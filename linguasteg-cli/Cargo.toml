@@ -16,3 +16,4 @@ workspace = true
 
 [dependencies]
 linguasteg-core.workspace = true
+linguasteg-models.workspace = true
