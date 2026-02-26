@@ -2,7 +2,10 @@ pub mod fa;
 
 use linguasteg_core::{ModelAdapter, ModelCapability};
 
-pub use fa::{FarsiPrototypeConstraintChecker, FarsiPrototypeLanguagePack, FarsiPrototypeRealizer};
+pub use fa::{
+    FarsiPrototypeConstraintChecker, FarsiPrototypeLanguagePack, FarsiPrototypeLexicon,
+    FarsiPrototypeRealizer,
+};
 
 #[derive(Debug, Default)]
 pub struct StubModelAdapter;

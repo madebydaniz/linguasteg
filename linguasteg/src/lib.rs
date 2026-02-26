@@ -11,6 +11,7 @@ pub use linguasteg_core::{
     validate_encode_request, validate_realization_plan, validate_template_descriptor,
 };
 pub use linguasteg_models::{
-    FarsiPrototypeConstraintChecker, FarsiPrototypeLanguagePack, FarsiPrototypeRealizer,
+    FarsiPrototypeConstraintChecker, FarsiPrototypeLanguagePack, FarsiPrototypeLexicon,
+    FarsiPrototypeRealizer,
     StubModelAdapter,
 };

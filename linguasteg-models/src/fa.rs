@@ -42,6 +42,44 @@ impl TemplateRegistry for FarsiPrototypeLanguagePack {
 }
 
 #[derive(Debug, Default, Clone, Copy)]
+pub struct FarsiPrototypeLexicon;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct FarsiNounLexeme {
+    canonical: &'static str,
+    accepted_forms: &'static [&'static str],
+    semantic_tags: &'static [&'static str],
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct FarsiVerbLexeme {
+    canonical: &'static str,
+    accepted_forms: &'static [&'static str],
+    accepted_object_tags: &'static [&'static str],
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct FarsiAdjectiveLexeme {
+    canonical: &'static str,
+    accepted_forms: &'static [&'static str],
+    accepted_noun_tags: &'static [&'static str],
+}
+
+impl FarsiPrototypeLexicon {
+    pub fn is_known_object_noun(surface_or_lemma: &str) -> bool {
+        find_noun_lexeme(surface_or_lemma).is_some()
+    }
+
+    pub fn is_known_verb(surface_or_lemma: &str) -> bool {
+        find_verb_lexeme(surface_or_lemma).is_some()
+    }
+
+    pub fn is_known_adjective(surface_or_lemma: &str) -> bool {
+        find_adjective_lexeme(surface_or_lemma).is_some()
+    }
+}
+
+#[derive(Debug, Default, Clone, Copy)]
 pub struct FarsiPrototypeConstraintChecker;
 
 impl GrammarConstraintChecker for FarsiPrototypeConstraintChecker {
@@ -79,7 +117,8 @@ impl GrammarConstraintChecker for FarsiPrototypeConstraintChecker {
             ));
         }
 
-        validate_assignment_surfaces(template, &plan.assignments)
+        validate_assignment_surfaces(template, &plan.assignments)?;
+        validate_lexical_compatibility(template, &plan.assignments)
     }
 }
 
@@ -131,6 +170,83 @@ fn validate_assignment_surfaces(
     }
 
     Ok(())
+}
+
+fn validate_lexical_compatibility(
+    template: &RealizationTemplateDescriptor,
+    assignments: &[SlotAssignment],
+) -> CoreResult<()> {
+    let object_assignment = find_assignment_by_role(template, assignments, SlotRole::DirectObject);
+    let verb_assignment = find_assignment_by_role(template, assignments, SlotRole::Verb);
+    let adjective_assignment = find_assignment_by_role(template, assignments, SlotRole::Adjective);
+
+    if let Some(object_assignment) = object_assignment {
+        let noun = find_noun_lexeme(assignment_key(object_assignment)).ok_or_else(|| {
+            CoreError::InvalidTemplate(format!(
+                "unknown object lexeme for slot '{}': {}",
+                object_assignment.slot, object_assignment.surface
+            ))
+        })?;
+
+        if let Some(verb_assignment) = verb_assignment {
+            let verb = find_verb_lexeme(assignment_key(verb_assignment)).ok_or_else(|| {
+                CoreError::InvalidTemplate(format!(
+                    "unknown verb lexeme for slot '{}': {}",
+                    verb_assignment.slot, verb_assignment.surface
+                ))
+            })?;
+
+            if !noun
+                .semantic_tags
+                .iter()
+                .any(|tag| verb.accepted_object_tags.contains(tag))
+            {
+                return Err(CoreError::InvalidTemplate(format!(
+                    "verb '{}' is not compatible with object '{}'",
+                    verb.canonical, noun.canonical
+                )));
+            }
+        }
+
+        if let Some(adjective_assignment) = adjective_assignment {
+            let adjective =
+                find_adjective_lexeme(assignment_key(adjective_assignment)).ok_or_else(|| {
+                    CoreError::InvalidTemplate(format!(
+                        "unknown adjective lexeme for slot '{}': {}",
+                        adjective_assignment.slot, adjective_assignment.surface
+                    ))
+                })?;
+
+            if !noun
+                .semantic_tags
+                .iter()
+                .any(|tag| adjective.accepted_noun_tags.contains(tag))
+            {
+                return Err(CoreError::InvalidTemplate(format!(
+                    "adjective '{}' is not compatible with object '{}'",
+                    adjective.canonical, noun.canonical
+                )));
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn find_assignment_by_role<'a>(
+    template: &'a RealizationTemplateDescriptor,
+    assignments: &'a [SlotAssignment],
+    role: SlotRole,
+) -> Option<&'a SlotAssignment> {
+    template
+        .slots
+        .iter()
+        .find(|slot| slot.role == role)
+        .and_then(|slot| assignments.iter().find(|assignment| assignment.slot == slot.id))
+}
+
+fn assignment_key(assignment: &SlotAssignment) -> &str {
+    assignment.lemma.as_deref().unwrap_or(&assignment.surface).trim()
 }
 
 fn looks_like_farsi_or_translit(value: &str) -> bool {
@@ -243,6 +359,126 @@ fn slot(name: &str, role: SlotRole, required: bool) -> TemplateSlotDescriptor {
     }
 }
 
+fn find_noun_lexeme(value: &str) -> Option<&'static FarsiNounLexeme> {
+    let normalized = value.trim();
+    FARSI_NOUN_LEXEMES
+        .iter()
+        .find(|entry| entry.accepted_forms.contains(&normalized))
+}
+
+fn find_verb_lexeme(value: &str) -> Option<&'static FarsiVerbLexeme> {
+    let normalized = value.trim();
+    FARSI_VERB_LEXEMES
+        .iter()
+        .find(|entry| entry.accepted_forms.contains(&normalized))
+}
+
+fn find_adjective_lexeme(value: &str) -> Option<&'static FarsiAdjectiveLexeme> {
+    let normalized = value.trim();
+    FARSI_ADJECTIVE_LEXEMES
+        .iter()
+        .find(|entry| entry.accepted_forms.contains(&normalized))
+}
+
+const FARSI_NOUN_LEXEMES: &[FarsiNounLexeme] = &[
+    FarsiNounLexeme {
+        canonical: "کتاب",
+        accepted_forms: &["کتاب", "ketab"],
+        semantic_tags: &["document", "readable", "physical-object"],
+    },
+    FarsiNounLexeme {
+        canonical: "نامه",
+        accepted_forms: &["نامه", "nameh"],
+        semantic_tags: &["document", "message", "physical-object"],
+    },
+    FarsiNounLexeme {
+        canonical: "چای",
+        accepted_forms: &["چای", "chay", "tea"],
+        semantic_tags: &["drink", "food"],
+    },
+    FarsiNounLexeme {
+        canonical: "غذا",
+        accepted_forms: &["غذا", "ghaza", "food"],
+        semantic_tags: &["food"],
+    },
+    FarsiNounLexeme {
+        canonical: "گل",
+        accepted_forms: &["گل", "gol", "flower"],
+        semantic_tags: &["plant", "gift", "decorative"],
+    },
+    FarsiNounLexeme {
+        canonical: "عکس",
+        accepted_forms: &["عکس", "aks"],
+        semantic_tags: &["image", "document", "physical-object"],
+    },
+];
+
+const FARSI_VERB_LEXEMES: &[FarsiVerbLexeme] = &[
+    FarsiVerbLexeme {
+        canonical: "خرید",
+        accepted_forms: &["خرید", "kharid", "bought"],
+        accepted_object_tags: &["document", "food", "gift", "decorative", "physical-object"],
+    },
+    FarsiVerbLexeme {
+        canonical: "نوشت",
+        accepted_forms: &["نوشت", "nevesht", "wrote"],
+        accepted_object_tags: &["document", "message"],
+    },
+    FarsiVerbLexeme {
+        canonical: "دید",
+        accepted_forms: &["دید", "did", "saw"],
+        accepted_object_tags: &[
+            "document",
+            "image",
+            "food",
+            "gift",
+            "decorative",
+            "physical-object",
+            "plant",
+        ],
+    },
+    FarsiVerbLexeme {
+        canonical: "خورد",
+        accepted_forms: &["خورد", "khord", "ate"],
+        accepted_object_tags: &["food"],
+    },
+    FarsiVerbLexeme {
+        canonical: "نوشید",
+        accepted_forms: &["نوشید", "noushid", "drank"],
+        accepted_object_tags: &["drink"],
+    },
+];
+
+const FARSI_ADJECTIVE_LEXEMES: &[FarsiAdjectiveLexeme] = &[
+    FarsiAdjectiveLexeme {
+        canonical: "زیبا",
+        accepted_forms: &["زیبا", "ziba"],
+        accepted_noun_tags: &[
+            "document",
+            "image",
+            "gift",
+            "decorative",
+            "physical-object",
+            "plant",
+        ],
+    },
+    FarsiAdjectiveLexeme {
+        canonical: "قدیمی",
+        accepted_forms: &["قدیمی", "ghadimi"],
+        accepted_noun_tags: &["document", "image", "physical-object"],
+    },
+    FarsiAdjectiveLexeme {
+        canonical: "تازه",
+        accepted_forms: &["تازه", "taze"],
+        accepted_noun_tags: &["food", "drink", "plant"],
+    },
+    FarsiAdjectiveLexeme {
+        canonical: "گرم",
+        accepted_forms: &["گرم", "garm"],
+        accepted_noun_tags: &["food", "drink"],
+    },
+];
+
 #[cfg(test)]
 mod tests {
     use linguasteg_core::{
@@ -250,7 +486,10 @@ mod tests {
         StyleProfileRegistry, TemplateId, TemplateRegistry,
     };
 
-    use super::{FarsiPrototypeConstraintChecker, FarsiPrototypeLanguagePack, FarsiPrototypeRealizer};
+    use super::{
+        FarsiPrototypeConstraintChecker, FarsiPrototypeLanguagePack, FarsiPrototypeLexicon,
+        FarsiPrototypeRealizer,
+    };
     use linguasteg_core::GrammarConstraintChecker;
 
     #[test]
@@ -339,6 +578,61 @@ mod tests {
             .render(template, &plan)
             .expect("render should work");
         assert_eq!(sentence, "دانشجو امروز در کتابخانه نامه را نوشت");
+    }
+
+    #[test]
+    fn constraint_checker_rejects_incompatible_object_verb_combination() {
+        let pack = FarsiPrototypeLanguagePack::default();
+        let template = pack
+            .template(&TemplateId::new("fa-time-location-sov").expect("valid template"))
+            .expect("template should exist");
+
+        let plan = RealizationPlan {
+            template_id: TemplateId::new("fa-time-location-sov").expect("valid template"),
+            assignments: vec![
+                assign("subject", "دانشجو"),
+                assign("time", "امروز"),
+                assign("location", "کتابخانه"),
+                assign("object", "کتاب"),
+                assign("verb", "نوشید"),
+            ],
+        };
+
+        let error = FarsiPrototypeConstraintChecker
+            .validate_plan(template, &plan)
+            .expect_err("plan should fail");
+        assert!(error.to_string().contains("not compatible"));
+    }
+
+    #[test]
+    fn constraint_checker_rejects_incompatible_object_adjective_combination() {
+        let pack = FarsiPrototypeLanguagePack::default();
+        let template = pack
+            .template(&TemplateId::new("fa-basic-sov").expect("valid template"))
+            .expect("template should exist");
+
+        let plan = RealizationPlan {
+            template_id: TemplateId::new("fa-basic-sov").expect("valid template"),
+            assignments: vec![
+                assign("subject", "زن"),
+                assign("object", "کتاب"),
+                assign("adjective", "گرم"),
+                assign("verb", "دید"),
+            ],
+        };
+
+        let error = FarsiPrototypeConstraintChecker
+            .validate_plan(template, &plan)
+            .expect_err("plan should fail");
+        assert!(error.to_string().contains("adjective"));
+    }
+
+    #[test]
+    fn lexicon_recognizes_known_forms() {
+        assert!(FarsiPrototypeLexicon::is_known_object_noun("کتاب"));
+        assert!(FarsiPrototypeLexicon::is_known_verb("نوشید"));
+        assert!(FarsiPrototypeLexicon::is_known_adjective("گرم"));
+        assert!(!FarsiPrototypeLexicon::is_known_object_noun("ابر"));
     }
 
     fn assign(slot: &str, surface: &str) -> SlotAssignment {
