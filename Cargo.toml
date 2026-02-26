@@ -1,0 +1,29 @@
+[workspace]
+members = [
+    "linguasteg",
+    "linguasteg-core",
+    "linguasteg-cli",
+    "linguasteg-models",
+    "linguasteg-eval"
+]
+default-members = ["linguasteg", "linguasteg-cli"]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.93"
+license = "MIT"
+repository = "https://github.com/madebydaniz/linguasteg.git"
+
+[workspace.lints.rust]
+unsafe_code = "warn"
+
+[workspace.lints.clippy]
+all = "warn"
+pedantic = "warn"
+
+[workspace.dependencies]
+linguasteg-core = { path = "linguasteg-core", version = "0.1.0" }
+linguasteg-models = { path = "linguasteg-models", version = "0.1.0" }
+linguasteg-eval = { path = "linguasteg-eval", version = "0.1.0" }

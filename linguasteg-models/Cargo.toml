@@ -1,0 +1,14 @@
+[package]
+name = "linguasteg-models"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Model adapters and provider integrations for LinguaSteg"
+
+[lints]
+workspace = true
+
+[dependencies]
+linguasteg-core.workspace = true
