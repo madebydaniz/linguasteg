@@ -4,9 +4,7 @@ use crate::{CoreResult, LanguageTag, ModelId, ProviderId, StrategyId};
 pub struct EncodeRequest {
     pub carrier_text: String,
     pub payload: Vec<u8>,
-    pub language: LanguageTag,
-    pub strategy: StrategyId,
-    pub model_selection: Option<ModelSelection>,
+    pub options: PipelineOptions,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -17,8 +15,7 @@ pub struct EncodeOutput {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DecodeRequest {
     pub stego_text: String,
-    pub language: LanguageTag,
-    pub strategy: StrategyId,
+    pub options: PipelineOptions,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -30,6 +27,13 @@ pub struct DecodeOutput {
 pub struct ModelSelection {
     pub provider: ProviderId,
     pub model: ModelId,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PipelineOptions {
+    pub language: LanguageTag,
+    pub strategy: StrategyId,
+    pub model_selection: Option<ModelSelection>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
