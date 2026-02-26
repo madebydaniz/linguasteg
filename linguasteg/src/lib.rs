@@ -10,4 +10,7 @@ pub use linguasteg_core::{
     ValidatedEncodeRequest, WritingRegister, render_realization_plan, validate_decode_request,
     validate_encode_request, validate_realization_plan, validate_template_descriptor,
 };
-pub use linguasteg_models::StubModelAdapter;
+pub use linguasteg_models::{
+    FarsiPrototypeConstraintChecker, FarsiPrototypeLanguagePack, FarsiPrototypeRealizer,
+    StubModelAdapter,
+};
