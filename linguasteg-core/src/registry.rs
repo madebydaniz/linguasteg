@@ -1,6 +1,6 @@
 use crate::{
     LanguageDescriptor, LanguageTag, ModelDescriptor, ModelId, ProviderId, StrategyDescriptor,
-    StrategyId,
+    StrategyId, StyleProfileDescriptor, StyleProfileId,
 };
 
 pub trait LanguageRegistry: Send + Sync {
@@ -31,11 +31,29 @@ pub trait ModelRegistry: Send + Sync {
     }
 }
 
+pub trait StyleProfileRegistry: Send + Sync {
+    fn all_style_profiles(&self) -> &[StyleProfileDescriptor];
+
+    fn style_profile(&self, id: &StyleProfileId) -> Option<&StyleProfileDescriptor> {
+        self.all_style_profiles()
+            .iter()
+            .find(|descriptor| &descriptor.id == id)
+    }
+
+    fn style_profiles_for_language(&self, language: &LanguageTag) -> Vec<&StyleProfileDescriptor> {
+        self.all_style_profiles()
+            .iter()
+            .filter(|descriptor| &descriptor.language == language)
+            .collect()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{
         LanguageDescriptor, LanguageRegistry, LanguageTag, ModelCapability, StrategyDescriptor,
-        StrategyId, StrategyRegistry, TextDirection,
+        StrategyId, StrategyRegistry, StyleInspiration, StyleProfileDescriptor, StyleProfileId,
+        StyleProfileRegistry, StyleStrength, TextDirection, WritingRegister,
     };
 
     struct InMemoryLanguageRegistry {
@@ -55,6 +73,16 @@ mod tests {
     impl StrategyRegistry for InMemoryStrategyRegistry {
         fn all_strategies(&self) -> &[StrategyDescriptor] {
             &self.strategies
+        }
+    }
+
+    struct InMemoryStyleProfileRegistry {
+        profiles: Vec<StyleProfileDescriptor>,
+    }
+
+    impl StyleProfileRegistry for InMemoryStyleProfileRegistry {
+        fn all_style_profiles(&self) -> &[StyleProfileDescriptor] {
+            &self.profiles
         }
     }
 
@@ -86,5 +114,42 @@ mod tests {
         let id = StrategyId::new("synonym").expect("valid strategy");
         let descriptor = registry.strategy(&id).expect("strategy should exist");
         assert_eq!(descriptor.display_name, "Synonym");
+    }
+
+    #[test]
+    fn style_profile_registry_supports_lookup_and_language_filter() {
+        let registry = InMemoryStyleProfileRegistry {
+            profiles: vec![
+                StyleProfileDescriptor {
+                    id: StyleProfileId::new("fa-formal").expect("valid style id"),
+                    language: LanguageTag::new("fa").expect("valid tag"),
+                    display_name: "Formal Persian".to_string(),
+                    register: WritingRegister::Formal,
+                    strength: StyleStrength::Medium,
+                    inspiration: StyleInspiration::RegisterOnly,
+                },
+                StyleProfileDescriptor {
+                    id: StyleProfileId::new("de-goethe-classic").expect("valid style id"),
+                    language: LanguageTag::new("de").expect("valid tag"),
+                    display_name: "Goethe-inspired German".to_string(),
+                    register: WritingRegister::Literary,
+                    strength: StyleStrength::Light,
+                    inspiration: StyleInspiration::PublicDomainAuthorInspired {
+                        author_label: "Goethe".to_string(),
+                    },
+                },
+            ],
+        };
+
+        let style_id = StyleProfileId::new("de-goethe-classic").expect("valid style id");
+        let profile = registry
+            .style_profile(&style_id)
+            .expect("style profile should exist");
+        assert_eq!(profile.display_name, "Goethe-inspired German");
+
+        let fa = LanguageTag::new("fa").expect("valid tag");
+        let fa_profiles = registry.style_profiles_for_language(&fa);
+        assert_eq!(fa_profiles.len(), 1);
+        assert_eq!(fa_profiles[0].display_name, "Formal Persian");
     }
 }
