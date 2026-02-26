@@ -1,4 +1,4 @@
-use crate::{CoreResult, LanguageTag, StrategyId};
+use crate::{CoreResult, LanguageTag, ModelId, ProviderId, StrategyId};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EncodeRequest {
@@ -6,6 +6,7 @@ pub struct EncodeRequest {
     pub payload: Vec<u8>,
     pub language: LanguageTag,
     pub strategy: StrategyId,
+    pub model_selection: Option<ModelSelection>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -25,12 +26,29 @@ pub struct DecodeOutput {
     pub payload: Vec<u8>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ModelSelection {
+    pub provider: ProviderId,
+    pub model: ModelId,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ModelCapability {
     TokenLogProbabilities,
     ConstrainedGeneration,
     DeterministicSeed,
     StreamingGeneration,
+}
+
+impl ModelCapability {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::TokenLogProbabilities => "token-log-probabilities",
+            Self::ConstrainedGeneration => "constrained-generation",
+            Self::DeterministicSeed => "deterministic-seed",
+            Self::StreamingGeneration => "streaming-generation",
+        }
+    }
 }
 
 pub trait ModelAdapter: Send + Sync {
