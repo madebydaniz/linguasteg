@@ -1,4 +1,7 @@
-use crate::{LanguageTag, ModelCapability, ModelId, ProviderId, StrategyId, StyleProfileId};
+use crate::{
+    LanguageTag, ModelCapability, ModelId, ProviderId, SlotId, StrategyId, StyleProfileId,
+    TemplateId,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum TextDirection {
@@ -28,6 +31,21 @@ pub enum StyleInspiration {
     EraInspired { era_label: String },
     PublicDomainAuthorInspired { author_label: String },
     RegisterOnly,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum SlotRole {
+    Subject,
+    Verb,
+    DirectObject,
+    IndirectObject,
+    Adjective,
+    Adverb,
+    Time,
+    Location,
+    Connector,
+    Determiner,
+    Particle,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -61,4 +79,26 @@ pub struct StyleProfileDescriptor {
     pub register: WritingRegister,
     pub strength: StyleStrength,
     pub inspiration: StyleInspiration,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TemplateSlotDescriptor {
+    pub id: SlotId,
+    pub role: SlotRole,
+    pub required: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TemplateToken {
+    Literal(String),
+    Slot(SlotId),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RealizationTemplateDescriptor {
+    pub id: TemplateId,
+    pub language: LanguageTag,
+    pub display_name: String,
+    pub slots: Vec<TemplateSlotDescriptor>,
+    pub tokens: Vec<TemplateToken>,
 }

@@ -6,7 +6,12 @@ pub enum CoreError {
     UnsupportedLanguage(String),
     UnsupportedStrategy(String),
     UnsupportedModel { provider: String, model: String },
+    UnsupportedTemplate(String),
     StrategyRequiresModel(String),
+    InvalidTemplate(String),
+    UnknownTemplateSlot(String),
+    DuplicateSlotAssignment(String),
+    MissingRequiredSlot(String),
     ModelDoesNotSupportLanguage {
         provider: String,
         model: String,
@@ -29,8 +34,19 @@ impl core::fmt::Display for CoreError {
             Self::UnsupportedModel { provider, model } => {
                 write!(f, "model is not supported: {provider}/{model}")
             }
+            Self::UnsupportedTemplate(template) => {
+                write!(f, "template is not supported: {template}")
+            }
             Self::StrategyRequiresModel(strategy) => {
                 write!(f, "strategy requires a model selection: {strategy}")
+            }
+            Self::InvalidTemplate(message) => write!(f, "invalid template: {message}"),
+            Self::UnknownTemplateSlot(slot) => write!(f, "unknown template slot: {slot}"),
+            Self::DuplicateSlotAssignment(slot) => {
+                write!(f, "duplicate slot assignment in realization plan: {slot}")
+            }
+            Self::MissingRequiredSlot(slot) => {
+                write!(f, "missing required slot in realization plan: {slot}")
             }
             Self::ModelDoesNotSupportLanguage {
                 provider,

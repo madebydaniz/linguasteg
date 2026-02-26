@@ -100,6 +100,46 @@ impl core::fmt::Display for StyleProfileId {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct TemplateId(String);
+
+impl TemplateId {
+    pub fn new(value: impl Into<String>) -> CoreResult<Self> {
+        let value = normalize_identifier(value.into())?;
+        Ok(Self(value))
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl core::fmt::Display for TemplateId {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct SlotId(String);
+
+impl SlotId {
+    pub fn new(value: impl Into<String>) -> CoreResult<Self> {
+        let value = normalize_identifier(value.into())?;
+        Ok(Self(value))
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl core::fmt::Display for SlotId {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
 fn normalize_identifier(value: String) -> CoreResult<String> {
     let normalized = value.trim().to_ascii_lowercase();
     let is_valid = !normalized.is_empty()
@@ -116,7 +156,9 @@ fn normalize_identifier(value: String) -> CoreResult<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{LanguageTag, ModelId, ProviderId, StrategyId, StyleProfileId};
+    use super::{
+        LanguageTag, ModelId, ProviderId, SlotId, StrategyId, StyleProfileId, TemplateId,
+    };
 
     #[test]
     fn language_tag_normalizes_ascii_input() {
@@ -146,5 +188,17 @@ mod tests {
     fn style_profile_id_normalizes_ascii_input() {
         let profile = StyleProfileId::new(" FA-Formal ").expect("profile id should normalize");
         assert_eq!(profile.as_str(), "fa-formal");
+    }
+
+    #[test]
+    fn template_id_normalizes_ascii_input() {
+        let template = TemplateId::new(" FA-Template-01 ").expect("template id should normalize");
+        assert_eq!(template.as_str(), "fa-template-01");
+    }
+
+    #[test]
+    fn slot_id_normalizes_ascii_input() {
+        let slot = SlotId::new(" Subject-Main ").expect("slot id should normalize");
+        assert_eq!(slot.as_str(), "subject-main");
     }
 }
