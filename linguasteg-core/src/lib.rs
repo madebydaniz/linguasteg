@@ -5,6 +5,7 @@ mod ids;
 mod pipeline;
 mod registry;
 mod style;
+mod symbolic;
 mod validation;
 
 pub use catalog::{
@@ -28,6 +29,11 @@ pub use registry::{LanguageRegistry, ModelRegistry, StrategyRegistry, StyleProfi
 pub use registry::TemplateRegistry;
 pub use style::{
     StyleCandidate, StyleRerankRequest, StyleReranker, StyleScorer, StyleSelection,
+};
+pub use symbolic::{
+    BitRange, FixedWidthBitPlanner, FixedWidthPlanningOptions, SymbolicFieldSpec,
+    SymbolicFramePlan, SymbolicFrameSchema, SymbolicPayloadPlan, SymbolicPayloadPlanner,
+    SymbolicSlotValue, plan_payload_to_symbolic_frames, validate_symbolic_frame_schema,
 };
 pub use validation::{
     ValidatedDecodeRequest, ValidatedEncodeRequest, validate_decode_request, validate_encode_request,

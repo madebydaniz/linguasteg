@@ -9,6 +9,8 @@ pub enum CoreError {
     UnsupportedTemplate(String),
     StrategyRequiresModel(String),
     InvalidTemplate(String),
+    InvalidSymbolicSchema(String),
+    InvalidSymbolicPlan(String),
     UnknownTemplateSlot(String),
     DuplicateSlotAssignment(String),
     MissingRequiredSlot(String),
@@ -41,6 +43,8 @@ impl core::fmt::Display for CoreError {
                 write!(f, "strategy requires a model selection: {strategy}")
             }
             Self::InvalidTemplate(message) => write!(f, "invalid template: {message}"),
+            Self::InvalidSymbolicSchema(message) => write!(f, "invalid symbolic schema: {message}"),
+            Self::InvalidSymbolicPlan(message) => write!(f, "invalid symbolic plan: {message}"),
             Self::UnknownTemplateSlot(slot) => write!(f, "unknown template slot: {slot}"),
             Self::DuplicateSlotAssignment(slot) => {
                 write!(f, "duplicate slot assignment in realization plan: {slot}")
