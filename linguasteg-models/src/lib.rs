@@ -4,7 +4,7 @@ use linguasteg_core::{ModelAdapter, ModelCapability};
 
 pub use fa::{
     FarsiPrototypeConstraintChecker, FarsiPrototypeLanguagePack, FarsiPrototypeLexicon,
-    FarsiPrototypeRealizer,
+    FarsiPrototypeRealizer, FarsiPrototypeSymbolicMapper,
 };
 
 #[derive(Debug, Default)]

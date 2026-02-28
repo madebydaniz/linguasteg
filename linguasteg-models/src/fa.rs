@@ -2,6 +2,7 @@ use linguasteg_core::{
     CoreError, CoreResult, GrammarConstraintChecker, LanguageDescriptor, LanguageRealizer,
     LanguageRegistry, LanguageTag, RealizationPlan, RealizationTemplateDescriptor, SlotAssignment,
     SlotId, SlotRole, StyleInspiration, StyleProfileDescriptor, StyleProfileId,
+    SymbolicFieldSpec, SymbolicFramePlan, SymbolicFrameSchema, SymbolicPayloadPlan,
     StyleProfileRegistry, StyleStrength, TemplateId, TemplateRegistry, TemplateSlotDescriptor,
     TemplateToken, TextDirection, WritingRegister, render_realization_plan, validate_realization_plan,
 };
@@ -135,6 +136,180 @@ impl LanguageRealizer for FarsiPrototypeRealizer {
         let rendered = render_realization_plan(template, plan)?;
         Ok(normalize_farsi_spacing(&rendered))
     }
+}
+
+#[derive(Debug, Default, Clone, Copy)]
+pub struct FarsiPrototypeSymbolicMapper;
+
+impl FarsiPrototypeSymbolicMapper {
+    pub fn frame_schemas(&self) -> Vec<SymbolicFrameSchema> {
+        farsi_symbolic_frame_schemas()
+    }
+
+    pub fn map_payload_to_plans(
+        &self,
+        payload_plan: &SymbolicPayloadPlan,
+    ) -> CoreResult<Vec<RealizationPlan>> {
+        payload_plan
+            .frames
+            .iter()
+            .map(|frame| self.map_frame_to_plan(frame))
+            .collect()
+    }
+
+    pub fn map_frame_to_plan(&self, frame: &SymbolicFramePlan) -> CoreResult<RealizationPlan> {
+        match frame.template_id.as_str() {
+            "fa-basic-sov" => map_basic_sov_frame(frame),
+            "fa-time-location-sov" => map_time_location_sov_frame(frame),
+            _ => Err(CoreError::UnsupportedTemplate(frame.template_id.to_string())),
+        }
+    }
+}
+
+fn map_basic_sov_frame(frame: &SymbolicFramePlan) -> CoreResult<RealizationPlan> {
+    let subject_value = symbolic_value_for_slot(frame, "subject")?;
+    let object_value = symbolic_value_for_slot(frame, "object")?;
+    let adjective_value = symbolic_value_for_slot(frame, "adjective")?;
+    let verb_value = symbolic_value_for_slot(frame, "verb")?;
+
+    let subject_surface = select_surface(subject_forms(), subject_value)?;
+    let object_lexeme = select_noun_lexeme(object_value)?;
+    let adjective_lexeme = select_compatible_adjective_lexeme(object_lexeme, adjective_value)?;
+    let verb_lexeme = select_compatible_verb_lexeme(object_lexeme, verb_value)?;
+
+    Ok(RealizationPlan {
+        template_id: TemplateId::new("fa-basic-sov")?,
+        assignments: vec![
+            create_assignment("subject", subject_surface, None)?,
+            create_assignment("object", object_lexeme.canonical.to_string(), Some(object_lexeme.canonical))?,
+            create_assignment(
+                "adjective",
+                adjective_lexeme.canonical.to_string(),
+                Some(adjective_lexeme.canonical),
+            )?,
+            create_assignment("verb", verb_lexeme.canonical.to_string(), Some(verb_lexeme.canonical))?,
+        ],
+    })
+}
+
+fn map_time_location_sov_frame(frame: &SymbolicFramePlan) -> CoreResult<RealizationPlan> {
+    let subject_value = symbolic_value_for_slot(frame, "subject")?;
+    let time_value = symbolic_value_for_slot(frame, "time")?;
+    let location_value = symbolic_value_for_slot(frame, "location")?;
+    let object_value = symbolic_value_for_slot(frame, "object")?;
+    let verb_value = symbolic_value_for_slot(frame, "verb")?;
+
+    let subject_surface = select_surface(subject_forms(), subject_value)?;
+    let time_surface = select_surface(time_forms(), time_value)?;
+    let location_surface = select_surface(location_forms(), location_value)?;
+    let object_lexeme = select_noun_lexeme(object_value)?;
+    let verb_lexeme = select_compatible_verb_lexeme(object_lexeme, verb_value)?;
+
+    Ok(RealizationPlan {
+        template_id: TemplateId::new("fa-time-location-sov")?,
+        assignments: vec![
+            create_assignment("subject", subject_surface, None)?,
+            create_assignment("time", time_surface, None)?,
+            create_assignment("location", location_surface, None)?,
+            create_assignment("object", object_lexeme.canonical.to_string(), Some(object_lexeme.canonical))?,
+            create_assignment("verb", verb_lexeme.canonical.to_string(), Some(verb_lexeme.canonical))?,
+        ],
+    })
+}
+
+fn symbolic_value_for_slot(frame: &SymbolicFramePlan, slot_name: &str) -> CoreResult<u32> {
+    frame
+        .values
+        .iter()
+        .find(|item| item.slot.as_str() == slot_name)
+        .map(|item| item.value)
+        .ok_or_else(|| {
+            CoreError::InvalidSymbolicPlan(format!(
+                "slot '{}' is missing in frame '{}'",
+                slot_name, frame.template_id
+            ))
+        })
+}
+
+fn create_assignment(
+    slot_name: &str,
+    surface: String,
+    lemma: Option<&str>,
+) -> CoreResult<SlotAssignment> {
+    Ok(SlotAssignment {
+        slot: SlotId::new(slot_name)?,
+        surface,
+        lemma: lemma.map(ToString::to_string),
+    })
+}
+
+fn select_surface(values: &[&str], encoded_value: u32) -> CoreResult<String> {
+    if values.is_empty() {
+        return Err(CoreError::InvalidTemplate(
+            "surface inventory must not be empty".to_string(),
+        ));
+    }
+    let idx = (encoded_value as usize) % values.len();
+    Ok(values[idx].to_string())
+}
+
+fn select_noun_lexeme(encoded_value: u32) -> CoreResult<&'static FarsiNounLexeme> {
+    if FARSI_NOUN_LEXEMES.is_empty() {
+        return Err(CoreError::InvalidTemplate(
+            "noun lexicon is empty".to_string(),
+        ));
+    }
+    Ok(&FARSI_NOUN_LEXEMES[(encoded_value as usize) % FARSI_NOUN_LEXEMES.len()])
+}
+
+fn select_compatible_verb_lexeme(
+    noun: &FarsiNounLexeme,
+    encoded_value: u32,
+) -> CoreResult<&'static FarsiVerbLexeme> {
+    let compatible: Vec<&FarsiVerbLexeme> = FARSI_VERB_LEXEMES
+        .iter()
+        .filter(|verb| is_verb_compatible(noun, verb))
+        .collect();
+
+    if compatible.is_empty() {
+        return Err(CoreError::InvalidTemplate(format!(
+            "no compatible verb found for object '{}'",
+            noun.canonical
+        )));
+    }
+
+    Ok(compatible[(encoded_value as usize) % compatible.len()])
+}
+
+fn select_compatible_adjective_lexeme(
+    noun: &FarsiNounLexeme,
+    encoded_value: u32,
+) -> CoreResult<&'static FarsiAdjectiveLexeme> {
+    let compatible: Vec<&FarsiAdjectiveLexeme> = FARSI_ADJECTIVE_LEXEMES
+        .iter()
+        .filter(|adjective| is_adjective_compatible(noun, adjective))
+        .collect();
+
+    if compatible.is_empty() {
+        return Err(CoreError::InvalidTemplate(format!(
+            "no compatible adjective found for object '{}'",
+            noun.canonical
+        )));
+    }
+
+    Ok(compatible[(encoded_value as usize) % compatible.len()])
+}
+
+fn is_verb_compatible(noun: &FarsiNounLexeme, verb: &FarsiVerbLexeme) -> bool {
+    noun.semantic_tags
+        .iter()
+        .any(|tag| verb.accepted_object_tags.contains(tag))
+}
+
+fn is_adjective_compatible(noun: &FarsiNounLexeme, adjective: &FarsiAdjectiveLexeme) -> bool {
+    noun.semantic_tags
+        .iter()
+        .any(|tag| adjective.accepted_noun_tags.contains(tag))
 }
 
 fn validate_assignment_surfaces(
@@ -359,6 +534,37 @@ fn slot(name: &str, role: SlotRole, required: bool) -> TemplateSlotDescriptor {
     }
 }
 
+fn farsi_symbolic_frame_schemas() -> Vec<SymbolicFrameSchema> {
+    vec![
+        SymbolicFrameSchema {
+            template_id: TemplateId::new("fa-basic-sov").expect("valid template id"),
+            fields: vec![
+                symbolic_field("subject", 5),
+                symbolic_field("object", 5),
+                symbolic_field("adjective", 3),
+                symbolic_field("verb", 5),
+            ],
+        },
+        SymbolicFrameSchema {
+            template_id: TemplateId::new("fa-time-location-sov").expect("valid template id"),
+            fields: vec![
+                symbolic_field("subject", 5),
+                symbolic_field("time", 3),
+                symbolic_field("location", 3),
+                symbolic_field("object", 5),
+                symbolic_field("verb", 5),
+            ],
+        },
+    ]
+}
+
+fn symbolic_field(slot_name: &str, bit_width: u8) -> SymbolicFieldSpec {
+    SymbolicFieldSpec {
+        slot: SlotId::new(slot_name).expect("valid slot id"),
+        bit_width,
+    }
+}
+
 fn find_noun_lexeme(value: &str) -> Option<&'static FarsiNounLexeme> {
     let normalized = value.trim();
     FARSI_NOUN_LEXEMES
@@ -479,16 +685,47 @@ const FARSI_ADJECTIVE_LEXEMES: &[FarsiAdjectiveLexeme] = &[
     },
 ];
 
+fn subject_forms() -> &'static [&'static str] {
+    &[
+        "مرد",
+        "زن",
+        "دانشجو",
+        "نویسنده",
+        "پژوهشگر",
+        "معلم",
+        "دوست",
+        "هنرمند",
+    ]
+}
+
+fn time_forms() -> &'static [&'static str] {
+    &["امروز", "دیروز", "صبح", "عصر", "شب", "سحر", "اکنون", "فردا"]
+}
+
+fn location_forms() -> &'static [&'static str] {
+    &[
+        "خانه",
+        "کتابخانه",
+        "بازار",
+        "دانشگاه",
+        "باغ",
+        "پارک",
+        "مدرسه",
+        "آشپزخانه",
+    ]
+}
+
 #[cfg(test)]
 mod tests {
     use linguasteg_core::{
-        LanguageRealizer, LanguageRegistry, RealizationPlan, SlotAssignment, SlotId,
-        StyleProfileRegistry, TemplateId, TemplateRegistry,
+        BitRange, FixedWidthBitPlanner, FixedWidthPlanningOptions, LanguageRealizer,
+        LanguageRegistry, RealizationPlan, SlotAssignment, SlotId, StyleProfileRegistry,
+        SymbolicFramePlan, SymbolicPayloadPlanner, SymbolicSlotValue, TemplateId, TemplateRegistry,
     };
 
     use super::{
         FarsiPrototypeConstraintChecker, FarsiPrototypeLanguagePack, FarsiPrototypeLexicon,
-        FarsiPrototypeRealizer,
+        FarsiPrototypeRealizer, FarsiPrototypeSymbolicMapper,
     };
     use linguasteg_core::GrammarConstraintChecker;
 
@@ -635,11 +872,101 @@ mod tests {
         assert!(!FarsiPrototypeLexicon::is_known_object_noun("ابر"));
     }
 
+    #[test]
+    fn symbolic_mapper_exposes_two_frame_schemas() {
+        let mapper = FarsiPrototypeSymbolicMapper;
+        let schemas = mapper.frame_schemas();
+
+        assert_eq!(schemas.len(), 2);
+        assert_eq!(schemas[0].template_id.as_str(), "fa-basic-sov");
+        assert_eq!(schemas[1].template_id.as_str(), "fa-time-location-sov");
+    }
+
+    #[test]
+    fn symbolic_mapper_maps_basic_frame_to_valid_plan() {
+        let mapper = FarsiPrototypeSymbolicMapper;
+        let pack = FarsiPrototypeLanguagePack::default();
+
+        let frame = symbolic_frame(
+            "fa-basic-sov",
+            &[
+                ("subject", 5, 3),
+                ("object", 5, 1),
+                ("adjective", 3, 2),
+                ("verb", 5, 4),
+            ],
+        );
+
+        let plan = mapper
+            .map_frame_to_plan(&frame)
+            .expect("mapping should succeed");
+
+        let template = pack
+            .template(&TemplateId::new("fa-basic-sov").expect("valid template"))
+            .expect("template should exist");
+
+        FarsiPrototypeConstraintChecker
+            .validate_plan(template, &plan)
+            .expect("mapped plan should validate");
+    }
+
+    #[test]
+    fn symbolic_mapper_maps_payload_plan_to_renderable_plans() {
+        let mapper = FarsiPrototypeSymbolicMapper;
+        let pack = FarsiPrototypeLanguagePack::default();
+        let planner = FixedWidthBitPlanner {
+            options: FixedWidthPlanningOptions {
+                prepend_u16_be_length: false,
+            },
+        };
+
+        let payload_plan = planner
+            .plan_payload(&[0b1010_0110], &mapper.frame_schemas())
+            .expect("planning should succeed");
+        let plans = mapper
+            .map_payload_to_plans(&payload_plan)
+            .expect("mapping should succeed");
+
+        assert_eq!(plans.len(), payload_plan.frames.len());
+
+        for plan in &plans {
+            let template = pack
+                .template(&plan.template_id)
+                .expect("template should exist");
+            FarsiPrototypeConstraintChecker
+                .validate_plan(template, plan)
+                .expect("mapped plan should validate");
+
+            let rendered = FarsiPrototypeRealizer
+                .render(template, plan)
+                .expect("render should work");
+            assert!(!rendered.trim().is_empty());
+        }
+    }
+
     fn assign(slot: &str, surface: &str) -> SlotAssignment {
         SlotAssignment {
             slot: SlotId::new(slot).expect("valid slot"),
             surface: surface.to_string(),
             lemma: None,
+        }
+    }
+
+    fn symbolic_frame(template: &str, fields: &[(&str, u8, u32)]) -> SymbolicFramePlan {
+        SymbolicFramePlan {
+            template_id: TemplateId::new(template).expect("valid template"),
+            source: BitRange {
+                start_bit: 0,
+                consumed_bits: fields.iter().map(|(_, width, _)| usize::from(*width)).sum(),
+            },
+            values: fields
+                .iter()
+                .map(|(slot, bit_width, value)| SymbolicSlotValue {
+                    slot: SlotId::new(*slot).expect("valid slot"),
+                    bit_width: *bit_width,
+                    value: *value,
+                })
+                .collect(),
         }
     }
 }
