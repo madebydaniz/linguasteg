@@ -3,8 +3,8 @@ use linguasteg_core::{
     GrammarConstraintChecker, LanguageRealizer, LanguageTag, ModelCapability, ModelDescriptor,
     ModelId, ModelRegistry, ModelSelection, PipelineOptions, PipelineOrchestrator, ProviderId,
     RealizationPlan, SlotAssignment, SlotId, StrategyDescriptor, StrategyId, StrategyRegistry,
-    StyleProfileRegistry, SymbolicFramePlan, SymbolicFrameSchema, SymbolicSlotValue, TemplateId,
-    TemplateRegistry,
+    StyleProfileRegistry, SymbolicFramePlan, SymbolicFrameSchema, SymbolicSlotValue,
+    TemplateId, TemplateRegistry, decode_payload_from_symbolic_frames,
 };
 use linguasteg_models::{
     FarsiPrototypeConstraintChecker, FarsiPrototypeLanguagePack, FarsiPrototypeRealizer,
@@ -19,7 +19,7 @@ type DynError = Box<dyn std::error::Error>;
 enum Command {
     Encode(EncodeOptions),
     Decode(DecodeOptions),
-    Analyze,
+    Analyze(AnalyzeOptions),
     Demo(DemoTarget),
     ProtoEncode(ProtoTarget, String, bool),
     ProtoDecode(ProtoTarget, Option<String>, bool),
@@ -39,6 +39,29 @@ struct DecodeOptions {
     input_path: Option<String>,
     output_path: Option<String>,
     format: OutputFormat,
+}
+
+struct AnalyzeOptions {
+    target: ProtoTarget,
+    trace: Option<String>,
+    input_path: Option<String>,
+    output_path: Option<String>,
+    format: OutputFormat,
+}
+
+struct TraceAnalysisSummary {
+    language: &'static str,
+    frame_count: usize,
+    consumed_bits: usize,
+    symbolic_bits: usize,
+    padding_bits: usize,
+    encoded_bytes: usize,
+    payload_bytes: Option<usize>,
+    payload_hex: Option<String>,
+    payload_utf8: Option<String>,
+    contiguous_ranges: bool,
+    integrity_ok: bool,
+    integrity_error: Option<String>,
 }
 
 #[derive(Clone, Copy)]
@@ -174,9 +197,7 @@ fn execute(command: Command) -> Result<(), DynError> {
     match command {
         Command::Encode(options) => run_encode(options)?,
         Command::Decode(options) => run_decode(options)?,
-        Command::Analyze => {
-            println!("analyze scaffold");
-        }
+        Command::Analyze(options) => run_analyze(options)?,
         Command::Demo(DemoTarget::Farsi) => run_farsi_demo()?,
         Command::ProtoEncode(ProtoTarget::Farsi, payload_text, json) => {
             run_farsi_proto_encode(&payload_text, json)?
@@ -202,7 +223,7 @@ fn parse_command(args: Vec<String>) -> Result<Option<Command>, CliError> {
     match command.as_str() {
         "encode" => parse_encode_command(args),
         "decode" => parse_decode_command(args),
-        "analyze" => Ok(Some(Command::Analyze)),
+        "analyze" => parse_analyze_command(args),
         "demo" => parse_demo_command(args),
         "proto-encode" => parse_proto_encode_command(args),
         "proto-decode" => parse_proto_decode_command(args),
@@ -345,6 +366,71 @@ fn parse_decode_command(
     })))
 }
 
+fn parse_analyze_command(
+    mut args: impl Iterator<Item = String>,
+) -> Result<Option<Command>, CliError> {
+    let mut lang = ProtoTarget::Farsi;
+    let mut format = OutputFormat::Text;
+    let mut trace = None;
+    let mut input_path = None;
+    let mut output_path = None;
+
+    while let Some(arg) = args.next() {
+        match arg.as_str() {
+            "--help" | "-h" => return Ok(None),
+            "--lang" => {
+                let value = next_arg_value(&mut args, "--lang")?;
+                lang = parse_proto_target(&value)?;
+            }
+            "--format" => {
+                let value = next_arg_value(&mut args, "--format")?;
+                format = parse_output_format(&value)?;
+            }
+            "--trace" => {
+                if trace.is_some() {
+                    return Err(CliError::Usage(
+                        "--trace cannot be provided multiple times".to_string(),
+                    ));
+                }
+                trace = Some(next_arg_value(&mut args, "--trace")?);
+            }
+            "--input" => {
+                if input_path.is_some() {
+                    return Err(CliError::Usage(
+                        "--input cannot be provided multiple times".to_string(),
+                    ));
+                }
+                input_path = Some(next_arg_value(&mut args, "--input")?);
+            }
+            "--output" => {
+                if output_path.is_some() {
+                    return Err(CliError::Usage(
+                        "--output cannot be provided multiple times".to_string(),
+                    ));
+                }
+                output_path = Some(next_arg_value(&mut args, "--output")?);
+            }
+            _ => {
+                return Err(CliError::Usage(format!("unknown analyze argument: {arg}")));
+            }
+        }
+    }
+
+    if trace.is_some() && input_path.is_some() {
+        return Err(CliError::Usage(
+            "analyze accepts either --trace or --input, not both".to_string(),
+        ));
+    }
+
+    Ok(Some(Command::Analyze(AnalyzeOptions {
+        target: lang,
+        trace,
+        input_path,
+        output_path,
+        format,
+    })))
+}
+
 fn parse_demo_command(mut args: impl Iterator<Item = String>) -> Result<Option<Command>, CliError> {
     match args.next().as_deref() {
         Some("fa") => Ok(Some(Command::Demo(DemoTarget::Farsi))),
@@ -438,9 +524,17 @@ fn run_encode(options: EncodeOptions) -> Result<(), DynError> {
 }
 
 fn run_decode(options: DecodeOptions) -> Result<(), DynError> {
-    let trace_text = resolve_decode_trace(&options)?;
+    let trace_text = resolve_trace_input(options.trace.as_deref(), options.input_path.as_deref())?;
     let output = match options.target {
         ProtoTarget::Farsi => render_farsi_proto_decode_output(&trace_text, options.format)?,
+    };
+    write_output(&output, options.output_path.as_deref())
+}
+
+fn run_analyze(options: AnalyzeOptions) -> Result<(), DynError> {
+    let trace_text = resolve_trace_input(options.trace.as_deref(), options.input_path.as_deref())?;
+    let output = match options.target {
+        ProtoTarget::Farsi => render_farsi_trace_analysis_output(&trace_text, options.format)?,
     };
     write_output(&output, options.output_path.as_deref())
 }
@@ -456,13 +550,13 @@ fn resolve_encode_payload(options: &EncodeOptions) -> Result<String, DynError> {
     Err("encode payload source is missing".into())
 }
 
-fn resolve_decode_trace(options: &DecodeOptions) -> Result<String, DynError> {
-    if let Some(input_path) = &options.input_path {
+fn resolve_trace_input(trace: Option<&str>, input_path: Option<&str>) -> Result<String, DynError> {
+    if let Some(input_path) = input_path {
         let trace_text = std::fs::read_to_string(input_path)?;
         return Ok(trace_text);
     }
-    if let Some(trace) = &options.trace {
-        return Ok(trace.clone());
+    if let Some(trace) = trace {
+        return Ok(trace.to_string());
     }
 
     let mut buffer = String::new();
@@ -738,6 +832,183 @@ fn render_farsi_proto_decode_output(
     }
 
     Ok(report_lines.join("\n"))
+}
+
+fn render_farsi_trace_analysis_output(
+    trace_text: &str,
+    format: OutputFormat,
+) -> Result<String, DynError> {
+    if trace_text.trim().is_empty() {
+        return Err("analyze requires trace input from proto-encode output".into());
+    }
+
+    let runtime = FarsiProtoRuntime::new()?;
+    let schemas = runtime.mapper.frame_schemas();
+    let frames = parse_frames_from_trace(trace_text, &schemas)?;
+    if frames.is_empty() {
+        return Err("no frame lines were found in trace input".into());
+    }
+
+    let summary = analyze_farsi_trace(&frames, &schemas)?;
+    if matches!(format, OutputFormat::Json) {
+        return Ok(build_trace_analysis_json(&summary));
+    }
+
+    Ok(build_trace_analysis_text(&summary))
+}
+
+fn analyze_farsi_trace(
+    frames: &[SymbolicFramePlan],
+    schemas: &[SymbolicFrameSchema],
+) -> Result<TraceAnalysisSummary, DynError> {
+    let mut ordered_schemas = Vec::with_capacity(frames.len());
+    let mut symbolic_bits = 0usize;
+    let mut consumed_bits = 0usize;
+    let mut contiguous_ranges = true;
+    let mut expected_start = 0usize;
+
+    for frame in frames {
+        if frame.source.start_bit != expected_start {
+            contiguous_ranges = false;
+        }
+        expected_start = frame.source.start_bit + frame.source.consumed_bits;
+        consumed_bits += frame.source.consumed_bits;
+
+        let schema = schema_for_template(schemas, &frame.template_id)?;
+        symbolic_bits += schema.total_bits();
+        ordered_schemas.push(schema);
+    }
+
+    let encoded_bytes = consumed_bits.div_ceil(8);
+    let mut integrity_ok = contiguous_ranges;
+    let mut integrity_error = if contiguous_ranges {
+        None
+    } else {
+        Some("frame bit ranges are not contiguous".to_string())
+    };
+
+    let padding_bits = if symbolic_bits >= consumed_bits {
+        symbolic_bits - consumed_bits
+    } else {
+        integrity_ok = false;
+        integrity_error = Some(format!(
+            "consumed bits ({consumed_bits}) exceed symbolic capacity ({symbolic_bits})"
+        ));
+        0
+    };
+
+    let mut payload_bytes = None;
+    let mut payload_hex = None;
+    let mut payload_utf8 = None;
+
+    match decode_payload_from_symbolic_frames(
+        frames,
+        &ordered_schemas,
+        &FixedWidthPlanningOptions::default(),
+    ) {
+        Ok(payload) => {
+            payload_bytes = Some(payload.len());
+            payload_hex = Some(
+                payload
+                    .iter()
+                    .map(|byte| format!("{byte:02x}"))
+                    .collect::<Vec<_>>()
+                    .join(""),
+            );
+            payload_utf8 = String::from_utf8(payload).ok();
+        }
+        Err(error) => {
+            integrity_ok = false;
+            if integrity_error.is_none() {
+                integrity_error = Some(error.to_string());
+            }
+        }
+    }
+
+    Ok(TraceAnalysisSummary {
+        language: "fa",
+        frame_count: frames.len(),
+        consumed_bits,
+        symbolic_bits,
+        padding_bits,
+        encoded_bytes,
+        payload_bytes,
+        payload_hex,
+        payload_utf8,
+        contiguous_ranges,
+        integrity_ok,
+        integrity_error,
+    })
+}
+
+fn build_trace_analysis_text(summary: &TraceAnalysisSummary) -> String {
+    let mut lines = Vec::new();
+    lines.push("Farsi prototype analyze".to_string());
+    lines.push(format!("language: {}", summary.language));
+    lines.push(format!("frames: {}", summary.frame_count));
+    lines.push(format!("consumed bits: {}", summary.consumed_bits));
+    lines.push(format!("symbolic bits: {}", summary.symbolic_bits));
+    lines.push(format!("padding bits: {}", summary.padding_bits));
+    lines.push(format!("encoded bytes: {}", summary.encoded_bytes));
+    match summary.payload_bytes {
+        Some(count) => lines.push(format!("payload bytes: {count}")),
+        None => lines.push("payload bytes: <unavailable>".to_string()),
+    }
+    match &summary.payload_hex {
+        Some(payload_hex) => lines.push(format!("payload hex: {payload_hex}")),
+        None => lines.push("payload hex: <unavailable>".to_string()),
+    }
+    match &summary.payload_utf8 {
+        Some(payload_utf8) => lines.push(format!("payload utf8: {payload_utf8}")),
+        None => lines.push("payload utf8: <unavailable>".to_string()),
+    }
+    lines.push(format!(
+        "contiguous ranges: {}",
+        if summary.contiguous_ranges { "yes" } else { "no" }
+    ));
+    lines.push(format!(
+        "trace integrity: {}",
+        if summary.integrity_ok { "ok" } else { "failed" }
+    ));
+    if let Some(error) = &summary.integrity_error {
+        lines.push(format!("integrity error: {error}"));
+    }
+    lines.join("\n")
+}
+
+fn build_trace_analysis_json(summary: &TraceAnalysisSummary) -> String {
+    let payload_bytes = match summary.payload_bytes {
+        Some(value) => value.to_string(),
+        None => "null".to_string(),
+    };
+    let payload_hex = match &summary.payload_hex {
+        Some(value) => format!("\"{}\"", json_escape(value)),
+        None => "null".to_string(),
+    };
+    let payload_utf8 = match &summary.payload_utf8 {
+        Some(value) => format!("\"{}\"", json_escape(value)),
+        None => "null".to_string(),
+    };
+    let integrity_error = match &summary.integrity_error {
+        Some(value) => format!("\"{}\"", json_escape(value)),
+        None => "null".to_string(),
+    };
+
+    format!(
+        "{{\"mode\":\"analyze\",\"language\":\"{}\",\"frame_count\":{},\"consumed_bits\":{},\"symbolic_bits\":{},\"padding_bits\":{},\"encoded_bytes\":{},\"payload_bytes\":{},\"payload_hex\":{},\"payload_utf8\":{},\"contiguous_ranges\":{},\"integrity_ok\":{},\"integrity_error\":{}}}",
+        summary.language,
+        summary.frame_count,
+        summary.consumed_bits,
+        summary.symbolic_bits,
+        summary.padding_bits,
+        summary.encoded_bytes,
+        payload_bytes,
+        payload_hex,
+        payload_utf8,
+        summary.contiguous_ranges,
+        summary.integrity_ok,
+        integrity_error
+    )
 }
 
 fn parse_frames_from_trace(
@@ -1163,6 +1434,10 @@ fn write_usage(mut writer: impl Write) -> std::io::Result<()> {
     writeln!(
         writer,
         "       lsteg decode [--lang fa] [--trace <text> | --input <file>] [--format text|json] [--output <file>]"
+    )?;
+    writeln!(
+        writer,
+        "       lsteg analyze [--lang fa] [--trace <text> | --input <file>] [--format text|json] [--output <file>]"
     )?;
     writeln!(writer, "       lsteg demo fa")?;
     writeln!(writer, "       lsteg proto-encode fa [message] [--json]")?;
