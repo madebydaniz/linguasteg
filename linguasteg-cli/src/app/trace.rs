@@ -300,3 +300,73 @@ fn split_json_objects(array_content: &str) -> Result<Vec<&str>, DynError> {
 
     Ok(objects)
 }
+
+#[cfg(test)]
+mod tests {
+    use linguasteg_models::FarsiPrototypeSymbolicMapper;
+
+    use super::parse_frames_from_trace;
+
+    fn farsi_schemas() -> Vec<linguasteg_core::SymbolicFrameSchema> {
+        FarsiPrototypeSymbolicMapper.frame_schemas()
+    }
+
+    #[test]
+    fn parse_line_trace_returns_expected_frames() {
+        let trace = "frame 01 [fa-basic-sov] bits=0..18 values=subject:0,object:0,adjective:0,verb:21 => x\nframe 02 [fa-time-location-sov] bits=18..39 values=subject:25,time:5,location:4,object:5,verb:22 => y";
+        let frames = parse_frames_from_trace(trace, &farsi_schemas()).expect("trace should parse");
+
+        assert_eq!(frames.len(), 2);
+        assert_eq!(frames[0].template_id.as_str(), "fa-basic-sov");
+        assert_eq!(frames[0].source.start_bit, 0);
+        assert_eq!(frames[0].source.consumed_bits, 18);
+        assert_eq!(frames[1].template_id.as_str(), "fa-time-location-sov");
+        assert_eq!(frames[1].source.start_bit, 18);
+        assert_eq!(frames[1].source.consumed_bits, 21);
+    }
+
+    #[test]
+    fn parse_proto_encode_json_trace_returns_frames() {
+        let trace = r#"{"mode":"proto-encode","language":"fa","frames":[{"index":1,"template_id":"fa-basic-sov","start_bit":0,"end_bit":18,"values":{"subject":0,"object":0,"adjective":0,"verb":21},"sentence":"x"},{"index":2,"template_id":"fa-time-location-sov","start_bit":18,"end_bit":39,"values":{"subject":25,"time":5,"location":4,"object":5,"verb":22},"sentence":"y"}]}"#;
+        let frames = parse_frames_from_trace(trace, &farsi_schemas()).expect("json trace should parse");
+
+        assert_eq!(frames.len(), 2);
+        assert_eq!(frames[0].template_id.as_str(), "fa-basic-sov");
+        assert_eq!(frames[1].template_id.as_str(), "fa-time-location-sov");
+    }
+
+    #[test]
+    fn parse_non_proto_json_returns_empty() {
+        let trace = r#"{"mode":"proto-decode","language":"fa","decoded_bytes":5}"#;
+        let frames = parse_frames_from_trace(trace, &farsi_schemas()).expect("parser should not fail");
+
+        assert!(frames.is_empty());
+    }
+
+    #[test]
+    fn parse_trace_fails_when_required_slot_is_missing() {
+        let trace =
+            "frame 01 [fa-basic-sov] bits=0..18 values=subject:0,object:0,verb:21 => x";
+        let error =
+            parse_frames_from_trace(trace, &farsi_schemas()).expect_err("trace should fail");
+
+        assert!(
+            error
+                .to_string()
+                .contains("missing symbolic value for slot 'adjective'")
+        );
+    }
+
+    #[test]
+    fn parse_proto_encode_json_fails_on_malformed_frame_array() {
+        let trace = r#"{"mode":"proto-encode","language":"fa","frames":[{"index":1,"template_id":"fa-basic-sov","start_bit":0,"end_bit":18,"values":{"subject":0,"object":0,"adjective":0,"verb":21}}}]}"#;
+        let error =
+            parse_frames_from_trace(trace, &farsi_schemas()).expect_err("json should fail");
+
+        assert!(
+            error
+                .to_string()
+                .contains("malformed json frame array: unexpected '}'")
+        );
+    }
+}
