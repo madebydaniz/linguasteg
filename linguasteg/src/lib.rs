@@ -18,5 +18,6 @@ pub use linguasteg_core::{
 };
 pub use linguasteg_models::{
     FarsiPrototypeConstraintChecker, FarsiPrototypeLanguagePack, FarsiPrototypeLexicon,
-    FarsiPrototypeRealizer, FarsiPrototypeSymbolicMapper, StubModelAdapter,
+    FarsiPrototypeRealizer, FarsiPrototypeSymbolicMapper, InMemoryGatewayRegistry, StubGateway,
+    StubModelAdapter,
 };

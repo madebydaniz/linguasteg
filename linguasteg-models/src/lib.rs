@@ -1,4 +1,5 @@
 pub mod fa;
+pub mod gateway;
 
 use linguasteg_core::{ModelAdapter, ModelCapability};
 
@@ -6,6 +7,7 @@ pub use fa::{
     FarsiPrototypeConstraintChecker, FarsiPrototypeLanguagePack, FarsiPrototypeLexicon,
     FarsiPrototypeRealizer, FarsiPrototypeSymbolicMapper,
 };
+pub use gateway::{InMemoryGatewayRegistry, StubGateway};
 
 #[derive(Debug, Default)]
 pub struct StubModelAdapter;
