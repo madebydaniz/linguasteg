@@ -1,0 +1,35 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "separate-pull-requests": false,
+  "always-link-local": true,
+  "plugins": [
+    "cargo-workspace"
+  ],
+  "packages": {
+    "linguasteg": {
+      "component": "linguasteg",
+      "release-type": "rust",
+      "package-name": "linguasteg"
+    },
+    "linguasteg-core": {
+      "component": "linguasteg-core",
+      "release-type": "rust",
+      "package-name": "linguasteg-core"
+    },
+    "linguasteg-models": {
+      "component": "linguasteg-models",
+      "release-type": "rust",
+      "package-name": "linguasteg-models"
+    },
+    "linguasteg-cli": {
+      "component": "linguasteg-cli",
+      "release-type": "rust",
+      "package-name": "linguasteg-cli"
+    },
+    "linguasteg-eval": {
+      "component": "linguasteg-eval",
+      "release-type": "rust",
+      "package-name": "linguasteg-eval"
+    }
+  }
+}
