@@ -35,7 +35,7 @@ jobs:
         run: cargo check --workspace --all-targets --all-features --locked
 
       - name: Clippy (bug-risk lints)
-        run: cargo clippy --workspace --all-targets --all-features -- -D clippy::correctness -D clippy::suspicious
+        run: cargo clippy --workspace --all-targets --all-features --locked -- -A clippy::all -A clippy::pedantic -D clippy::correctness -D clippy::suspicious
 
       - name: Cargo test
         run: cargo test --workspace --all-features --locked
