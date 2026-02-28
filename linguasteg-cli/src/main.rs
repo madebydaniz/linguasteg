@@ -18,8 +18,8 @@ enum Command {
     Decode,
     Analyze,
     Demo(DemoTarget),
-    ProtoEncode(ProtoTarget, String),
-    ProtoDecode(ProtoTarget, Option<String>),
+    ProtoEncode(ProtoTarget, String, bool),
+    ProtoDecode(ProtoTarget, Option<String>, bool),
 }
 
 enum DemoTarget {
@@ -132,13 +132,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         },
         Some("proto-encode") => match args.next().as_deref() {
             Some("fa") => {
-                let message = args.collect::<Vec<_>>().join(" ");
+                let mut parts = args.collect::<Vec<_>>();
+                let json = take_flag(&mut parts, "--json");
+                let message = parts.join(" ");
                 let payload_text = if message.trim().is_empty() {
                     "salam donya".to_string()
                 } else {
                     message
                 };
-                Command::ProtoEncode(ProtoTarget::Farsi, payload_text)
+                Command::ProtoEncode(ProtoTarget::Farsi, payload_text, json)
             }
             _ => {
                 eprintln!("proto-encode target is required (supported: fa)");
@@ -148,13 +150,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         },
         Some("proto-decode") => match args.next().as_deref() {
             Some("fa") => {
-                let trace_input = args.collect::<Vec<_>>().join(" ");
+                let mut parts = args.collect::<Vec<_>>();
+                let json = take_flag(&mut parts, "--json");
+                let trace_input = parts.join(" ");
                 let trace = if trace_input.trim().is_empty() {
                     None
                 } else {
                     Some(trace_input)
                 };
-                Command::ProtoDecode(ProtoTarget::Farsi, trace)
+                Command::ProtoDecode(ProtoTarget::Farsi, trace, json)
             }
             _ => {
                 eprintln!("proto-decode target is required (supported: fa)");
@@ -183,11 +187,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("analyze scaffold");
         }
         Command::Demo(DemoTarget::Farsi) => run_farsi_demo()?,
-        Command::ProtoEncode(ProtoTarget::Farsi, payload_text) => {
-            run_farsi_proto_encode(&payload_text)?
+        Command::ProtoEncode(ProtoTarget::Farsi, payload_text, json) => {
+            run_farsi_proto_encode(&payload_text, json)?
         }
-        Command::ProtoDecode(ProtoTarget::Farsi, trace_input) => {
-            run_farsi_proto_decode(trace_input)?
+        Command::ProtoDecode(ProtoTarget::Farsi, trace_input, json) => {
+            run_farsi_proto_decode(trace_input, json)?
         }
     }
 
@@ -265,7 +269,10 @@ fn assignment(slot: &str, surface: &str) -> Result<SlotAssignment, Box<dyn std::
     })
 }
 
-fn run_farsi_proto_encode(payload_text: &str) -> Result<(), Box<dyn std::error::Error>> {
+fn run_farsi_proto_encode(
+    payload_text: &str,
+    json: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
     let payload = payload_text.as_bytes();
     let runtime = FarsiProtoRuntime::new()?;
     let schemas = runtime.mapper.frame_schemas();
@@ -280,18 +287,8 @@ fn run_farsi_proto_encode(payload_text: &str) -> Result<(), Box<dyn std::error::
     let payload_plan = orchestration.symbolic_plan;
     let realization_plans = runtime.mapper.map_payload_to_plans(&payload_plan)?;
 
-    println!("Farsi prototype encode");
-    println!("input text: {}", payload_text);
-    println!("payload bytes: {}", payload.len());
-    println!(
-        "encoded bytes (with length prefix): {}",
-        payload_plan.encoded_len_bytes
-    );
-    println!("frames: {}", payload_plan.frames.len());
-    println!("padding bits: {}", payload_plan.padding_bits);
-    println!();
-
     let mut sentences = Vec::with_capacity(realization_plans.len());
+    let mut frame_lines = Vec::with_capacity(realization_plans.len());
     for (index, plan) in realization_plans.iter().enumerate() {
         let template = runtime
             .pack
@@ -305,7 +302,7 @@ fn run_farsi_proto_encode(payload_text: &str) -> Result<(), Box<dyn std::error::
             .map(|value| format!("{}:{}", value.slot, value.value))
             .collect::<Vec<_>>()
             .join(",");
-        println!(
+        frame_lines.push(format!(
             "frame {:02} [{}] bits={}..{} values={} => {}",
             index + 1,
             plan.template_id,
@@ -314,22 +311,58 @@ fn run_farsi_proto_encode(payload_text: &str) -> Result<(), Box<dyn std::error::
                 + payload_plan.frames[index].source.consumed_bits,
             symbol_values,
             sentence
-        );
+        ));
         sentences.push(sentence);
     }
 
+    let final_text = format!("{}.", sentences.join(". "));
+    let gateway_response = orchestration.gateway_response.map(|item| item.content);
+
+    if json {
+        println!(
+            "{}",
+            build_proto_encode_json(
+                payload_text,
+                payload.len(),
+                payload_plan.encoded_len_bytes,
+                payload_plan.padding_bits,
+                &payload_plan.frames,
+                &sentences,
+                &final_text,
+                gateway_response.as_deref(),
+            )
+        );
+        return Ok(());
+    }
+
+    println!("Farsi prototype encode");
+    println!("input text: {}", payload_text);
+    println!("payload bytes: {}", payload.len());
+    println!(
+        "encoded bytes (with length prefix): {}",
+        payload_plan.encoded_len_bytes
+    );
+    println!("frames: {}", payload_plan.frames.len());
+    println!("padding bits: {}", payload_plan.padding_bits);
+    println!();
+    for line in frame_lines {
+        println!("{line}");
+    }
     println!();
     println!("final prototype text:");
-    println!("{}.", sentences.join(". "));
+    println!("{final_text}");
 
-    if let Some(gateway_response) = orchestration.gateway_response {
-        println!("gateway response: {}", gateway_response.content);
+    if let Some(gateway_response) = gateway_response {
+        println!("gateway response: {gateway_response}");
     }
 
     Ok(())
 }
 
-fn run_farsi_proto_decode(trace_input: Option<String>) -> Result<(), Box<dyn std::error::Error>> {
+fn run_farsi_proto_decode(
+    trace_input: Option<String>,
+    json: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
     let trace_text = match trace_input {
         Some(value) => value,
         None => {
@@ -376,15 +409,31 @@ fn run_farsi_proto_decode(trace_input: Option<String>) -> Result<(), Box<dyn std
         .collect::<Vec<_>>()
         .join("");
 
+    let utf8_text = String::from_utf8(payload.clone()).ok();
+    let gateway_response = orchestration.gateway_response.map(|item| item.content);
+
+    if json {
+        println!(
+            "{}",
+            build_proto_decode_json(
+                payload.len(),
+                &hex_payload,
+                utf8_text.as_deref(),
+                gateway_response.as_deref(),
+            )
+        );
+        return Ok(());
+    }
+
     println!("Farsi prototype decode");
     println!("decoded bytes: {}", payload.len());
     println!("payload hex: {hex_payload}");
-    match String::from_utf8(payload.clone()) {
-        Ok(text) => println!("payload utf8: {text}"),
-        Err(_) => println!("payload utf8: <invalid utf8>"),
+    match utf8_text {
+        Some(text) => println!("payload utf8: {text}"),
+        None => println!("payload utf8: <invalid utf8>"),
     }
-    if let Some(gateway_response) = orchestration.gateway_response {
-        println!("gateway response: {}", gateway_response.content);
+    if let Some(gateway_response) = gateway_response {
+        println!("gateway response: {gateway_response}");
     }
 
     Ok(())
@@ -523,11 +572,120 @@ fn schema_for_template(
         .ok_or_else(|| format!("no schema found for template '{template_id}'"))
 }
 
+fn take_flag(parts: &mut Vec<String>, flag: &str) -> bool {
+    let mut found = false;
+    parts.retain(|item| {
+        if item == flag {
+            found = true;
+            false
+        } else {
+            true
+        }
+    });
+    found
+}
+
+fn build_proto_encode_json(
+    input_text: &str,
+    payload_bytes: usize,
+    encoded_bytes: usize,
+    padding_bits: u8,
+    frames: &[SymbolicFramePlan],
+    sentences: &[String],
+    final_text: &str,
+    gateway_response: Option<&str>,
+) -> String {
+    let mut frame_items = Vec::with_capacity(frames.len());
+    for (index, frame) in frames.iter().enumerate() {
+        let mut values = String::new();
+        values.push('{');
+        for (value_index, value) in frame.values.iter().enumerate() {
+            if value_index > 0 {
+                values.push(',');
+            }
+            values.push_str(&format!(
+                "\"{}\":{}",
+                json_escape(value.slot.as_str()),
+                value.value
+            ));
+        }
+        values.push('}');
+
+        let sentence = sentences.get(index).map_or("", |item| item.as_str());
+        frame_items.push(format!(
+            "{{\"index\":{},\"template_id\":\"{}\",\"start_bit\":{},\"end_bit\":{},\"values\":{},\"sentence\":\"{}\"}}",
+            index + 1,
+            json_escape(frame.template_id.as_str()),
+            frame.source.start_bit,
+            frame.source.start_bit + frame.source.consumed_bits,
+            values,
+            json_escape(sentence)
+        ));
+    }
+    let gateway_json = match gateway_response {
+        Some(content) => format!("\"{}\"", json_escape(content)),
+        None => "null".to_string(),
+    };
+
+    format!(
+        "{{\"mode\":\"proto-encode\",\"language\":\"fa\",\"input_text\":\"{}\",\"payload_bytes\":{},\"encoded_bytes\":{},\"frame_count\":{},\"padding_bits\":{},\"frames\":[{}],\"final_text\":\"{}\",\"gateway_response\":{}}}",
+        json_escape(input_text),
+        payload_bytes,
+        encoded_bytes,
+        frames.len(),
+        padding_bits,
+        frame_items.join(","),
+        json_escape(final_text),
+        gateway_json
+    )
+}
+
+fn build_proto_decode_json(
+    decoded_bytes: usize,
+    payload_hex: &str,
+    payload_utf8: Option<&str>,
+    gateway_response: Option<&str>,
+) -> String {
+    let utf8_json = match payload_utf8 {
+        Some(text) => format!("\"{}\"", json_escape(text)),
+        None => "null".to_string(),
+    };
+    let gateway_json = match gateway_response {
+        Some(content) => format!("\"{}\"", json_escape(content)),
+        None => "null".to_string(),
+    };
+
+    format!(
+        "{{\"mode\":\"proto-decode\",\"language\":\"fa\",\"decoded_bytes\":{},\"payload_hex\":\"{}\",\"payload_utf8\":{},\"gateway_response\":{}}}",
+        decoded_bytes,
+        json_escape(payload_hex),
+        utf8_json,
+        gateway_json
+    )
+}
+
+fn json_escape(input: &str) -> String {
+    let mut escaped = String::with_capacity(input.len());
+    for ch in input.chars() {
+        match ch {
+            '"' => escaped.push_str("\\\""),
+            '\\' => escaped.push_str("\\\\"),
+            '\n' => escaped.push_str("\\n"),
+            '\r' => escaped.push_str("\\r"),
+            '\t' => escaped.push_str("\\t"),
+            '\u{08}' => escaped.push_str("\\b"),
+            '\u{0C}' => escaped.push_str("\\f"),
+            _ => escaped.push(ch),
+        }
+    }
+    escaped
+}
+
 fn print_usage() {
     println!("LinguaSteg CLI (scaffold)");
     println!("Usage: lsteg <encode|decode|analyze|demo|proto-encode|proto-decode>");
     println!("       lsteg demo fa");
-    println!("       lsteg proto-encode fa [message]");
-    println!("       lsteg proto-encode fa [message] | lsteg proto-decode fa");
-    println!("       lsteg proto-decode fa \"<frame trace lines>\"");
+    println!("       lsteg proto-encode fa [message] [--json]");
+    println!("       lsteg proto-encode fa [message] | lsteg proto-decode fa [--json]");
+    println!("       lsteg proto-decode fa \"<frame trace lines>\" [--json]");
 }
