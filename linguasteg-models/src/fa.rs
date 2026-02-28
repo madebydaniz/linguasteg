@@ -254,12 +254,10 @@ fn select_surface(values: &[&str], encoded_value: u32) -> CoreResult<String> {
 }
 
 fn select_noun_lexeme(encoded_value: u32) -> CoreResult<&'static FarsiNounLexeme> {
-    if FARSI_NOUN_LEXEMES.is_empty() {
-        return Err(CoreError::InvalidTemplate(
-            "noun lexicon is empty".to_string(),
-        ));
-    }
-    Ok(&FARSI_NOUN_LEXEMES[(encoded_value as usize) % FARSI_NOUN_LEXEMES.len()])
+    let idx = (encoded_value as usize) % FARSI_NOUN_LEXEMES.len();
+    FARSI_NOUN_LEXEMES
+        .get(idx)
+        .ok_or_else(|| CoreError::InvalidTemplate("noun lexicon is empty".to_string()))
 }
 
 fn select_compatible_verb_lexeme(
