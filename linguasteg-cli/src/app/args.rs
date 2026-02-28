@@ -29,11 +29,15 @@ pub(crate) fn parse_command(args: Vec<String>) -> Result<Option<Command>, CliErr
 fn parse_encode_command(
     mut args: impl Iterator<Item = String>,
 ) -> Result<Option<Command>, CliError> {
-    let mut lang = ProtoTarget::Farsi;
-    let mut format = OutputFormat::Text;
-    let mut message = None;
-    let mut input_path = None;
-    let mut output_path = None;
+    let mut lang = env_proto_target("LSTEG_LANG")?.unwrap_or(ProtoTarget::Farsi);
+    let mut format = env_output_format("LSTEG_FORMAT")?.unwrap_or(OutputFormat::Text);
+    let mut message = env_optional("LSTEG_ENCODE_MESSAGE");
+    let mut input_path = env_optional("LSTEG_INPUT");
+    let mut output_path = env_optional("LSTEG_OUTPUT");
+
+    let mut seen_message = false;
+    let mut seen_input = false;
+    let mut seen_output = false;
 
     while let Some(arg) = args.next() {
         match arg.as_str() {
@@ -47,27 +51,30 @@ fn parse_encode_command(
                 format = parse_output_format(&value)?;
             }
             "--message" => {
-                if message.is_some() {
+                if seen_message {
                     return Err(CliError::usage(
                         "--message cannot be provided multiple times".to_string(),
                     ));
                 }
+                seen_message = true;
                 message = Some(next_arg_value(&mut args, "--message")?);
             }
             "--input" => {
-                if input_path.is_some() {
+                if seen_input {
                     return Err(CliError::usage(
                         "--input cannot be provided multiple times".to_string(),
                     ));
                 }
+                seen_input = true;
                 input_path = Some(next_arg_value(&mut args, "--input")?);
             }
             "--output" => {
-                if output_path.is_some() {
+                if seen_output {
                     return Err(CliError::usage(
                         "--output cannot be provided multiple times".to_string(),
                     ));
                 }
+                seen_output = true;
                 output_path = Some(next_arg_value(&mut args, "--output")?);
             }
             _ => {
@@ -99,11 +106,15 @@ fn parse_encode_command(
 fn parse_decode_command(
     mut args: impl Iterator<Item = String>,
 ) -> Result<Option<Command>, CliError> {
-    let mut lang = ProtoTarget::Farsi;
-    let mut format = OutputFormat::Text;
-    let mut trace = None;
-    let mut input_path = None;
-    let mut output_path = None;
+    let mut lang = env_proto_target("LSTEG_LANG")?.unwrap_or(ProtoTarget::Farsi);
+    let mut format = env_output_format("LSTEG_FORMAT")?.unwrap_or(OutputFormat::Text);
+    let mut trace = env_optional("LSTEG_TRACE");
+    let mut input_path = env_optional("LSTEG_INPUT");
+    let mut output_path = env_optional("LSTEG_OUTPUT");
+
+    let mut seen_trace = false;
+    let mut seen_input = false;
+    let mut seen_output = false;
 
     while let Some(arg) = args.next() {
         match arg.as_str() {
@@ -117,27 +128,30 @@ fn parse_decode_command(
                 format = parse_output_format(&value)?;
             }
             "--trace" => {
-                if trace.is_some() {
+                if seen_trace {
                     return Err(CliError::usage(
                         "--trace cannot be provided multiple times".to_string(),
                     ));
                 }
+                seen_trace = true;
                 trace = Some(next_arg_value(&mut args, "--trace")?);
             }
             "--input" => {
-                if input_path.is_some() {
+                if seen_input {
                     return Err(CliError::usage(
                         "--input cannot be provided multiple times".to_string(),
                     ));
                 }
+                seen_input = true;
                 input_path = Some(next_arg_value(&mut args, "--input")?);
             }
             "--output" => {
-                if output_path.is_some() {
+                if seen_output {
                     return Err(CliError::usage(
                         "--output cannot be provided multiple times".to_string(),
                     ));
                 }
+                seen_output = true;
                 output_path = Some(next_arg_value(&mut args, "--output")?);
             }
             _ => {
@@ -164,11 +178,15 @@ fn parse_decode_command(
 fn parse_analyze_command(
     mut args: impl Iterator<Item = String>,
 ) -> Result<Option<Command>, CliError> {
-    let mut lang = ProtoTarget::Farsi;
-    let mut format = OutputFormat::Text;
-    let mut trace = None;
-    let mut input_path = None;
-    let mut output_path = None;
+    let mut lang = env_proto_target("LSTEG_LANG")?.unwrap_or(ProtoTarget::Farsi);
+    let mut format = env_output_format("LSTEG_FORMAT")?.unwrap_or(OutputFormat::Text);
+    let mut trace = env_optional("LSTEG_TRACE");
+    let mut input_path = env_optional("LSTEG_INPUT");
+    let mut output_path = env_optional("LSTEG_OUTPUT");
+
+    let mut seen_trace = false;
+    let mut seen_input = false;
+    let mut seen_output = false;
 
     while let Some(arg) = args.next() {
         match arg.as_str() {
@@ -182,27 +200,30 @@ fn parse_analyze_command(
                 format = parse_output_format(&value)?;
             }
             "--trace" => {
-                if trace.is_some() {
+                if seen_trace {
                     return Err(CliError::usage(
                         "--trace cannot be provided multiple times".to_string(),
                     ));
                 }
+                seen_trace = true;
                 trace = Some(next_arg_value(&mut args, "--trace")?);
             }
             "--input" => {
-                if input_path.is_some() {
+                if seen_input {
                     return Err(CliError::usage(
                         "--input cannot be provided multiple times".to_string(),
                     ));
                 }
+                seen_input = true;
                 input_path = Some(next_arg_value(&mut args, "--input")?);
             }
             "--output" => {
-                if output_path.is_some() {
+                if seen_output {
                     return Err(CliError::usage(
                         "--output cannot be provided multiple times".to_string(),
                     ));
                 }
+                seen_output = true;
                 output_path = Some(next_arg_value(&mut args, "--output")?);
             }
             _ => {
@@ -307,6 +328,27 @@ fn parse_output_format(value: &str) -> Result<OutputFormat, CliError> {
     }
 }
 
+fn env_optional(key: &str) -> Option<String> {
+    std::env::var(key)
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
+fn env_proto_target(key: &str) -> Result<Option<ProtoTarget>, CliError> {
+    match env_optional(key) {
+        Some(value) => parse_proto_target(&value).map(Some),
+        None => Ok(None),
+    }
+}
+
+fn env_output_format(key: &str) -> Result<Option<OutputFormat>, CliError> {
+    match env_optional(key) {
+        Some(value) => parse_output_format(&value).map(Some),
+        None => Ok(None),
+    }
+}
+
 fn take_flag(parts: &mut Vec<String>, flag: &str) -> bool {
     let mut found = false;
     parts.retain(|item| {
@@ -347,6 +389,10 @@ pub(crate) fn write_usage(mut writer: impl Write) -> std::io::Result<()> {
     writeln!(
         writer,
         "       lsteg proto-decode fa \"<frame trace lines>\" [--json]"
+    )?;
+    writeln!(
+        writer,
+        "Env defaults: LSTEG_LANG, LSTEG_FORMAT, LSTEG_INPUT, LSTEG_OUTPUT, LSTEG_ENCODE_MESSAGE, LSTEG_TRACE"
     )?;
     Ok(())
 }

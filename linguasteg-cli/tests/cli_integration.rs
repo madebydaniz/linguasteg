@@ -8,6 +8,15 @@ fn run_lsteg(args: &[&str]) -> Output {
         .expect("failed to run lsteg")
 }
 
+fn run_lsteg_with_env(args: &[&str], envs: &[(&str, &str)]) -> Output {
+    let mut command = Command::new(env!("CARGO_BIN_EXE_lsteg"));
+    command.args(args);
+    for (key, value) in envs {
+        command.env(key, value);
+    }
+    command.output().expect("failed to run lsteg with env")
+}
+
 fn run_lsteg_with_stdin(args: &[&str], stdin: &str) -> Output {
     let mut child = Command::new(env!("CARGO_BIN_EXE_lsteg"))
         .args(args)
@@ -113,4 +122,67 @@ fn analyze_reports_integrity_failure_for_non_contiguous_trace() {
     let analysis_json = stdout_string(&analyze_output);
     assert!(analysis_json.contains("\"integrity_ok\":false"));
     assert!(analysis_json.contains("frame 02 starts at bit 19 but expected 18"));
+}
+
+#[test]
+fn encode_uses_env_defaults_when_cli_values_missing() {
+    let output = run_lsteg_with_env(
+        &["encode"],
+        &[("LSTEG_ENCODE_MESSAGE", "salam"), ("LSTEG_FORMAT", "json")],
+    );
+    assert!(output.status.success());
+
+    let stdout = stdout_string(&output);
+    assert!(stdout.contains("\"mode\":\"proto-encode\""));
+    assert!(stdout.contains("\"input_text\":\"salam\""));
+    assert!(stdout.contains("\"payload_bytes\":5"));
+}
+
+#[test]
+fn cli_flags_override_env_defaults() {
+    let output = run_lsteg_with_env(
+        &["encode", "--message", "override", "--format", "json"],
+        &[("LSTEG_ENCODE_MESSAGE", "from-env"), ("LSTEG_FORMAT", "text")],
+    );
+    assert!(output.status.success());
+
+    let stdout = stdout_string(&output);
+    assert!(stdout.contains("\"input_text\":\"override\""));
+}
+
+#[test]
+fn invalid_env_format_returns_config_error() {
+    let output = run_lsteg_with_env(
+        &["encode", "--message", "salam"],
+        &[("LSTEG_FORMAT", "xml")],
+    );
+    assert_eq!(output.status.code(), Some(1));
+    let stderr = stderr_string(&output);
+    assert!(stderr.contains("LSTEG-CLI-CFG-001"));
+}
+
+#[test]
+fn decode_uses_env_trace_when_stdin_missing() {
+    let encode_output = run_lsteg(&["encode", "--message", "salam"]);
+    assert!(encode_output.status.success());
+    let trace_text = stdout_string(&encode_output);
+
+    let decode_output = run_lsteg_with_env(&["decode", "--format", "json"], &[("LSTEG_TRACE", &trace_text)]);
+    assert!(decode_output.status.success());
+    let decoded_json = stdout_string(&decode_output);
+    assert!(decoded_json.contains("\"payload_utf8\":\"salam\""));
+}
+
+#[test]
+fn cli_trace_overrides_env_trace() {
+    let good_trace = stdout_string(&run_lsteg(&["encode", "--message", "salam"]));
+    let bad_trace = stdout_string(&run_lsteg(&["encode", "--message", "kharab"]));
+
+    let decode_output = run_lsteg_with_env(
+        &["decode", "--trace", &good_trace, "--format", "json"],
+        &[("LSTEG_TRACE", &bad_trace)],
+    );
+    assert!(decode_output.status.success());
+    let decoded_json = stdout_string(&decode_output);
+    assert!(decoded_json.contains("\"payload_utf8\":\"salam\""));
 }
