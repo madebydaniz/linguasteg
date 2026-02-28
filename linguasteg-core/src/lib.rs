@@ -1,5 +1,6 @@
 mod catalog;
 mod error;
+mod gateway;
 mod grammar;
 mod ids;
 mod pipeline;
@@ -14,6 +15,10 @@ pub use catalog::{
     TemplateSlotDescriptor, TemplateToken, TextDirection, WritingRegister,
 };
 pub use error::{CoreError, CoreResult};
+pub use gateway::{
+    GatewayFinishReason, GatewayMessage, GatewayMessageRole, GatewayOperation, GatewayRequest,
+    GatewayResponse, GatewayUsage, ModelGateway, ModelGatewayRegistry,
+};
 pub use grammar::{
     GrammarConstraintChecker, LanguageRealizer, RealizationPlan, SlotAssignment,
     render_realization_plan, validate_realization_plan, validate_template_descriptor,
