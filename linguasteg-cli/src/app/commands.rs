@@ -1,4 +1,5 @@
 use std::io::Read;
+use std::fmt::Display;
 
 use linguasteg_core::{
     DecodeRequest, EncodeRequest, FixedWidthPlanningOptions, GrammarConstraintChecker,
@@ -11,11 +12,11 @@ use super::formatters::{build_proto_decode_json, build_proto_encode_json};
 use super::runtime::FarsiProtoRuntime;
 use super::trace::{frame_sequence_error, parse_frames_from_trace, schema_for_template};
 use super::types::{
-    AnalyzeOptions, Command, DecodeOptions, DemoTarget, DynError, EncodeOptions, OutputFormat,
+    AnalyzeOptions, CliError, Command, DecodeOptions, DemoTarget, EncodeOptions, OutputFormat,
     ProtoTarget,
 };
 
-pub(crate) fn execute(command: Command) -> Result<(), DynError> {
+pub(crate) fn execute(command: Command) -> Result<(), CliError> {
     match command {
         Command::Encode(options) => run_encode(options)?,
         Command::Decode(options) => run_decode(options)?,
@@ -32,7 +33,7 @@ pub(crate) fn execute(command: Command) -> Result<(), DynError> {
     Ok(())
 }
 
-fn run_encode(options: EncodeOptions) -> Result<(), DynError> {
+fn run_encode(options: EncodeOptions) -> Result<(), CliError> {
     let payload_text = resolve_encode_payload(&options)?;
     let output = match options.target {
         ProtoTarget::Farsi => render_farsi_proto_encode_output(&payload_text, options.format)?,
@@ -40,7 +41,7 @@ fn run_encode(options: EncodeOptions) -> Result<(), DynError> {
     write_output(&output, options.output_path.as_deref())
 }
 
-fn run_decode(options: DecodeOptions) -> Result<(), DynError> {
+fn run_decode(options: DecodeOptions) -> Result<(), CliError> {
     let trace_text = resolve_trace_input(options.trace.as_deref(), options.input_path.as_deref())?;
     let output = match options.target {
         ProtoTarget::Farsi => render_farsi_proto_decode_output(&trace_text, options.format)?,
@@ -48,7 +49,7 @@ fn run_decode(options: DecodeOptions) -> Result<(), DynError> {
     write_output(&output, options.output_path.as_deref())
 }
 
-fn run_analyze(options: AnalyzeOptions) -> Result<(), DynError> {
+fn run_analyze(options: AnalyzeOptions) -> Result<(), CliError> {
     let trace_text = resolve_trace_input(options.trace.as_deref(), options.input_path.as_deref())?;
     let output = match options.target {
         ProtoTarget::Farsi => render_farsi_trace_analysis_output(&trace_text, options.format)?,
@@ -56,20 +57,24 @@ fn run_analyze(options: AnalyzeOptions) -> Result<(), DynError> {
     write_output(&output, options.output_path.as_deref())
 }
 
-fn resolve_encode_payload(options: &EncodeOptions) -> Result<String, DynError> {
+fn resolve_encode_payload(options: &EncodeOptions) -> Result<String, CliError> {
     if let Some(input_path) = &options.input_path {
-        let payload = std::fs::read_to_string(input_path)?;
+        let payload = std::fs::read_to_string(input_path)
+            .map_err(|error| CliError::io("failed to read input file", Some(input_path), error))?;
         return Ok(payload);
     }
     if let Some(message) = &options.message {
         return Ok(message.clone());
     }
-    Err("encode payload source is missing".into())
+    Err(CliError::input(
+        "encode payload source is missing (--message or --input is required)",
+    ))
 }
 
-fn resolve_trace_input(trace: Option<&str>, input_path: Option<&str>) -> Result<String, DynError> {
+fn resolve_trace_input(trace: Option<&str>, input_path: Option<&str>) -> Result<String, CliError> {
     if let Some(input_path) = input_path {
-        let trace_text = std::fs::read_to_string(input_path)?;
+        let trace_text = std::fs::read_to_string(input_path)
+            .map_err(|error| CliError::io("failed to read trace file", Some(input_path), error))?;
         return Ok(trace_text);
     }
     if let Some(trace) = trace {
@@ -77,25 +82,28 @@ fn resolve_trace_input(trace: Option<&str>, input_path: Option<&str>) -> Result<
     }
 
     let mut buffer = String::new();
-    std::io::stdin().read_to_string(&mut buffer)?;
+    std::io::stdin()
+        .read_to_string(&mut buffer)
+        .map_err(|error| CliError::io("failed to read trace from stdin", None, error))?;
     Ok(buffer)
 }
 
-fn write_output(output: &str, output_path: Option<&str>) -> Result<(), DynError> {
+fn write_output(output: &str, output_path: Option<&str>) -> Result<(), CliError> {
     if let Some(path) = output_path {
-        std::fs::write(path, output)?;
+        std::fs::write(path, output)
+            .map_err(|error| CliError::io("failed to write output file", Some(path), error))?;
     } else {
         println!("{output}");
     }
     Ok(())
 }
 
-fn run_farsi_demo() -> Result<(), DynError> {
+fn run_farsi_demo() -> Result<(), CliError> {
     let pack = linguasteg_models::FarsiPrototypeLanguagePack::default();
     let checker = linguasteg_models::FarsiPrototypeConstraintChecker;
     let realizer = linguasteg_models::FarsiPrototypeRealizer;
 
-    let fa = LanguageTag::new("fa")?;
+    let fa = map_domain(LanguageTag::new("fa"), "invalid language tag")?;
     let templates = pack.templates_for_language(&fa);
     let style_profiles = pack.style_profiles_for_language(&fa);
 
@@ -110,10 +118,13 @@ fn run_farsi_demo() -> Result<(), DynError> {
         println!("  - {} ({})", profile.id, profile.display_name);
     }
 
-    let template_id = TemplateId::new("fa-time-location-sov")?;
+    let template_id = map_domain(
+        TemplateId::new("fa-time-location-sov"),
+        "invalid template identifier",
+    )?;
     let template = pack
         .template(&template_id)
-        .ok_or_else(|| format!("missing template: {template_id}"))?;
+        .ok_or_else(|| CliError::domain(format!("missing template: {template_id}")))?;
 
     let valid_plan = RealizationPlan {
         template_id: template_id.clone(),
@@ -126,8 +137,11 @@ fn run_farsi_demo() -> Result<(), DynError> {
         ],
     };
 
-    checker.validate_plan(template, &valid_plan)?;
-    let rendered = realizer.render(template, &valid_plan)?;
+    map_domain(checker.validate_plan(template, &valid_plan), "demo plan validation failed")?;
+    let rendered = map_domain(
+        realizer.render(template, &valid_plan),
+        "demo realization failed",
+    )?;
     println!();
     println!("valid render:");
     println!("  {rendered}");
@@ -153,15 +167,15 @@ fn run_farsi_demo() -> Result<(), DynError> {
     Ok(())
 }
 
-fn assignment(slot: &str, surface: &str) -> Result<SlotAssignment, DynError> {
+fn assignment(slot: &str, surface: &str) -> Result<SlotAssignment, CliError> {
     Ok(SlotAssignment {
-        slot: SlotId::new(slot)?,
+        slot: map_domain(SlotId::new(slot), "invalid slot identifier")?,
         surface: surface.to_string(),
         lemma: None,
     })
 }
 
-fn run_farsi_proto_encode(payload_text: &str, json: bool) -> Result<(), DynError> {
+fn run_farsi_proto_encode(payload_text: &str, json: bool) -> Result<(), CliError> {
     let format = if json {
         OutputFormat::Json
     } else {
@@ -175,20 +189,27 @@ fn run_farsi_proto_encode(payload_text: &str, json: bool) -> Result<(), DynError
 fn render_farsi_proto_encode_output(
     payload_text: &str,
     format: OutputFormat,
-) -> Result<String, DynError> {
+) -> Result<String, CliError> {
     let payload = payload_text.as_bytes();
-    let runtime = FarsiProtoRuntime::new()?;
+    let runtime = FarsiProtoRuntime::new().map_err(|error| {
+        CliError::internal(format!("failed to initialize Farsi runtime: {error}"))
+    })?;
     let schemas = runtime.mapper.frame_schemas();
-    let orchestration = runtime.orchestrator().orchestrate_encode(
+    let orchestration = map_domain(runtime.orchestrator().orchestrate_encode(
         EncodeRequest {
             carrier_text: payload_text.to_string(),
             payload: payload.to_vec(),
-            options: runtime.pipeline_options()?,
+            options: runtime.pipeline_options().map_err(|error| {
+                CliError::config(format!("invalid pipeline options: {error}"))
+            })?,
         },
         &schemas,
-    )?;
+    ), "encode orchestration failed")?;
     let payload_plan = orchestration.symbolic_plan;
-    let realization_plans = runtime.mapper.map_payload_to_plans(&payload_plan)?;
+    let realization_plans = map_domain(
+        runtime.mapper.map_payload_to_plans(&payload_plan),
+        "failed to map payload to realization plans",
+    )?;
 
     let mut sentences = Vec::with_capacity(realization_plans.len());
     let mut frame_lines = Vec::with_capacity(realization_plans.len());
@@ -196,9 +217,15 @@ fn render_farsi_proto_encode_output(
         let template = runtime
             .pack
             .template(&plan.template_id)
-            .ok_or_else(|| format!("missing template: {}", plan.template_id))?;
-        runtime.checker.validate_plan(template, plan)?;
-        let sentence = runtime.realizer.render(template, plan)?;
+            .ok_or_else(|| CliError::domain(format!("missing template: {}", plan.template_id)))?;
+        map_domain(
+            runtime.checker.validate_plan(template, plan),
+            "render plan validation failed",
+        )?;
+        let sentence = map_domain(
+            runtime.realizer.render(template, plan),
+            "render plan failed",
+        )?;
         let symbol_values = payload_plan.frames[index]
             .values
             .iter()
@@ -259,12 +286,16 @@ fn render_farsi_proto_encode_output(
     Ok(report_lines.join("\n"))
 }
 
-fn run_farsi_proto_decode(trace_input: Option<String>, json: bool) -> Result<(), DynError> {
+fn run_farsi_proto_decode(trace_input: Option<String>, json: bool) -> Result<(), CliError> {
     let trace_text = match trace_input {
         Some(value) => value,
         None => {
             let mut buffer = String::new();
-            std::io::stdin().read_to_string(&mut buffer)?;
+            std::io::stdin()
+                .read_to_string(&mut buffer)
+                .map_err(|error| {
+                    CliError::io("failed to read trace from stdin", None, error)
+                })?;
             buffer
         }
     };
@@ -282,38 +313,51 @@ fn run_farsi_proto_decode(trace_input: Option<String>, json: bool) -> Result<(),
 fn render_farsi_proto_decode_output(
     trace_text: &str,
     format: OutputFormat,
-) -> Result<String, DynError> {
+) -> Result<String, CliError> {
     if trace_text.trim().is_empty() {
-        return Err("proto-decode requires trace input from proto-encode output".into());
+        return Err(CliError::input(
+            "proto-decode requires trace input from proto-encode output",
+        ));
     }
 
-    let runtime = FarsiProtoRuntime::new()?;
+    let runtime = FarsiProtoRuntime::new().map_err(|error| {
+        CliError::internal(format!("failed to initialize Farsi runtime: {error}"))
+    })?;
     let schemas = runtime.mapper.frame_schemas();
-    let frames = parse_frames_from_trace(trace_text, &schemas)?;
+    let frames = parse_frames_from_trace(trace_text, &schemas)
+        .map_err(|error| CliError::trace(format!("failed to parse trace frames: {error}")))?;
 
     if frames.is_empty() {
-        return Err("no frame lines were found in trace input".into());
+        return Err(CliError::trace("no frame lines were found in trace input"));
     }
     if let Some(sequence_error) = frame_sequence_error(&frames) {
-        return Err(format!("invalid trace frame sequence: {sequence_error}").into());
+        return Err(CliError::trace(format!(
+            "invalid trace frame sequence: {sequence_error}"
+        )));
     }
 
     let ordered_schemas = frames
         .iter()
         .map(|frame| schema_for_template(&schemas, &frame.template_id))
-        .collect::<Result<Vec<_>, String>>()?;
+        .collect::<Result<Vec<_>, String>>()
+        .map_err(|error| CliError::trace(format!("failed to resolve trace schemas: {error}")))?;
 
-    let orchestration = runtime
+    let orchestration = map_domain(
+        runtime
         .orchestrator()
         .with_symbolic_options(FixedWidthPlanningOptions::default())
         .orchestrate_decode(
             DecodeRequest {
                 stego_text: trace_text.to_string(),
-                options: runtime.pipeline_options()?,
+                options: runtime.pipeline_options().map_err(|error| {
+                    CliError::config(format!("invalid pipeline options: {error}"))
+                })?,
             },
             &frames,
             &ordered_schemas,
-        )?;
+        ),
+        "decode orchestration failed",
+    )?;
     let payload = orchestration.payload;
     let hex_payload = payload
         .iter()
@@ -346,4 +390,11 @@ fn render_farsi_proto_decode_output(
     }
 
     Ok(report_lines.join("\n"))
+}
+
+fn map_domain<T, E>(result: Result<T, E>, context: &str) -> Result<T, CliError>
+where
+    E: Display,
+{
+    result.map_err(|error| CliError::domain(format!("{context}: {error}")))
 }

@@ -4,7 +4,7 @@ use linguasteg_core::{
     BitRange, SymbolicFramePlan, SymbolicFrameSchema, SymbolicSlotValue, TemplateId,
 };
 
-use super::types::DynError;
+type DynError = Box<dyn std::error::Error>;
 
 pub(crate) fn parse_frames_from_trace(
     trace_text: &str,

@@ -8,8 +8,6 @@ use linguasteg_models::{
     FarsiPrototypeSymbolicMapper, InMemoryGatewayRegistry,
 };
 
-use super::types::DynError;
-
 struct InMemoryStrategyRegistry {
     strategies: Vec<StrategyDescriptor>,
 }
@@ -42,7 +40,7 @@ pub(crate) struct FarsiProtoRuntime {
 }
 
 impl FarsiProtoRuntime {
-    pub(crate) fn new() -> Result<Self, DynError> {
+    pub(crate) fn new() -> Result<Self, Box<dyn std::error::Error>> {
         let strategy_id = StrategyId::new("symbolic-stub")?;
         let provider = ProviderId::new("stub")?;
         let model = ModelId::new("stub-local")?;
@@ -84,7 +82,7 @@ impl FarsiProtoRuntime {
         )
     }
 
-    pub(crate) fn pipeline_options(&self) -> Result<PipelineOptions, DynError> {
+    pub(crate) fn pipeline_options(&self) -> Result<PipelineOptions, Box<dyn std::error::Error>> {
         Ok(PipelineOptions {
             language: LanguageTag::new("fa")?,
             strategy: StrategyId::new("symbolic-stub")?,

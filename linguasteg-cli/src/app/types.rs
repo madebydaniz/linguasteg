@@ -1,4 +1,4 @@
-pub(crate) type DynError = Box<dyn std::error::Error>;
+use std::fmt::{Display, Formatter};
 
 pub(crate) enum Command {
     Encode(EncodeOptions),
@@ -63,6 +63,85 @@ pub(crate) enum ProtoTarget {
     Farsi,
 }
 
-pub(crate) enum CliError {
-    Usage(String),
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum CliErrorKind {
+    Usage,
+    Input,
+    Config,
+    Trace,
+    Io,
+    Domain,
+    Internal,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct CliError {
+    kind: CliErrorKind,
+    code: &'static str,
+    message: String,
+}
+
+impl CliError {
+    pub(crate) fn usage(message: impl Into<String>) -> Self {
+        Self::new(CliErrorKind::Usage, "LSTEG-CLI-ARG-001", message)
+    }
+
+    pub(crate) fn input(message: impl Into<String>) -> Self {
+        Self::new(CliErrorKind::Input, "LSTEG-CLI-INP-001", message)
+    }
+
+    pub(crate) fn config(message: impl Into<String>) -> Self {
+        Self::new(CliErrorKind::Config, "LSTEG-CLI-CFG-001", message)
+    }
+
+    pub(crate) fn trace(message: impl Into<String>) -> Self {
+        Self::new(CliErrorKind::Trace, "LSTEG-CLI-TRC-001", message)
+    }
+
+    pub(crate) fn io(operation: &str, path: Option<&str>, error: impl Display) -> Self {
+        let location = path.map_or_else(String::new, |item| format!(" '{item}'"));
+        Self::new(
+            CliErrorKind::Io,
+            "LSTEG-CLI-IO-001",
+            format!("{operation}{location}: {error}"),
+        )
+    }
+
+    pub(crate) fn domain(message: impl Into<String>) -> Self {
+        Self::new(CliErrorKind::Domain, "LSTEG-CLI-DOM-001", message)
+    }
+
+    pub(crate) fn internal(message: impl Into<String>) -> Self {
+        Self::new(CliErrorKind::Internal, "LSTEG-CLI-INT-001", message)
+    }
+
+    pub(crate) fn kind(&self) -> CliErrorKind {
+        self.kind
+    }
+
+    pub(crate) fn code(&self) -> &'static str {
+        self.code
+    }
+
+    pub(crate) fn message(&self) -> &str {
+        &self.message
+    }
+
+    pub(crate) fn exit_code(&self) -> u8 {
+        if self.kind == CliErrorKind::Usage { 2 } else { 1 }
+    }
+
+    fn new(kind: CliErrorKind, code: &'static str, message: impl Into<String>) -> Self {
+        Self {
+            kind,
+            code,
+            message: message.into(),
+        }
+    }
+}
+
+impl Display for CliError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "[{}] {}", self.code, self.message)
+    }
 }

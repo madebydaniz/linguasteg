@@ -6,21 +6,26 @@ use linguasteg_core::{
 use super::formatters::{build_trace_analysis_json, build_trace_analysis_text};
 use super::runtime::FarsiProtoRuntime;
 use super::trace::{frame_sequence_error, parse_frames_from_trace, schema_for_template};
-use super::types::{DynError, OutputFormat, TraceAnalysisSummary};
+use super::types::{CliError, OutputFormat, TraceAnalysisSummary};
 
 pub(crate) fn render_farsi_trace_analysis_output(
     trace_text: &str,
     format: OutputFormat,
-) -> Result<String, DynError> {
+) -> Result<String, CliError> {
     if trace_text.trim().is_empty() {
-        return Err("analyze requires trace input from proto-encode output".into());
+        return Err(CliError::input(
+            "analyze requires trace input from proto-encode output",
+        ));
     }
 
-    let runtime = FarsiProtoRuntime::new()?;
+    let runtime = FarsiProtoRuntime::new().map_err(|error| {
+        CliError::internal(format!("failed to initialize Farsi runtime: {error}"))
+    })?;
     let schemas = runtime.mapper.frame_schemas();
-    let frames = parse_frames_from_trace(trace_text, &schemas)?;
+    let frames = parse_frames_from_trace(trace_text, &schemas)
+        .map_err(|error| CliError::trace(format!("failed to parse trace frames: {error}")))?;
     if frames.is_empty() {
-        return Err("no frame lines were found in trace input".into());
+        return Err(CliError::trace("no frame lines were found in trace input"));
     }
 
     let summary = analyze_farsi_trace(&frames, &schemas)?;
@@ -34,7 +39,7 @@ pub(crate) fn render_farsi_trace_analysis_output(
 fn analyze_farsi_trace(
     frames: &[SymbolicFramePlan],
     schemas: &[SymbolicFrameSchema],
-) -> Result<TraceAnalysisSummary, DynError> {
+) -> Result<TraceAnalysisSummary, CliError> {
     let mut ordered_schemas = Vec::with_capacity(frames.len());
     let mut symbolic_bits = 0usize;
     let mut consumed_bits = 0usize;
@@ -44,7 +49,8 @@ fn analyze_farsi_trace(
     for frame in frames {
         consumed_bits += frame.source.consumed_bits;
 
-        let schema = schema_for_template(schemas, &frame.template_id)?;
+        let schema = schema_for_template(schemas, &frame.template_id)
+            .map_err(|error| CliError::trace(format!("failed to resolve trace schemas: {error}")))?;
         symbolic_bits += schema.total_bits();
         ordered_schemas.push(schema);
     }

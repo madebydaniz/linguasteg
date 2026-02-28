@@ -22,7 +22,7 @@ pub(crate) fn parse_command(args: Vec<String>) -> Result<Option<Command>, CliErr
         "demo" => parse_demo_command(args),
         "proto-encode" => parse_proto_encode_command(args),
         "proto-decode" => parse_proto_decode_command(args),
-        _ => Err(CliError::Usage(format!("unknown command: {command}"))),
+        _ => Err(CliError::usage(format!("unknown command: {command}"))),
     }
 }
 
@@ -48,7 +48,7 @@ fn parse_encode_command(
             }
             "--message" => {
                 if message.is_some() {
-                    return Err(CliError::Usage(
+                    return Err(CliError::usage(
                         "--message cannot be provided multiple times".to_string(),
                     ));
                 }
@@ -56,7 +56,7 @@ fn parse_encode_command(
             }
             "--input" => {
                 if input_path.is_some() {
-                    return Err(CliError::Usage(
+                    return Err(CliError::usage(
                         "--input cannot be provided multiple times".to_string(),
                     ));
                 }
@@ -64,25 +64,25 @@ fn parse_encode_command(
             }
             "--output" => {
                 if output_path.is_some() {
-                    return Err(CliError::Usage(
+                    return Err(CliError::usage(
                         "--output cannot be provided multiple times".to_string(),
                     ));
                 }
                 output_path = Some(next_arg_value(&mut args, "--output")?);
             }
             _ => {
-                return Err(CliError::Usage(format!("unknown encode argument: {arg}")));
+                return Err(CliError::usage(format!("unknown encode argument: {arg}")));
             }
         }
     }
 
     if message.is_some() && input_path.is_some() {
-        return Err(CliError::Usage(
+        return Err(CliError::usage(
             "encode accepts either --message or --input, not both".to_string(),
         ));
     }
     if message.is_none() && input_path.is_none() {
-        return Err(CliError::Usage(
+        return Err(CliError::usage(
             "encode requires --message <text> or --input <file>".to_string(),
         ));
     }
@@ -118,7 +118,7 @@ fn parse_decode_command(
             }
             "--trace" => {
                 if trace.is_some() {
-                    return Err(CliError::Usage(
+                    return Err(CliError::usage(
                         "--trace cannot be provided multiple times".to_string(),
                     ));
                 }
@@ -126,7 +126,7 @@ fn parse_decode_command(
             }
             "--input" => {
                 if input_path.is_some() {
-                    return Err(CliError::Usage(
+                    return Err(CliError::usage(
                         "--input cannot be provided multiple times".to_string(),
                     ));
                 }
@@ -134,20 +134,20 @@ fn parse_decode_command(
             }
             "--output" => {
                 if output_path.is_some() {
-                    return Err(CliError::Usage(
+                    return Err(CliError::usage(
                         "--output cannot be provided multiple times".to_string(),
                     ));
                 }
                 output_path = Some(next_arg_value(&mut args, "--output")?);
             }
             _ => {
-                return Err(CliError::Usage(format!("unknown decode argument: {arg}")));
+                return Err(CliError::usage(format!("unknown decode argument: {arg}")));
             }
         }
     }
 
     if trace.is_some() && input_path.is_some() {
-        return Err(CliError::Usage(
+        return Err(CliError::usage(
             "decode accepts either --trace or --input, not both".to_string(),
         ));
     }
@@ -183,7 +183,7 @@ fn parse_analyze_command(
             }
             "--trace" => {
                 if trace.is_some() {
-                    return Err(CliError::Usage(
+                    return Err(CliError::usage(
                         "--trace cannot be provided multiple times".to_string(),
                     ));
                 }
@@ -191,7 +191,7 @@ fn parse_analyze_command(
             }
             "--input" => {
                 if input_path.is_some() {
-                    return Err(CliError::Usage(
+                    return Err(CliError::usage(
                         "--input cannot be provided multiple times".to_string(),
                     ));
                 }
@@ -199,20 +199,20 @@ fn parse_analyze_command(
             }
             "--output" => {
                 if output_path.is_some() {
-                    return Err(CliError::Usage(
+                    return Err(CliError::usage(
                         "--output cannot be provided multiple times".to_string(),
                     ));
                 }
                 output_path = Some(next_arg_value(&mut args, "--output")?);
             }
             _ => {
-                return Err(CliError::Usage(format!("unknown analyze argument: {arg}")));
+                return Err(CliError::usage(format!("unknown analyze argument: {arg}")));
             }
         }
     }
 
     if trace.is_some() && input_path.is_some() {
-        return Err(CliError::Usage(
+        return Err(CliError::usage(
             "analyze accepts either --trace or --input, not both".to_string(),
         ));
     }
@@ -229,7 +229,7 @@ fn parse_analyze_command(
 fn parse_demo_command(mut args: impl Iterator<Item = String>) -> Result<Option<Command>, CliError> {
     match args.next().as_deref() {
         Some("fa") => Ok(Some(Command::Demo(DemoTarget::Farsi))),
-        _ => Err(CliError::Usage(
+        _ => Err(CliError::usage(
             "demo target is required (supported: fa)".to_string(),
         )),
     }
@@ -240,7 +240,7 @@ fn parse_proto_encode_command(
 ) -> Result<Option<Command>, CliError> {
     let mut args = args.collect::<Vec<_>>();
     if args.first().map(String::as_str) != Some("fa") {
-        return Err(CliError::Usage(
+        return Err(CliError::usage(
             "proto-encode target is required (supported: fa)".to_string(),
         ));
     }
@@ -266,7 +266,7 @@ fn parse_proto_decode_command(
 ) -> Result<Option<Command>, CliError> {
     let mut args = args.collect::<Vec<_>>();
     if args.first().map(String::as_str) != Some("fa") {
-        return Err(CliError::Usage(
+        return Err(CliError::usage(
             "proto-decode target is required (supported: fa)".to_string(),
         ));
     }
@@ -285,13 +285,13 @@ fn parse_proto_decode_command(
 
 fn next_arg_value(args: &mut impl Iterator<Item = String>, flag: &str) -> Result<String, CliError> {
     args.next()
-        .ok_or_else(|| CliError::Usage(format!("{flag} requires a value")))
+        .ok_or_else(|| CliError::usage(format!("{flag} requires a value")))
 }
 
 fn parse_proto_target(value: &str) -> Result<ProtoTarget, CliError> {
     match value {
         "fa" => Ok(ProtoTarget::Farsi),
-        _ => Err(CliError::Usage(format!(
+        _ => Err(CliError::config(format!(
             "unsupported language '{value}' (supported: fa)"
         ))),
     }
@@ -301,7 +301,7 @@ fn parse_output_format(value: &str) -> Result<OutputFormat, CliError> {
     match value {
         "text" => Ok(OutputFormat::Text),
         "json" => Ok(OutputFormat::Json),
-        _ => Err(CliError::Usage(format!(
+        _ => Err(CliError::config(format!(
             "unsupported output format '{value}' (supported: text, json)"
         ))),
     }
