@@ -3,6 +3,7 @@ mod error;
 mod gateway;
 mod grammar;
 mod ids;
+mod orchestration;
 mod pipeline;
 mod registry;
 mod style;
@@ -24,6 +25,7 @@ pub use grammar::{
     render_realization_plan, validate_realization_plan, validate_template_descriptor,
 };
 pub use ids::{LanguageTag, ModelId, ProviderId, SlotId, StrategyId, StyleProfileId, TemplateId};
+pub use orchestration::{OrchestratedDecodeResult, OrchestratedEncodeResult, PipelineOrchestrator};
 pub use pipeline::{
     DecodeOutput, DecodeRequest, Decoder, EncodeOutput, EncodeRequest, Encoder, ModelAdapter,
     ModelCapability, ModelSelection, PipelineOptions,
