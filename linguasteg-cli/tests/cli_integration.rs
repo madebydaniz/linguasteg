@@ -30,6 +30,10 @@ fn stdout_string(output: &Output) -> String {
     String::from_utf8(output.stdout.clone()).expect("stdout must be valid utf8")
 }
 
+fn stderr_string(output: &Output) -> String {
+    String::from_utf8(output.stderr.clone()).expect("stderr must be valid utf8")
+}
+
 #[test]
 fn encode_json_outputs_proto_encode_mode() {
     let output = run_lsteg(&["encode", "--message", "salam", "--format", "json"]);
@@ -80,4 +84,33 @@ fn parse_errors_return_exit_code_two() {
 fn runtime_errors_return_exit_code_one() {
     let output = run_lsteg_with_stdin(&["decode"], "");
     assert_eq!(output.status.code(), Some(1));
+}
+
+#[test]
+fn decode_rejects_non_contiguous_trace_ranges() {
+    let encode_output = run_lsteg(&["encode", "--message", "salam"]);
+    assert!(encode_output.status.success());
+    let trace_text = stdout_string(&encode_output);
+    let broken_trace = trace_text.replacen("bits=18..39", "bits=19..40", 1);
+
+    let decode_output = run_lsteg_with_stdin(&["decode", "--format", "json"], &broken_trace);
+    assert_eq!(decode_output.status.code(), Some(1));
+
+    let stderr = stderr_string(&decode_output);
+    assert!(stderr.contains("invalid trace frame sequence"));
+}
+
+#[test]
+fn analyze_reports_integrity_failure_for_non_contiguous_trace() {
+    let encode_output = run_lsteg(&["encode", "--message", "salam"]);
+    assert!(encode_output.status.success());
+    let trace_text = stdout_string(&encode_output);
+    let broken_trace = trace_text.replacen("bits=18..39", "bits=19..40", 1);
+
+    let analyze_output = run_lsteg_with_stdin(&["analyze", "--format", "json"], &broken_trace);
+    assert!(analyze_output.status.success());
+
+    let analysis_json = stdout_string(&analyze_output);
+    assert!(analysis_json.contains("\"integrity_ok\":false"));
+    assert!(analysis_json.contains("frame 02 starts at bit 19 but expected 18"));
 }

@@ -5,7 +5,7 @@ use linguasteg_core::{
 
 use super::formatters::{build_trace_analysis_json, build_trace_analysis_text};
 use super::runtime::FarsiProtoRuntime;
-use super::trace::{parse_frames_from_trace, schema_for_template};
+use super::trace::{frame_sequence_error, parse_frames_from_trace, schema_for_template};
 use super::types::{DynError, OutputFormat, TraceAnalysisSummary};
 
 pub(crate) fn render_farsi_trace_analysis_output(
@@ -38,14 +38,10 @@ fn analyze_farsi_trace(
     let mut ordered_schemas = Vec::with_capacity(frames.len());
     let mut symbolic_bits = 0usize;
     let mut consumed_bits = 0usize;
-    let mut contiguous_ranges = true;
-    let mut expected_start = 0usize;
+    let sequence_error = frame_sequence_error(frames);
+    let contiguous_ranges = sequence_error.is_none();
 
     for frame in frames {
-        if frame.source.start_bit != expected_start {
-            contiguous_ranges = false;
-        }
-        expected_start = frame.source.start_bit + frame.source.consumed_bits;
         consumed_bits += frame.source.consumed_bits;
 
         let schema = schema_for_template(schemas, &frame.template_id)?;
@@ -55,11 +51,7 @@ fn analyze_farsi_trace(
 
     let encoded_bytes = consumed_bits.div_ceil(8);
     let mut integrity_ok = contiguous_ranges;
-    let mut integrity_error = if contiguous_ranges {
-        None
-    } else {
-        Some("frame bit ranges are not contiguous".to_string())
-    };
+    let mut integrity_error = sequence_error;
 
     let padding_bits = if symbolic_bits >= consumed_bits {
         symbolic_bits - consumed_bits

@@ -32,6 +32,31 @@ pub(crate) fn parse_frames_from_trace(
     Ok(frames)
 }
 
+pub(crate) fn frame_sequence_error(frames: &[SymbolicFramePlan]) -> Option<String> {
+    let mut expected_start = 0usize;
+    for (index, frame) in frames.iter().enumerate() {
+        if frame.source.consumed_bits == 0 {
+            return Some(format!(
+                "frame {:02} has zero consumed bits",
+                index + 1
+            ));
+        }
+        if frame.source.start_bit != expected_start {
+            return Some(format!(
+                "frame {:02} starts at bit {} but expected {}",
+                index + 1,
+                frame.source.start_bit,
+                expected_start
+            ));
+        }
+        expected_start = frame
+            .source
+            .start_bit
+            .saturating_add(frame.source.consumed_bits);
+    }
+    None
+}
+
 pub(crate) fn schema_for_template(
     schemas: &[SymbolicFrameSchema],
     template_id: &TemplateId,
@@ -305,7 +330,7 @@ fn split_json_objects(array_content: &str) -> Result<Vec<&str>, DynError> {
 mod tests {
     use linguasteg_models::FarsiPrototypeSymbolicMapper;
 
-    use super::parse_frames_from_trace;
+    use super::{frame_sequence_error, parse_frames_from_trace};
 
     fn farsi_schemas() -> Vec<linguasteg_core::SymbolicFrameSchema> {
         FarsiPrototypeSymbolicMapper.frame_schemas()
@@ -368,5 +393,13 @@ mod tests {
                 .to_string()
                 .contains("malformed json frame array: unexpected '}'")
         );
+    }
+
+    #[test]
+    fn frame_sequence_error_detects_non_contiguous_ranges() {
+        let trace = "frame 01 [fa-basic-sov] bits=0..18 values=subject:0,object:0,adjective:0,verb:21 => x\nframe 02 [fa-time-location-sov] bits=19..40 values=subject:25,time:5,location:4,object:5,verb:22 => y";
+        let frames = parse_frames_from_trace(trace, &farsi_schemas()).expect("trace should parse");
+        let error = frame_sequence_error(&frames).expect("should detect range gap");
+        assert!(error.contains("frame 02 starts at bit 19 but expected 18"));
     }
 }

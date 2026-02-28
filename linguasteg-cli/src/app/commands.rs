@@ -9,7 +9,7 @@ use linguasteg_core::{
 use super::analysis::render_farsi_trace_analysis_output;
 use super::formatters::{build_proto_decode_json, build_proto_encode_json};
 use super::runtime::FarsiProtoRuntime;
-use super::trace::{parse_frames_from_trace, schema_for_template};
+use super::trace::{frame_sequence_error, parse_frames_from_trace, schema_for_template};
 use super::types::{
     AnalyzeOptions, Command, DecodeOptions, DemoTarget, DynError, EncodeOptions, OutputFormat,
     ProtoTarget,
@@ -293,6 +293,9 @@ fn render_farsi_proto_decode_output(
 
     if frames.is_empty() {
         return Err("no frame lines were found in trace input".into());
+    }
+    if let Some(sequence_error) = frame_sequence_error(&frames) {
+        return Err(format!("invalid trace frame sequence: {sequence_error}").into());
     }
 
     let ordered_schemas = frames
