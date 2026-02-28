@@ -17,18 +17,41 @@ use std::process::ExitCode;
 type DynError = Box<dyn std::error::Error>;
 
 enum Command {
-    Encode,
-    Decode,
+    Encode(EncodeOptions),
+    Decode(DecodeOptions),
     Analyze,
     Demo(DemoTarget),
     ProtoEncode(ProtoTarget, String, bool),
     ProtoDecode(ProtoTarget, Option<String>, bool),
 }
 
+struct EncodeOptions {
+    target: ProtoTarget,
+    message: Option<String>,
+    input_path: Option<String>,
+    output_path: Option<String>,
+    format: OutputFormat,
+}
+
+struct DecodeOptions {
+    target: ProtoTarget,
+    trace: Option<String>,
+    input_path: Option<String>,
+    output_path: Option<String>,
+    format: OutputFormat,
+}
+
+#[derive(Clone, Copy)]
+enum OutputFormat {
+    Text,
+    Json,
+}
+
 enum DemoTarget {
     Farsi,
 }
 
+#[derive(Clone, Copy)]
 enum ProtoTarget {
     Farsi,
 }
@@ -149,16 +172,8 @@ fn main() -> ExitCode {
 
 fn execute(command: Command) -> Result<(), DynError> {
     match command {
-        Command::Encode => {
-            let language = LanguageTag::new("en")?;
-            let strategy = StrategyId::new("synonym")?;
-            println!("encode scaffold: language={language} strategy={strategy}");
-        }
-        Command::Decode => {
-            let language = LanguageTag::new("en")?;
-            let strategy = StrategyId::new("synonym")?;
-            println!("decode scaffold: language={language} strategy={strategy}");
-        }
+        Command::Encode(options) => run_encode(options)?,
+        Command::Decode(options) => run_decode(options)?,
         Command::Analyze => {
             println!("analyze scaffold");
         }
@@ -185,14 +200,149 @@ fn parse_command(args: Vec<String>) -> Result<Option<Command>, CliError> {
     }
 
     match command.as_str() {
-        "encode" => Ok(Some(Command::Encode)),
-        "decode" => Ok(Some(Command::Decode)),
+        "encode" => parse_encode_command(args),
+        "decode" => parse_decode_command(args),
         "analyze" => Ok(Some(Command::Analyze)),
         "demo" => parse_demo_command(args),
         "proto-encode" => parse_proto_encode_command(args),
         "proto-decode" => parse_proto_decode_command(args),
         _ => Err(CliError::Usage(format!("unknown command: {command}"))),
     }
+}
+
+fn parse_encode_command(
+    mut args: impl Iterator<Item = String>,
+) -> Result<Option<Command>, CliError> {
+    let mut lang = ProtoTarget::Farsi;
+    let mut format = OutputFormat::Text;
+    let mut message = None;
+    let mut input_path = None;
+    let mut output_path = None;
+
+    while let Some(arg) = args.next() {
+        match arg.as_str() {
+            "--help" | "-h" => return Ok(None),
+            "--lang" => {
+                let value = next_arg_value(&mut args, "--lang")?;
+                lang = parse_proto_target(&value)?;
+            }
+            "--format" => {
+                let value = next_arg_value(&mut args, "--format")?;
+                format = parse_output_format(&value)?;
+            }
+            "--message" => {
+                if message.is_some() {
+                    return Err(CliError::Usage(
+                        "--message cannot be provided multiple times".to_string(),
+                    ));
+                }
+                message = Some(next_arg_value(&mut args, "--message")?);
+            }
+            "--input" => {
+                if input_path.is_some() {
+                    return Err(CliError::Usage(
+                        "--input cannot be provided multiple times".to_string(),
+                    ));
+                }
+                input_path = Some(next_arg_value(&mut args, "--input")?);
+            }
+            "--output" => {
+                if output_path.is_some() {
+                    return Err(CliError::Usage(
+                        "--output cannot be provided multiple times".to_string(),
+                    ));
+                }
+                output_path = Some(next_arg_value(&mut args, "--output")?);
+            }
+            _ => {
+                return Err(CliError::Usage(format!("unknown encode argument: {arg}")));
+            }
+        }
+    }
+
+    if message.is_some() && input_path.is_some() {
+        return Err(CliError::Usage(
+            "encode accepts either --message or --input, not both".to_string(),
+        ));
+    }
+    if message.is_none() && input_path.is_none() {
+        return Err(CliError::Usage(
+            "encode requires --message <text> or --input <file>".to_string(),
+        ));
+    }
+
+    Ok(Some(Command::Encode(EncodeOptions {
+        target: lang,
+        message,
+        input_path,
+        output_path,
+        format,
+    })))
+}
+
+fn parse_decode_command(
+    mut args: impl Iterator<Item = String>,
+) -> Result<Option<Command>, CliError> {
+    let mut lang = ProtoTarget::Farsi;
+    let mut format = OutputFormat::Text;
+    let mut trace = None;
+    let mut input_path = None;
+    let mut output_path = None;
+
+    while let Some(arg) = args.next() {
+        match arg.as_str() {
+            "--help" | "-h" => return Ok(None),
+            "--lang" => {
+                let value = next_arg_value(&mut args, "--lang")?;
+                lang = parse_proto_target(&value)?;
+            }
+            "--format" => {
+                let value = next_arg_value(&mut args, "--format")?;
+                format = parse_output_format(&value)?;
+            }
+            "--trace" => {
+                if trace.is_some() {
+                    return Err(CliError::Usage(
+                        "--trace cannot be provided multiple times".to_string(),
+                    ));
+                }
+                trace = Some(next_arg_value(&mut args, "--trace")?);
+            }
+            "--input" => {
+                if input_path.is_some() {
+                    return Err(CliError::Usage(
+                        "--input cannot be provided multiple times".to_string(),
+                    ));
+                }
+                input_path = Some(next_arg_value(&mut args, "--input")?);
+            }
+            "--output" => {
+                if output_path.is_some() {
+                    return Err(CliError::Usage(
+                        "--output cannot be provided multiple times".to_string(),
+                    ));
+                }
+                output_path = Some(next_arg_value(&mut args, "--output")?);
+            }
+            _ => {
+                return Err(CliError::Usage(format!("unknown decode argument: {arg}")));
+            }
+        }
+    }
+
+    if trace.is_some() && input_path.is_some() {
+        return Err(CliError::Usage(
+            "decode accepts either --trace or --input, not both".to_string(),
+        ));
+    }
+
+    Ok(Some(Command::Decode(DecodeOptions {
+        target: lang,
+        trace,
+        input_path,
+        output_path,
+        format,
+    })))
 }
 
 fn parse_demo_command(mut args: impl Iterator<Item = String>) -> Result<Option<Command>, CliError> {
@@ -250,6 +400,83 @@ fn parse_proto_decode_command(
     };
 
     Ok(Some(Command::ProtoDecode(ProtoTarget::Farsi, trace, json)))
+}
+
+fn next_arg_value(
+    args: &mut impl Iterator<Item = String>,
+    flag: &str,
+) -> Result<String, CliError> {
+    args.next()
+        .ok_or_else(|| CliError::Usage(format!("{flag} requires a value")))
+}
+
+fn parse_proto_target(value: &str) -> Result<ProtoTarget, CliError> {
+    match value {
+        "fa" => Ok(ProtoTarget::Farsi),
+        _ => Err(CliError::Usage(format!(
+            "unsupported language '{value}' (supported: fa)"
+        ))),
+    }
+}
+
+fn parse_output_format(value: &str) -> Result<OutputFormat, CliError> {
+    match value {
+        "text" => Ok(OutputFormat::Text),
+        "json" => Ok(OutputFormat::Json),
+        _ => Err(CliError::Usage(format!(
+            "unsupported output format '{value}' (supported: text, json)"
+        ))),
+    }
+}
+
+fn run_encode(options: EncodeOptions) -> Result<(), DynError> {
+    let payload_text = resolve_encode_payload(&options)?;
+    let output = match options.target {
+        ProtoTarget::Farsi => render_farsi_proto_encode_output(&payload_text, options.format)?,
+    };
+    write_output(&output, options.output_path.as_deref())
+}
+
+fn run_decode(options: DecodeOptions) -> Result<(), DynError> {
+    let trace_text = resolve_decode_trace(&options)?;
+    let output = match options.target {
+        ProtoTarget::Farsi => render_farsi_proto_decode_output(&trace_text, options.format)?,
+    };
+    write_output(&output, options.output_path.as_deref())
+}
+
+fn resolve_encode_payload(options: &EncodeOptions) -> Result<String, DynError> {
+    if let Some(input_path) = &options.input_path {
+        let payload = std::fs::read_to_string(input_path)?;
+        return Ok(payload);
+    }
+    if let Some(message) = &options.message {
+        return Ok(message.clone());
+    }
+    Err("encode payload source is missing".into())
+}
+
+fn resolve_decode_trace(options: &DecodeOptions) -> Result<String, DynError> {
+    if let Some(input_path) = &options.input_path {
+        let trace_text = std::fs::read_to_string(input_path)?;
+        return Ok(trace_text);
+    }
+    if let Some(trace) = &options.trace {
+        return Ok(trace.clone());
+    }
+
+    let mut buffer = String::new();
+    std::io::stdin().read_to_string(&mut buffer)?;
+    Ok(buffer)
+}
+
+fn write_output(output: &str, output_path: Option<&str>) -> Result<(), DynError> {
+    if let Some(path) = output_path {
+        std::fs::write(path, output)?;
+    } else {
+        println!("{output}");
+    }
+    Ok(())
 }
 
 fn run_farsi_demo() -> Result<(), Box<dyn std::error::Error>> {
@@ -327,6 +554,20 @@ fn run_farsi_proto_encode(
     payload_text: &str,
     json: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    let format = if json {
+        OutputFormat::Json
+    } else {
+        OutputFormat::Text
+    };
+    let output = render_farsi_proto_encode_output(payload_text, format)?;
+    println!("{output}");
+    Ok(())
+}
+
+fn render_farsi_proto_encode_output(
+    payload_text: &str,
+    format: OutputFormat,
+) -> Result<String, Box<dyn std::error::Error>> {
     let payload = payload_text.as_bytes();
     let runtime = FarsiProtoRuntime::new()?;
     let schemas = runtime.mapper.frame_schemas();
@@ -372,45 +613,42 @@ fn run_farsi_proto_encode(
     let final_text = format!("{}.", sentences.join(". "));
     let gateway_response = orchestration.gateway_response.map(|item| item.content);
 
-    if json {
-        println!(
-            "{}",
-            build_proto_encode_json(
-                payload_text,
-                payload.len(),
-                payload_plan.encoded_len_bytes,
-                payload_plan.padding_bits,
-                &payload_plan.frames,
-                &sentences,
-                &final_text,
-                gateway_response.as_deref(),
-            )
-        );
-        return Ok(());
+    if matches!(format, OutputFormat::Json) {
+        return Ok(build_proto_encode_json(
+            payload_text,
+            payload.len(),
+            payload_plan.encoded_len_bytes,
+            payload_plan.padding_bits,
+            &payload_plan.frames,
+            &sentences,
+            &final_text,
+            gateway_response.as_deref(),
+        ));
     }
 
-    println!("Farsi prototype encode");
-    println!("input text: {}", payload_text);
-    println!("payload bytes: {}", payload.len());
-    println!(
+    let mut report_lines = Vec::new();
+    report_lines.push("Farsi prototype encode".to_string());
+    report_lines.push(format!("input text: {payload_text}"));
+    report_lines.push(format!("payload bytes: {}", payload.len()));
+    report_lines.push(format!(
         "encoded bytes (with length prefix): {}",
         payload_plan.encoded_len_bytes
-    );
-    println!("frames: {}", payload_plan.frames.len());
-    println!("padding bits: {}", payload_plan.padding_bits);
-    println!();
+    ));
+    report_lines.push(format!("frames: {}", payload_plan.frames.len()));
+    report_lines.push(format!("padding bits: {}", payload_plan.padding_bits));
+    report_lines.push(String::new());
     for line in frame_lines {
-        println!("{line}");
+        report_lines.push(line);
     }
-    println!();
-    println!("final prototype text:");
-    println!("{final_text}");
+    report_lines.push(String::new());
+    report_lines.push("final prototype text:".to_string());
+    report_lines.push(final_text);
 
     if let Some(gateway_response) = gateway_response {
-        println!("gateway response: {gateway_response}");
+        report_lines.push(format!("gateway response: {gateway_response}"));
     }
 
-    Ok(())
+    Ok(report_lines.join("\n"))
 }
 
 fn run_farsi_proto_decode(
@@ -426,6 +664,20 @@ fn run_farsi_proto_decode(
         }
     };
 
+    let format = if json {
+        OutputFormat::Json
+    } else {
+        OutputFormat::Text
+    };
+    let output = render_farsi_proto_decode_output(&trace_text, format)?;
+    println!("{output}");
+    Ok(())
+}
+
+fn render_farsi_proto_decode_output(
+    trace_text: &str,
+    format: OutputFormat,
+) -> Result<String, Box<dyn std::error::Error>> {
     if trace_text.trim().is_empty() {
         return Err("proto-decode requires trace input from proto-encode output".into());
     }
@@ -448,7 +700,7 @@ fn run_farsi_proto_decode(
         .with_symbolic_options(FixedWidthPlanningOptions::default())
         .orchestrate_decode(
             DecodeRequest {
-                stego_text: trace_text.clone(),
+                stego_text: trace_text.to_string(),
                 options: runtime.pipeline_options()?,
             },
             &frames,
@@ -464,31 +716,28 @@ fn run_farsi_proto_decode(
     let utf8_text = String::from_utf8(payload.clone()).ok();
     let gateway_response = orchestration.gateway_response.map(|item| item.content);
 
-    if json {
-        println!(
-            "{}",
-            build_proto_decode_json(
-                payload.len(),
-                &hex_payload,
-                utf8_text.as_deref(),
-                gateway_response.as_deref(),
-            )
-        );
-        return Ok(());
+    if matches!(format, OutputFormat::Json) {
+        return Ok(build_proto_decode_json(
+            payload.len(),
+            &hex_payload,
+            utf8_text.as_deref(),
+            gateway_response.as_deref(),
+        ));
     }
 
-    println!("Farsi prototype decode");
-    println!("decoded bytes: {}", payload.len());
-    println!("payload hex: {hex_payload}");
+    let mut report_lines = Vec::new();
+    report_lines.push("Farsi prototype decode".to_string());
+    report_lines.push(format!("decoded bytes: {}", payload.len()));
+    report_lines.push(format!("payload hex: {hex_payload}"));
     match utf8_text {
-        Some(text) => println!("payload utf8: {text}"),
-        None => println!("payload utf8: <invalid utf8>"),
+        Some(text) => report_lines.push(format!("payload utf8: {text}")),
+        None => report_lines.push("payload utf8: <invalid utf8>".to_string()),
     }
     if let Some(gateway_response) = gateway_response {
-        println!("gateway response: {gateway_response}");
+        report_lines.push(format!("gateway response: {gateway_response}"));
     }
 
-    Ok(())
+    Ok(report_lines.join("\n"))
 }
 
 fn parse_frames_from_trace(
@@ -906,6 +1155,14 @@ fn write_usage(mut writer: impl Write) -> std::io::Result<()> {
     writeln!(
         writer,
         "Usage: lsteg <encode|decode|analyze|demo|proto-encode|proto-decode>"
+    )?;
+    writeln!(
+        writer,
+        "       lsteg encode [--lang fa] (--message <text> | --input <file>) [--format text|json] [--output <file>]"
+    )?;
+    writeln!(
+        writer,
+        "       lsteg decode [--lang fa] [--trace <text> | --input <file>] [--format text|json] [--output <file>]"
     )?;
     writeln!(writer, "       lsteg demo fa")?;
     writeln!(writer, "       lsteg proto-encode fa [message] [--json]")?;
