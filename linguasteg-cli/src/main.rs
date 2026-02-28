@@ -11,7 +11,10 @@ use linguasteg_models::{
     FarsiPrototypeSymbolicMapper, InMemoryGatewayRegistry,
 };
 use std::collections::HashMap;
-use std::io::Read;
+use std::io::{Read, Write};
+use std::process::ExitCode;
+
+type DynError = Box<dyn std::error::Error>;
 
 enum Command {
     Encode,
@@ -28,6 +31,10 @@ enum DemoTarget {
 
 enum ProtoTarget {
     Farsi,
+}
+
+enum CliError {
+    Usage(String),
 }
 
 struct InMemoryStrategyRegistry {
@@ -116,62 +123,31 @@ impl FarsiProtoRuntime {
     }
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let mut args = std::env::args().skip(1);
-    let command = match args.next().as_deref() {
-        Some("encode") => Command::Encode,
-        Some("decode") => Command::Decode,
-        Some("analyze") => Command::Analyze,
-        Some("demo") => match args.next().as_deref() {
-            Some("fa") => Command::Demo(DemoTarget::Farsi),
-            _ => {
-                eprintln!("demo target is required (supported: fa)");
-                print_usage();
-                return Ok(());
-            }
-        },
-        Some("proto-encode") => match args.next().as_deref() {
-            Some("fa") => {
-                let mut parts = args.collect::<Vec<_>>();
-                let json = take_flag(&mut parts, "--json");
-                let message = parts.join(" ");
-                let payload_text = if message.trim().is_empty() {
-                    "salam donya".to_string()
-                } else {
-                    message
-                };
-                Command::ProtoEncode(ProtoTarget::Farsi, payload_text, json)
-            }
-            _ => {
-                eprintln!("proto-encode target is required (supported: fa)");
-                print_usage();
-                return Ok(());
-            }
-        },
-        Some("proto-decode") => match args.next().as_deref() {
-            Some("fa") => {
-                let mut parts = args.collect::<Vec<_>>();
-                let json = take_flag(&mut parts, "--json");
-                let trace_input = parts.join(" ");
-                let trace = if trace_input.trim().is_empty() {
-                    None
-                } else {
-                    Some(trace_input)
-                };
-                Command::ProtoDecode(ProtoTarget::Farsi, trace, json)
-            }
-            _ => {
-                eprintln!("proto-decode target is required (supported: fa)");
-                print_usage();
-                return Ok(());
-            }
-        },
-        _ => {
-            print_usage();
-            return Ok(());
+fn main() -> ExitCode {
+    let args = std::env::args().skip(1).collect::<Vec<_>>();
+    let command = match parse_command(args) {
+        Ok(Some(command)) => command,
+        Ok(None) => {
+            let _ = write_usage(std::io::stdout());
+            return ExitCode::SUCCESS;
+        }
+        Err(CliError::Usage(message)) => {
+            eprintln!("{message}");
+            let _ = write_usage(std::io::stderr());
+            return ExitCode::from(2);
         }
     };
 
+    match execute(command) {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(error) => {
+            eprintln!("error: {error}");
+            ExitCode::from(1)
+        }
+    }
+}
+
+fn execute(command: Command) -> Result<(), DynError> {
     match command {
         Command::Encode => {
             let language = LanguageTag::new("en")?;
@@ -196,6 +172,84 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     Ok(())
+}
+
+fn parse_command(args: Vec<String>) -> Result<Option<Command>, CliError> {
+    let mut args = args.into_iter();
+    let Some(command) = args.next() else {
+        return Ok(None);
+    };
+
+    if command == "--help" || command == "-h" {
+        return Ok(None);
+    }
+
+    match command.as_str() {
+        "encode" => Ok(Some(Command::Encode)),
+        "decode" => Ok(Some(Command::Decode)),
+        "analyze" => Ok(Some(Command::Analyze)),
+        "demo" => parse_demo_command(args),
+        "proto-encode" => parse_proto_encode_command(args),
+        "proto-decode" => parse_proto_decode_command(args),
+        _ => Err(CliError::Usage(format!("unknown command: {command}"))),
+    }
+}
+
+fn parse_demo_command(mut args: impl Iterator<Item = String>) -> Result<Option<Command>, CliError> {
+    match args.next().as_deref() {
+        Some("fa") => Ok(Some(Command::Demo(DemoTarget::Farsi))),
+        _ => Err(CliError::Usage(
+            "demo target is required (supported: fa)".to_string(),
+        )),
+    }
+}
+
+fn parse_proto_encode_command(
+    args: impl Iterator<Item = String>,
+) -> Result<Option<Command>, CliError> {
+    let mut args = args.collect::<Vec<_>>();
+    if args.first().map(String::as_str) != Some("fa") {
+        return Err(CliError::Usage(
+            "proto-encode target is required (supported: fa)".to_string(),
+        ));
+    }
+
+    args.remove(0);
+    let json = take_flag(&mut args, "--json");
+    let message = args.join(" ");
+    let payload_text = if message.trim().is_empty() {
+        "salam donya".to_string()
+    } else {
+        message
+    };
+
+    Ok(Some(Command::ProtoEncode(
+        ProtoTarget::Farsi,
+        payload_text,
+        json,
+    )))
+}
+
+fn parse_proto_decode_command(
+    args: impl Iterator<Item = String>,
+) -> Result<Option<Command>, CliError> {
+    let mut args = args.collect::<Vec<_>>();
+    if args.first().map(String::as_str) != Some("fa") {
+        return Err(CliError::Usage(
+            "proto-decode target is required (supported: fa)".to_string(),
+        ));
+    }
+
+    args.remove(0);
+    let json = take_flag(&mut args, "--json");
+    let trace_input = args.join(" ");
+    let trace = if trace_input.trim().is_empty() {
+        None
+    } else {
+        Some(trace_input)
+    };
+
+    Ok(Some(Command::ProtoDecode(ProtoTarget::Farsi, trace, json)))
 }
 
 fn run_farsi_demo() -> Result<(), Box<dyn std::error::Error>> {
@@ -373,8 +427,7 @@ fn run_farsi_proto_decode(
     };
 
     if trace_text.trim().is_empty() {
-        eprintln!("proto-decode requires trace input from proto-encode output");
-        return Ok(());
+        return Err("proto-decode requires trace input from proto-encode output".into());
     }
 
     let runtime = FarsiProtoRuntime::new()?;
@@ -382,8 +435,7 @@ fn run_farsi_proto_decode(
     let frames = parse_frames_from_trace(&trace_text, &schemas)?;
 
     if frames.is_empty() {
-        eprintln!("no frame lines were found in trace input");
-        return Ok(());
+        return Err("no frame lines were found in trace input".into());
     }
 
     let ordered_schemas = frames
@@ -849,11 +901,21 @@ fn json_escape(input: &str) -> String {
     escaped
 }
 
-fn print_usage() {
-    println!("LinguaSteg CLI (scaffold)");
-    println!("Usage: lsteg <encode|decode|analyze|demo|proto-encode|proto-decode>");
-    println!("       lsteg demo fa");
-    println!("       lsteg proto-encode fa [message] [--json]");
-    println!("       lsteg proto-encode fa [message] | lsteg proto-decode fa [--json]");
-    println!("       lsteg proto-decode fa \"<frame trace lines>\" [--json]");
+fn write_usage(mut writer: impl Write) -> std::io::Result<()> {
+    writeln!(writer, "LinguaSteg CLI (scaffold)")?;
+    writeln!(
+        writer,
+        "Usage: lsteg <encode|decode|analyze|demo|proto-encode|proto-decode>"
+    )?;
+    writeln!(writer, "       lsteg demo fa")?;
+    writeln!(writer, "       lsteg proto-encode fa [message] [--json]")?;
+    writeln!(
+        writer,
+        "       lsteg proto-encode fa [message] | lsteg proto-decode fa [--json]"
+    )?;
+    writeln!(
+        writer,
+        "       lsteg proto-decode fa \"<frame trace lines>\" [--json]"
+    )?;
+    Ok(())
 }
