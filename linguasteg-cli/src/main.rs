@@ -1,12 +1,14 @@
 use linguasteg_core::{
-    BitRange, FixedWidthBitPlanner, FixedWidthPlanningOptions, GrammarConstraintChecker,
-    LanguageRealizer, LanguageTag, RealizationPlan, SlotAssignment, SlotId, StrategyId,
-    StyleProfileRegistry, SymbolicFramePlan, SymbolicFrameSchema, SymbolicPayloadPlanner,
-    SymbolicSlotValue, TemplateId, TemplateRegistry, decode_payload_from_symbolic_frames,
+    BitRange, DecodeRequest, EncodeRequest, FixedWidthBitPlanner, FixedWidthPlanningOptions,
+    GrammarConstraintChecker, LanguageRealizer, LanguageTag, ModelCapability, ModelDescriptor,
+    ModelId, ModelRegistry, ModelSelection, PipelineOptions, PipelineOrchestrator, ProviderId,
+    RealizationPlan, SlotAssignment, SlotId, StrategyDescriptor, StrategyId, StrategyRegistry,
+    StyleProfileRegistry, SymbolicFramePlan, SymbolicFrameSchema, SymbolicSlotValue, TemplateId,
+    TemplateRegistry,
 };
 use linguasteg_models::{
     FarsiPrototypeConstraintChecker, FarsiPrototypeLanguagePack, FarsiPrototypeRealizer,
-    FarsiPrototypeSymbolicMapper,
+    FarsiPrototypeSymbolicMapper, InMemoryGatewayRegistry,
 };
 use std::collections::HashMap;
 use std::io::Read;
@@ -26,6 +28,92 @@ enum DemoTarget {
 
 enum ProtoTarget {
     Farsi,
+}
+
+struct InMemoryStrategyRegistry {
+    strategies: Vec<StrategyDescriptor>,
+}
+
+impl StrategyRegistry for InMemoryStrategyRegistry {
+    fn all_strategies(&self) -> &[StrategyDescriptor] {
+        &self.strategies
+    }
+}
+
+struct InMemoryModelRegistry {
+    models: Vec<ModelDescriptor>,
+}
+
+impl ModelRegistry for InMemoryModelRegistry {
+    fn all_models(&self) -> &[ModelDescriptor] {
+        &self.models
+    }
+}
+
+struct FarsiProtoRuntime {
+    pack: FarsiPrototypeLanguagePack,
+    checker: FarsiPrototypeConstraintChecker,
+    realizer: FarsiPrototypeRealizer,
+    mapper: FarsiPrototypeSymbolicMapper,
+    planner: FixedWidthBitPlanner,
+    strategy_registry: InMemoryStrategyRegistry,
+    model_registry: InMemoryModelRegistry,
+    gateway_registry: InMemoryGatewayRegistry,
+}
+
+impl FarsiProtoRuntime {
+    fn new() -> Result<Self, Box<dyn std::error::Error>> {
+        let strategy_id = StrategyId::new("symbolic-stub")?;
+        let provider = ProviderId::new("stub")?;
+        let model = ModelId::new("stub-local")?;
+        let fa = LanguageTag::new("fa")?;
+
+        Ok(Self {
+            pack: FarsiPrototypeLanguagePack::default(),
+            checker: FarsiPrototypeConstraintChecker,
+            realizer: FarsiPrototypeRealizer,
+            mapper: FarsiPrototypeSymbolicMapper,
+            planner: FixedWidthBitPlanner::default(),
+            strategy_registry: InMemoryStrategyRegistry {
+                strategies: vec![StrategyDescriptor {
+                    id: strategy_id,
+                    display_name: "Symbolic Stub".to_string(),
+                    required_capabilities: vec![ModelCapability::DeterministicSeed],
+                }],
+            },
+            model_registry: InMemoryModelRegistry {
+                models: vec![ModelDescriptor {
+                    provider,
+                    model,
+                    display_name: "Stub Local".to_string(),
+                    supported_languages: vec![fa],
+                    capabilities: vec![ModelCapability::DeterministicSeed],
+                }],
+            },
+            gateway_registry: InMemoryGatewayRegistry::with_stub(),
+        })
+    }
+
+    fn orchestrator(&self) -> PipelineOrchestrator<'_> {
+        PipelineOrchestrator::new(
+            &self.pack,
+            &self.strategy_registry,
+            &self.model_registry,
+            &self.gateway_registry,
+            &self.planner,
+        )
+    }
+
+    fn pipeline_options(&self) -> Result<PipelineOptions, Box<dyn std::error::Error>> {
+        Ok(PipelineOptions {
+            language: LanguageTag::new("fa")?,
+            strategy: StrategyId::new("symbolic-stub")?,
+            model_selection: Some(ModelSelection {
+                provider: ProviderId::new("stub")?,
+                model: ModelId::new("stub-local")?,
+            }),
+        })
+    }
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -179,15 +267,18 @@ fn assignment(slot: &str, surface: &str) -> Result<SlotAssignment, Box<dyn std::
 
 fn run_farsi_proto_encode(payload_text: &str) -> Result<(), Box<dyn std::error::Error>> {
     let payload = payload_text.as_bytes();
-    let pack = FarsiPrototypeLanguagePack::default();
-    let checker = FarsiPrototypeConstraintChecker;
-    let realizer = FarsiPrototypeRealizer;
-    let mapper = FarsiPrototypeSymbolicMapper;
-    let planner = FixedWidthBitPlanner::default();
-    let schemas = mapper.frame_schemas();
-
-    let payload_plan = planner.plan_payload(payload, &schemas)?;
-    let realization_plans = mapper.map_payload_to_plans(&payload_plan)?;
+    let runtime = FarsiProtoRuntime::new()?;
+    let schemas = runtime.mapper.frame_schemas();
+    let orchestration = runtime.orchestrator().orchestrate_encode(
+        EncodeRequest {
+            carrier_text: payload_text.to_string(),
+            payload: payload.to_vec(),
+            options: runtime.pipeline_options()?,
+        },
+        &schemas,
+    )?;
+    let payload_plan = orchestration.symbolic_plan;
+    let realization_plans = runtime.mapper.map_payload_to_plans(&payload_plan)?;
 
     println!("Farsi prototype encode");
     println!("input text: {}", payload_text);
@@ -202,11 +293,12 @@ fn run_farsi_proto_encode(payload_text: &str) -> Result<(), Box<dyn std::error::
 
     let mut sentences = Vec::with_capacity(realization_plans.len());
     for (index, plan) in realization_plans.iter().enumerate() {
-        let template = pack
+        let template = runtime
+            .pack
             .template(&plan.template_id)
             .ok_or_else(|| format!("missing template: {}", plan.template_id))?;
-        checker.validate_plan(template, plan)?;
-        let sentence = realizer.render(template, plan)?;
+        runtime.checker.validate_plan(template, plan)?;
+        let sentence = runtime.realizer.render(template, plan)?;
         let symbol_values = payload_plan.frames[index]
             .values
             .iter()
@@ -229,6 +321,11 @@ fn run_farsi_proto_encode(payload_text: &str) -> Result<(), Box<dyn std::error::
     println!();
     println!("final prototype text:");
     println!("{}.", sentences.join(". "));
+
+    if let Some(gateway_response) = orchestration.gateway_response {
+        println!("gateway response: {}", gateway_response.content);
+    }
+
     Ok(())
 }
 
@@ -247,8 +344,8 @@ fn run_farsi_proto_decode(trace_input: Option<String>) -> Result<(), Box<dyn std
         return Ok(());
     }
 
-    let mapper = FarsiPrototypeSymbolicMapper;
-    let schemas = mapper.frame_schemas();
+    let runtime = FarsiProtoRuntime::new()?;
+    let schemas = runtime.mapper.frame_schemas();
     let frames = parse_frames_from_trace(&trace_text, &schemas)?;
 
     if frames.is_empty() {
@@ -261,11 +358,18 @@ fn run_farsi_proto_decode(trace_input: Option<String>) -> Result<(), Box<dyn std
         .map(|frame| schema_for_template(&schemas, &frame.template_id))
         .collect::<Result<Vec<_>, String>>()?;
 
-    let payload = decode_payload_from_symbolic_frames(
-        &frames,
-        &ordered_schemas,
-        &FixedWidthPlanningOptions::default(),
-    )?;
+    let orchestration = runtime
+        .orchestrator()
+        .with_symbolic_options(FixedWidthPlanningOptions::default())
+        .orchestrate_decode(
+            DecodeRequest {
+                stego_text: trace_text.clone(),
+                options: runtime.pipeline_options()?,
+            },
+            &frames,
+            &ordered_schemas,
+        )?;
+    let payload = orchestration.payload;
     let hex_payload = payload
         .iter()
         .map(|byte| format!("{byte:02x}"))
@@ -278,6 +382,9 @@ fn run_farsi_proto_decode(trace_input: Option<String>) -> Result<(), Box<dyn std
     match String::from_utf8(payload.clone()) {
         Ok(text) => println!("payload utf8: {text}"),
         Err(_) => println!("payload utf8: <invalid utf8>"),
+    }
+    if let Some(gateway_response) = orchestration.gateway_response {
+        println!("gateway response: {}", gateway_response.content);
     }
 
     Ok(())
