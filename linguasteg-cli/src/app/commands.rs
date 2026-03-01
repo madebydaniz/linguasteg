@@ -53,8 +53,13 @@ fn run_decode(options: DecodeOptions) -> Result<(), CliError> {
         options.secret_file.as_deref(),
         "decode",
     )?;
-    let output =
-        render_proto_decode_output(options.target, &trace_text, options.format, Some(&secret))?;
+    let output = render_proto_decode_output(
+        options.target,
+        options.auto_detect_target,
+        &trace_text,
+        options.format,
+        Some(&secret),
+    )?;
     write_output(&output, options.output_path.as_deref())
 }
 
@@ -64,6 +69,7 @@ fn run_analyze(options: AnalyzeOptions) -> Result<(), CliError> {
         resolve_optional_secret_bytes(options.secret.as_deref(), options.secret_file.as_deref())?;
     let output = render_trace_analysis_output(
         options.target,
+        options.auto_detect_target,
         &trace_text,
         options.format,
         secret.as_deref(),
@@ -222,7 +228,7 @@ fn run_proto_decode(
     } else {
         OutputFormat::Text
     };
-    let output = render_proto_decode_output(target, &trace_text, format, None)?;
+    let output = render_proto_decode_output(target, false, &trace_text, format, None)?;
     println!("{output}");
     Ok(())
 }
@@ -338,6 +344,7 @@ fn render_proto_encode_output(
 
 fn render_proto_decode_output(
     target: ProtoTarget,
+    auto_detect_target: bool,
     trace_text: &str,
     format: OutputFormat,
     secret: Option<&[u8]>,
@@ -348,6 +355,7 @@ fn render_proto_decode_output(
         ));
     }
 
+    let target = resolve_trace_target(target, auto_detect_target, trace_text)?;
     let runtime = runtime_for_target(target)?;
     let schemas = runtime.mapper.frame_schemas();
     let frames = parse_frames_from_trace(trace_text, &schemas)
@@ -422,6 +430,83 @@ fn render_proto_decode_output(
     }
 
     Ok(report_lines.join("\n"))
+}
+
+fn resolve_trace_target(
+    requested: ProtoTarget,
+    auto_detect_target: bool,
+    trace_text: &str,
+) -> Result<ProtoTarget, CliError> {
+    let detected = detect_target_from_trace(trace_text);
+    if auto_detect_target {
+        return Ok(detected.unwrap_or(requested));
+    }
+
+    if let Some(detected) = detected {
+        if detected.as_str() != requested.as_str() {
+            return Err(CliError::config(format!(
+                "trace language '{}' does not match requested --lang '{}'",
+                detected.as_str(),
+                requested.as_str()
+            )));
+        }
+    }
+
+    Ok(requested)
+}
+
+fn detect_target_from_trace(trace_text: &str) -> Option<ProtoTarget> {
+    let trimmed = trace_text.trim_start();
+    if trimmed.starts_with('{') {
+        if let Some(language) = extract_json_language(trimmed) {
+            if let Some(target) = target_from_language(language) {
+                return Some(target);
+            }
+        }
+    }
+
+    for line in trace_text.lines() {
+        let trimmed_line = line.trim();
+        if !trimmed_line.starts_with("frame ") {
+            continue;
+        }
+
+        let open = trimmed_line.find('[')?;
+        let close_relative = trimmed_line[open + 1..].find(']')?;
+        let close = open + 1 + close_relative;
+        let template_id = &trimmed_line[open + 1..close];
+        if let Some(target) = target_from_template_id(template_id) {
+            return Some(target);
+        }
+    }
+
+    None
+}
+
+fn extract_json_language(json_text: &str) -> Option<&str> {
+    let pattern = "\"language\":\"";
+    let start = json_text.find(pattern)? + pattern.len();
+    let tail = &json_text[start..];
+    let end = tail.find('"')?;
+    Some(&tail[..end])
+}
+
+fn target_from_language(language: &str) -> Option<ProtoTarget> {
+    match language {
+        "fa" => Some(ProtoTarget::Farsi),
+        "en" => Some(ProtoTarget::English),
+        _ => None,
+    }
+}
+
+fn target_from_template_id(template_id: &str) -> Option<ProtoTarget> {
+    if template_id.starts_with("fa-") {
+        return Some(ProtoTarget::Farsi);
+    }
+    if template_id.starts_with("en-") {
+        return Some(ProtoTarget::English);
+    }
+    None
 }
 
 fn resolve_encode_payload(options: &EncodeOptions) -> Result<String, CliError> {

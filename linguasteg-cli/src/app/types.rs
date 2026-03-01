@@ -21,6 +21,7 @@ pub(crate) struct EncodeOptions {
 
 pub(crate) struct DecodeOptions {
     pub(crate) target: ProtoTarget,
+    pub(crate) auto_detect_target: bool,
     pub(crate) trace: Option<String>,
     pub(crate) input_path: Option<String>,
     pub(crate) output_path: Option<String>,
@@ -31,6 +32,7 @@ pub(crate) struct DecodeOptions {
 
 pub(crate) struct AnalyzeOptions {
     pub(crate) target: ProtoTarget,
+    pub(crate) auto_detect_target: bool,
     pub(crate) trace: Option<String>,
     pub(crate) input_path: Option<String>,
     pub(crate) output_path: Option<String>,

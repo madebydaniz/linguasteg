@@ -147,7 +147,8 @@ fn parse_encode_command(
 fn parse_decode_command(
     mut args: impl Iterator<Item = String>,
 ) -> Result<Option<Command>, CliError> {
-    let mut lang = env_proto_target("LSTEG_LANG")?.unwrap_or(ProtoTarget::Farsi);
+    let (mut lang, mut auto_detect_target) =
+        env_trace_proto_target("LSTEG_LANG")?.unwrap_or((ProtoTarget::Farsi, true));
     let mut format = env_output_format("LSTEG_FORMAT")?.unwrap_or(OutputFormat::Text);
     let mut trace = env_optional("LSTEG_TRACE");
     let mut input_path = env_optional("LSTEG_INPUT");
@@ -166,7 +167,9 @@ fn parse_decode_command(
             "--help" | "-h" => return Ok(None),
             "--lang" => {
                 let value = next_arg_value(&mut args, "--lang")?;
-                lang = parse_proto_target(&value)?;
+                let (resolved_lang, resolved_auto_detect) = parse_trace_proto_target(&value)?;
+                lang = resolved_lang;
+                auto_detect_target = resolved_auto_detect;
             }
             "--format" => {
                 let value = next_arg_value(&mut args, "--format")?;
@@ -248,6 +251,7 @@ fn parse_decode_command(
 
     Ok(Some(Command::Decode(DecodeOptions {
         target: lang,
+        auto_detect_target,
         trace,
         input_path,
         output_path,
@@ -260,7 +264,8 @@ fn parse_decode_command(
 fn parse_analyze_command(
     mut args: impl Iterator<Item = String>,
 ) -> Result<Option<Command>, CliError> {
-    let mut lang = env_proto_target("LSTEG_LANG")?.unwrap_or(ProtoTarget::Farsi);
+    let (mut lang, mut auto_detect_target) =
+        env_trace_proto_target("LSTEG_LANG")?.unwrap_or((ProtoTarget::Farsi, true));
     let mut format = env_output_format("LSTEG_FORMAT")?.unwrap_or(OutputFormat::Text);
     let mut trace = env_optional("LSTEG_TRACE");
     let mut input_path = env_optional("LSTEG_INPUT");
@@ -279,7 +284,9 @@ fn parse_analyze_command(
             "--help" | "-h" => return Ok(None),
             "--lang" => {
                 let value = next_arg_value(&mut args, "--lang")?;
-                lang = parse_proto_target(&value)?;
+                let (resolved_lang, resolved_auto_detect) = parse_trace_proto_target(&value)?;
+                lang = resolved_lang;
+                auto_detect_target = resolved_auto_detect;
             }
             "--format" => {
                 let value = next_arg_value(&mut args, "--format")?;
@@ -361,6 +368,7 @@ fn parse_analyze_command(
 
     Ok(Some(Command::Analyze(AnalyzeOptions {
         target: lang,
+        auto_detect_target,
         trace,
         input_path,
         output_path,
@@ -481,6 +489,24 @@ fn env_proto_target(key: &str) -> Result<Option<ProtoTarget>, CliError> {
     }
 }
 
+fn env_trace_proto_target(key: &str) -> Result<Option<(ProtoTarget, bool)>, CliError> {
+    match env_optional(key) {
+        Some(value) => parse_trace_proto_target(&value).map(Some),
+        None => Ok(None),
+    }
+}
+
+fn parse_trace_proto_target(value: &str) -> Result<(ProtoTarget, bool), CliError> {
+    match value {
+        "fa" => Ok((ProtoTarget::Farsi, false)),
+        "en" => Ok((ProtoTarget::English, false)),
+        "auto" => Ok((ProtoTarget::Farsi, true)),
+        _ => Err(CliError::config(format!(
+            "unsupported language '{value}' (supported: auto, fa, en)"
+        ))),
+    }
+}
+
 fn env_output_format(key: &str) -> Result<Option<OutputFormat>, CliError> {
     match env_optional(key) {
         Some(value) => parse_output_format(&value).map(Some),
@@ -513,11 +539,11 @@ pub(crate) fn write_usage(mut writer: impl Write) -> std::io::Result<()> {
     )?;
     writeln!(
         writer,
-        "       lsteg decode [--lang fa|en] [--trace <text> | --input <file>] [--secret <value> | --secret-file <file>] [--format text|json] [--output <file>]"
+        "       lsteg decode [--lang auto|fa|en] [--trace <text> | --input <file>] [--secret <value> | --secret-file <file>] [--format text|json] [--output <file>]"
     )?;
     writeln!(
         writer,
-        "       lsteg analyze [--lang fa|en] [--trace <text> | --input <file>] [--secret <value> | --secret-file <file>] [--format text|json] [--output <file>]"
+        "       lsteg analyze [--lang auto|fa|en] [--trace <text> | --input <file>] [--secret <value> | --secret-file <file>] [--format text|json] [--output <file>]"
     )?;
     writeln!(writer, "       lsteg demo <fa|en>")?;
     writeln!(
@@ -534,7 +560,7 @@ pub(crate) fn write_usage(mut writer: impl Write) -> std::io::Result<()> {
     )?;
     writeln!(
         writer,
-        "Env defaults: LSTEG_LANG, LSTEG_FORMAT, LSTEG_INPUT, LSTEG_OUTPUT, LSTEG_ENCODE_MESSAGE, LSTEG_TRACE, LSTEG_SECRET"
+        "Env defaults: LSTEG_LANG (decode/analyze accepts auto), LSTEG_FORMAT, LSTEG_INPUT, LSTEG_OUTPUT, LSTEG_ENCODE_MESSAGE, LSTEG_TRACE, LSTEG_SECRET"
     )?;
     Ok(())
 }

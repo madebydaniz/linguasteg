@@ -144,13 +144,27 @@ fn decode_roundtrip_from_english_trace_works() {
     assert!(encode_output.status.success());
     let trace_text = stdout_string(&encode_output);
 
-    let decode_output =
-        run_lsteg_with_stdin(&["decode", "--lang", "en", "--format", "json"], &trace_text);
+    let decode_output = run_lsteg_with_stdin(&["decode", "--format", "json"], &trace_text);
     assert!(decode_output.status.success());
 
     let decoded_json = stdout_string(&decode_output);
     assert!(decoded_json.contains("\"language\":\"en\""));
     assert!(decoded_json.contains("\"payload_utf8\":\"hello\""));
+}
+
+#[test]
+fn decode_rejects_explicit_language_mismatch() {
+    let encode_output = run_lsteg(&["encode", "--lang", "en", "--message", "hello"]);
+    assert!(encode_output.status.success());
+    let trace_text = stdout_string(&encode_output);
+
+    let decode_output =
+        run_lsteg_with_stdin(&["decode", "--lang", "fa", "--format", "json"], &trace_text);
+    assert_eq!(decode_output.status.code(), Some(1));
+
+    let stderr = stderr_string(&decode_output);
+    assert!(stderr.contains("LSTEG-CLI-CFG-001"));
+    assert!(stderr.contains("trace language 'en' does not match requested --lang 'fa'"));
 }
 
 #[test]
@@ -166,6 +180,39 @@ fn analyze_from_trace_reports_integrity_ok() {
     assert!(analysis_json.contains("\"mode\":\"analyze\""));
     assert!(analysis_json.contains("\"integrity_ok\":true"));
     assert!(analysis_json.contains("\"payload_utf8\":\"salam donya\""));
+}
+
+#[test]
+fn analyze_auto_detects_english_trace_language() {
+    let encode_output = run_lsteg(&["encode", "--lang", "en", "--message", "hello world"]);
+    assert!(encode_output.status.success());
+    let trace_text = stdout_string(&encode_output);
+
+    let analyze_output = run_lsteg_with_stdin(&["analyze", "--format", "json"], &trace_text);
+    assert!(analyze_output.status.success());
+
+    let analysis_json = stdout_string(&analyze_output);
+    assert!(analysis_json.contains("\"mode\":\"analyze\""));
+    assert!(analysis_json.contains("\"language\":\"en\""));
+    assert!(analysis_json.contains("\"integrity_ok\":true"));
+    assert!(analysis_json.contains("\"payload_utf8\":\"hello world\""));
+}
+
+#[test]
+fn analyze_rejects_explicit_language_mismatch() {
+    let encode_output = run_lsteg(&["encode", "--lang", "en", "--message", "hello world"]);
+    assert!(encode_output.status.success());
+    let trace_text = stdout_string(&encode_output);
+
+    let analyze_output = run_lsteg_with_stdin(
+        &["analyze", "--lang", "fa", "--format", "json"],
+        &trace_text,
+    );
+    assert_eq!(analyze_output.status.code(), Some(1));
+
+    let stderr = stderr_string(&analyze_output);
+    assert!(stderr.contains("LSTEG-CLI-CFG-001"));
+    assert!(stderr.contains("trace language 'en' does not match requested --lang 'fa'"));
 }
 
 #[test]
