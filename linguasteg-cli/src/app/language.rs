@@ -47,13 +47,7 @@ fn inspect_trace_language(trace_text: &str) -> TraceLanguageState {
 
     let trimmed = trace_text.trim_start();
     if trimmed.starts_with('{') {
-        if let Some(language) = extract_json_string_field(trimmed, "language") {
-            record_language(language, &mut seen_fa, &mut seen_en);
-        }
-
-        for template in extract_json_string_values(trimmed, "template_id") {
-            record_template(template, &mut seen_fa, &mut seen_en);
-        }
+        inspect_json_trace_language(trimmed, &mut seen_fa, &mut seen_en);
     }
 
     for line in trace_text.lines() {
@@ -82,33 +76,23 @@ fn extract_template_id_from_frame_line(line: &str) -> Option<&str> {
     Some(&line[open + 1..close])
 }
 
-fn extract_json_string_field<'a>(json_text: &'a str, key: &str) -> Option<&'a str> {
-    let pattern = format!("\"{key}\":\"");
-    let start = json_text.find(&pattern)? + pattern.len();
-    let tail = &json_text[start..];
-    let end = tail.find('"')?;
-    Some(&tail[..end])
-}
+fn inspect_json_trace_language(json_text: &str, seen_fa: &mut bool, seen_en: &mut bool) {
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(json_text) else {
+        return;
+    };
 
-fn extract_json_string_values<'a>(json_text: &'a str, key: &str) -> Vec<&'a str> {
-    let mut values = Vec::new();
-    let pattern = format!("\"{key}\":\"");
-    let mut cursor = 0usize;
-
-    while cursor < json_text.len() {
-        let Some(found) = json_text[cursor..].find(&pattern) else {
-            break;
-        };
-        let start = cursor + found + pattern.len();
-        let tail = &json_text[start..];
-        let Some(end) = tail.find('"') else {
-            break;
-        };
-        values.push(&tail[..end]);
-        cursor = start + end + 1;
+    if let Some(language) = value.get("language").and_then(serde_json::Value::as_str) {
+        record_language(language, seen_fa, seen_en);
     }
 
-    values
+    if let Some(frames) = value.get("frames").and_then(serde_json::Value::as_array) {
+        for frame in frames {
+            if let Some(template_id) = frame.get("template_id").and_then(serde_json::Value::as_str)
+            {
+                record_template(template_id, seen_fa, seen_en);
+            }
+        }
+    }
 }
 
 fn record_language(value: &str, seen_fa: &mut bool, seen_en: &mut bool) {
