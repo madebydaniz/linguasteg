@@ -14,6 +14,29 @@ use linguasteg_models::{
 
 use super::types::ProtoTarget;
 
+pub(crate) struct SupportedLanguageInfo {
+    pub(crate) code: &'static str,
+    pub(crate) display: &'static str,
+    pub(crate) direction: &'static str,
+}
+
+const SUPPORTED_LANGUAGES: [SupportedLanguageInfo; 2] = [
+    SupportedLanguageInfo {
+        code: "fa",
+        display: "Farsi",
+        direction: "rtl",
+    },
+    SupportedLanguageInfo {
+        code: "en",
+        display: "English",
+        direction: "ltr",
+    },
+];
+
+pub(crate) fn supported_languages() -> &'static [SupportedLanguageInfo] {
+    &SUPPORTED_LANGUAGES
+}
+
 struct InMemoryStrategyRegistry {
     strategies: Vec<StrategyDescriptor>,
 }

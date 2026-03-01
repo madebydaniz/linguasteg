@@ -125,6 +125,30 @@ fn encode_json_supports_english_target() {
 }
 
 #[test]
+fn languages_text_lists_supported_languages() {
+    let output = run_lsteg(&["languages"]);
+    assert!(output.status.success());
+
+    let stdout = stdout_string(&output);
+    assert!(stdout.contains("supported languages:"));
+    assert!(stdout.contains("- fa (Farsi, rtl)"));
+    assert!(stdout.contains("- en (English, ltr)"));
+}
+
+#[test]
+fn languages_json_exposes_contract() {
+    let output = run_lsteg(&["languages", "--format", "json"]);
+    assert!(output.status.success());
+
+    let stdout = stdout_string(&output);
+    assert!(stdout.contains("\"mode\":\"languages\""));
+    assert!(stdout.contains("\"code\":\"fa\""));
+    assert!(stdout.contains("\"direction\":\"rtl\""));
+    assert!(stdout.contains("\"code\":\"en\""));
+    assert!(stdout.contains("\"direction\":\"ltr\""));
+}
+
+#[test]
 fn decode_roundtrip_from_encode_trace_works() {
     let encode_output = run_lsteg(&["encode", "--message", "salam"]);
     assert!(encode_output.status.success());

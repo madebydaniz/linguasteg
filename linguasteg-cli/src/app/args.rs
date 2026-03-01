@@ -19,6 +19,7 @@ pub(crate) fn parse_command(args: Vec<String>) -> Result<Option<Command>, CliErr
         "encode" => parse_encode_command(args),
         "decode" => parse_decode_command(args),
         "analyze" => parse_analyze_command(args),
+        "languages" => parse_languages_command(args),
         "demo" => parse_demo_command(args),
         "proto-encode" => parse_proto_encode_command(args),
         "proto-decode" => parse_proto_decode_command(args),
@@ -388,6 +389,29 @@ fn parse_demo_command(mut args: impl Iterator<Item = String>) -> Result<Option<C
     }
 }
 
+fn parse_languages_command(
+    mut args: impl Iterator<Item = String>,
+) -> Result<Option<Command>, CliError> {
+    let mut format = env_output_format("LSTEG_FORMAT")?.unwrap_or(OutputFormat::Text);
+
+    while let Some(arg) = args.next() {
+        match arg.as_str() {
+            "--help" | "-h" => return Ok(None),
+            "--format" => {
+                let value = next_arg_value(&mut args, "--format")?;
+                format = parse_output_format(&value)?;
+            }
+            _ => {
+                return Err(CliError::usage(format!(
+                    "unknown languages argument: {arg}"
+                )));
+            }
+        }
+    }
+
+    Ok(Some(Command::Languages(format)))
+}
+
 fn parse_proto_encode_command(
     args: impl Iterator<Item = String>,
 ) -> Result<Option<Command>, CliError> {
@@ -531,7 +555,7 @@ pub(crate) fn write_usage(mut writer: impl Write) -> std::io::Result<()> {
     writeln!(writer, "LinguaSteg CLI (scaffold)")?;
     writeln!(
         writer,
-        "Usage: lsteg <encode|decode|analyze|demo|proto-encode|proto-decode>"
+        "Usage: lsteg <encode|decode|analyze|languages|demo|proto-encode|proto-decode>"
     )?;
     writeln!(
         writer,
@@ -545,6 +569,7 @@ pub(crate) fn write_usage(mut writer: impl Write) -> std::io::Result<()> {
         writer,
         "       lsteg analyze [--lang auto|fa|en] [--trace <text> | --input <file>] [--secret <value> | --secret-file <file>] [--format text|json] [--output <file>]"
     )?;
+    writeln!(writer, "       lsteg languages [--format text|json]")?;
     writeln!(writer, "       lsteg demo <fa|en>")?;
     writeln!(
         writer,

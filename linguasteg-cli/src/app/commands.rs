@@ -8,9 +8,9 @@ use linguasteg_core::{
 };
 
 use super::analysis::render_trace_analysis_output;
-use super::formatters::{build_proto_decode_json, build_proto_encode_json};
+use super::formatters::{build_proto_decode_json, build_proto_encode_json, json_escape};
 use super::language::resolve_trace_target;
-use super::runtime::PrototypeRuntime;
+use super::runtime::{PrototypeRuntime, supported_languages};
 use super::trace::{frame_sequence_error, parse_frames_from_trace, schema_for_template};
 use super::types::{
     AnalyzeOptions, CliError, Command, DecodeOptions, DemoTarget, EncodeOptions, OutputFormat,
@@ -22,6 +22,7 @@ pub(crate) fn execute(command: Command) -> Result<(), CliError> {
         Command::Encode(options) => run_encode(options)?,
         Command::Decode(options) => run_decode(options)?,
         Command::Analyze(options) => run_analyze(options)?,
+        Command::Languages(format) => run_languages(format),
         Command::Demo(DemoTarget::Farsi) => run_demo(ProtoTarget::Farsi)?,
         Command::Demo(DemoTarget::English) => run_demo(ProtoTarget::English)?,
         Command::ProtoEncode(target, payload_text, json) => {
@@ -33,6 +34,31 @@ pub(crate) fn execute(command: Command) -> Result<(), CliError> {
     }
 
     Ok(())
+}
+
+fn run_languages(format: OutputFormat) {
+    let items = supported_languages();
+    if matches!(format, OutputFormat::Json) {
+        let json_items = items
+            .iter()
+            .map(|item| {
+                format!(
+                    "{{\"code\":\"{}\",\"display\":\"{}\",\"direction\":\"{}\"}}",
+                    json_escape(item.code),
+                    json_escape(item.display),
+                    json_escape(item.direction)
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(",");
+        println!("{{\"mode\":\"languages\",\"items\":[{json_items}]}}");
+        return;
+    }
+
+    println!("supported languages:");
+    for item in items {
+        println!("- {} ({}, {})", item.code, item.display, item.direction);
+    }
 }
 
 fn run_encode(options: EncodeOptions) -> Result<(), CliError> {
