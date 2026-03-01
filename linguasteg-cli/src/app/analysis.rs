@@ -1,6 +1,6 @@
 use linguasteg_core::{
-    FixedWidthPlanningOptions, SymbolicFramePlan, SymbolicFrameSchema,
-    decode_payload_from_symbolic_frames, open_payload,
+    CryptoEnvelopeInspection, FixedWidthPlanningOptions, SymbolicFramePlan, SymbolicFrameSchema,
+    decode_payload_from_symbolic_frames, inspect_envelope, open_payload,
 };
 
 use super::formatters::{build_trace_analysis_json, build_trace_analysis_text};
@@ -75,6 +75,11 @@ fn analyze_farsi_trace(
     let mut payload_bytes = None;
     let mut payload_hex = None;
     let mut payload_utf8 = None;
+    let mut envelope_present = false;
+    let mut envelope_version = None;
+    let mut envelope_kdf = None;
+    let mut envelope_aead = None;
+    let mut envelope_error = None;
 
     match decode_payload_from_symbolic_frames(
         frames,
@@ -82,26 +87,53 @@ fn analyze_farsi_trace(
         &FixedWidthPlanningOptions::default(),
     ) {
         Ok(raw_payload) => {
+            match inspect_envelope(&raw_payload) {
+                CryptoEnvelopeInspection::NotEnvelope => {}
+                CryptoEnvelopeInspection::Metadata(metadata) => {
+                    envelope_present = true;
+                    envelope_version = Some(metadata.version);
+                    envelope_kdf = Some(metadata.kdf_name().to_string());
+                    envelope_aead = Some(metadata.aead_name().to_string());
+                }
+                CryptoEnvelopeInspection::Invalid(message) => {
+                    envelope_present = true;
+                    envelope_error = Some(message);
+                }
+            }
+
             if let Some(secret) = secret {
-                match open_payload(&raw_payload, secret) {
-                    Ok(payload) => {
-                        payload_bytes = Some(payload.len());
-                        payload_hex = Some(
-                            payload
-                                .iter()
-                                .map(|byte| format!("{byte:02x}"))
-                                .collect::<Vec<_>>()
-                                .join(""),
-                        );
-                        payload_utf8 = String::from_utf8(payload).ok();
-                    }
-                    Err(_) => {
-                        integrity_ok = false;
-                        if integrity_error.is_none() {
-                            integrity_error = Some(
-                                "failed to decrypt payload; verify provided secret".to_string(),
+                if envelope_present && envelope_error.is_none() {
+                    match open_payload(&raw_payload, secret) {
+                        Ok(payload) => {
+                            payload_bytes = Some(payload.len());
+                            payload_hex = Some(
+                                payload
+                                    .iter()
+                                    .map(|byte| format!("{byte:02x}"))
+                                    .collect::<Vec<_>>()
+                                    .join(""),
                             );
+                            payload_utf8 = String::from_utf8(payload).ok();
                         }
+                        Err(_) => {
+                            integrity_ok = false;
+                            if integrity_error.is_none() {
+                                integrity_error = Some(
+                                    "failed to decrypt payload; verify provided secret".to_string(),
+                                );
+                            }
+                        }
+                    }
+                } else {
+                    envelope_error.get_or_insert_with(|| {
+                        "payload is not a valid secure envelope".to_string()
+                    });
+                    integrity_ok = false;
+                    if integrity_error.is_none() {
+                        integrity_error = Some(
+                            "failed to decrypt payload; payload is not a valid secure envelope"
+                                .to_string(),
+                        );
                     }
                 }
             }
@@ -127,5 +159,10 @@ fn analyze_farsi_trace(
         contiguous_ranges,
         integrity_ok,
         integrity_error,
+        envelope_present,
+        envelope_version,
+        envelope_kdf,
+        envelope_aead,
+        envelope_error,
     })
 }

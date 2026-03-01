@@ -24,6 +24,29 @@ pub(crate) fn build_trace_analysis_text(summary: &TraceAnalysisSummary) -> Strin
         None => lines.push("payload utf8: <unavailable>".to_string()),
     }
     lines.push(format!(
+        "secure envelope: {}",
+        if summary.envelope_present {
+            "detected"
+        } else {
+            "not-detected"
+        }
+    ));
+    match summary.envelope_version {
+        Some(version) => lines.push(format!("envelope version: {version}")),
+        None => lines.push("envelope version: <unavailable>".to_string()),
+    }
+    match &summary.envelope_kdf {
+        Some(kdf) => lines.push(format!("envelope kdf: {kdf}")),
+        None => lines.push("envelope kdf: <unavailable>".to_string()),
+    }
+    match &summary.envelope_aead {
+        Some(aead) => lines.push(format!("envelope aead: {aead}")),
+        None => lines.push("envelope aead: <unavailable>".to_string()),
+    }
+    if let Some(error) = &summary.envelope_error {
+        lines.push(format!("envelope error: {error}"));
+    }
+    lines.push(format!(
         "contiguous ranges: {}",
         if summary.contiguous_ranges {
             "yes"
@@ -58,9 +81,25 @@ pub(crate) fn build_trace_analysis_json(summary: &TraceAnalysisSummary) -> Strin
         Some(value) => format!("\"{}\"", json_escape(value)),
         None => "null".to_string(),
     };
+    let envelope_version = match summary.envelope_version {
+        Some(value) => value.to_string(),
+        None => "null".to_string(),
+    };
+    let envelope_kdf = match &summary.envelope_kdf {
+        Some(value) => format!("\"{}\"", json_escape(value)),
+        None => "null".to_string(),
+    };
+    let envelope_aead = match &summary.envelope_aead {
+        Some(value) => format!("\"{}\"", json_escape(value)),
+        None => "null".to_string(),
+    };
+    let envelope_error = match &summary.envelope_error {
+        Some(value) => format!("\"{}\"", json_escape(value)),
+        None => "null".to_string(),
+    };
 
     format!(
-        "{{\"mode\":\"analyze\",\"language\":\"{}\",\"frame_count\":{},\"consumed_bits\":{},\"symbolic_bits\":{},\"padding_bits\":{},\"encoded_bytes\":{},\"payload_bytes\":{},\"payload_hex\":{},\"payload_utf8\":{},\"contiguous_ranges\":{},\"integrity_ok\":{},\"integrity_error\":{}}}",
+        "{{\"mode\":\"analyze\",\"language\":\"{}\",\"frame_count\":{},\"consumed_bits\":{},\"symbolic_bits\":{},\"padding_bits\":{},\"encoded_bytes\":{},\"payload_bytes\":{},\"payload_hex\":{},\"payload_utf8\":{},\"envelope_present\":{},\"envelope_version\":{},\"envelope_kdf\":{},\"envelope_aead\":{},\"envelope_error\":{},\"contiguous_ranges\":{},\"integrity_ok\":{},\"integrity_error\":{}}}",
         summary.language,
         summary.frame_count,
         summary.consumed_bits,
@@ -70,6 +109,11 @@ pub(crate) fn build_trace_analysis_json(summary: &TraceAnalysisSummary) -> Strin
         payload_bytes,
         payload_hex,
         payload_utf8,
+        summary.envelope_present,
+        envelope_version,
+        envelope_kdf,
+        envelope_aead,
+        envelope_error,
         summary.contiguous_ranges,
         summary.integrity_ok,
         integrity_error

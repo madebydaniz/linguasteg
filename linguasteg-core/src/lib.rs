@@ -17,8 +17,9 @@ pub use catalog::{
     TemplateSlotDescriptor, TemplateToken, TextDirection, WritingRegister,
 };
 pub use crypto::{
-    CryptoEnvelopeConfig, CryptoEnvelopeError, CryptoEnvelopeResult, KeyDerivationParams,
-    open_payload, open_payload_with_config, seal_payload, seal_payload_with_config,
+    CryptoEnvelopeConfig, CryptoEnvelopeError, CryptoEnvelopeInspection, CryptoEnvelopeMetadata,
+    CryptoEnvelopeResult, KeyDerivationParams, inspect_envelope, open_payload,
+    open_payload_with_config, seal_payload, seal_payload_with_config,
 };
 pub use error::{CoreError, CoreResult};
 pub use gateway::{

@@ -47,6 +47,34 @@ pub enum CryptoEnvelopeError {
     DecryptFailed,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CryptoEnvelopeMetadata {
+    pub version: u8,
+    pub kdf: u8,
+    pub aead: u8,
+    pub salt_len: u8,
+    pub nonce_len: u8,
+    pub ciphertext_len: u32,
+    pub total_len: usize,
+}
+
+impl CryptoEnvelopeMetadata {
+    pub fn kdf_name(&self) -> &'static str {
+        kdf_name(self.kdf)
+    }
+
+    pub fn aead_name(&self) -> &'static str {
+        aead_name(self.aead)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CryptoEnvelopeInspection {
+    NotEnvelope,
+    Metadata(CryptoEnvelopeMetadata),
+    Invalid(String),
+}
+
 impl core::fmt::Display for CryptoEnvelopeError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
@@ -170,6 +198,59 @@ pub fn open_payload_with_config(
     Ok(plaintext)
 }
 
+pub fn inspect_envelope(payload: &[u8]) -> CryptoEnvelopeInspection {
+    if payload.len() < ENVELOPE_MAGIC.len() || payload[0..ENVELOPE_MAGIC.len()] != ENVELOPE_MAGIC {
+        return CryptoEnvelopeInspection::NotEnvelope;
+    }
+
+    let header = match parse_header(payload) {
+        Ok(header) => header,
+        Err(error) => return CryptoEnvelopeInspection::Invalid(error.to_string()),
+    };
+
+    let body_len = usize::from(header.salt_len)
+        + usize::from(header.nonce_len)
+        + match usize::try_from(header.ciphertext_len) {
+            Ok(length) => length,
+            Err(_) => {
+                return CryptoEnvelopeInspection::Invalid(
+                    "ciphertext length does not fit in usize".to_string(),
+                );
+            }
+        };
+    let expected_len = HEADER_LEN + body_len;
+    if payload.len() != expected_len {
+        return CryptoEnvelopeInspection::Invalid(format!(
+            "expected total envelope length {expected_len}, got {}",
+            payload.len()
+        ));
+    }
+
+    CryptoEnvelopeInspection::Metadata(CryptoEnvelopeMetadata {
+        version: header.version,
+        kdf: header.kdf,
+        aead: header.aead,
+        salt_len: header.salt_len,
+        nonce_len: header.nonce_len,
+        ciphertext_len: header.ciphertext_len,
+        total_len: expected_len,
+    })
+}
+
+fn kdf_name(id: u8) -> &'static str {
+    match id {
+        KDF_ARGON2ID => "argon2id",
+        _ => "unknown",
+    }
+}
+
+fn aead_name(id: u8) -> &'static str {
+    match id {
+        AEAD_XCHACHA20POLY1305 => "xchacha20poly1305",
+        _ => "unknown",
+    }
+}
+
 fn seal_payload_with_material(
     payload: &[u8],
     secret: &[u8],
@@ -262,8 +343,8 @@ fn require_secret(secret: &[u8]) -> CryptoEnvelopeResult<()> {
 #[cfg(test)]
 mod tests {
     use super::{
-        CryptoEnvelopeConfig, CryptoEnvelopeError, NONCE_LEN, SALT_LEN, open_payload, parse_header,
-        seal_payload, seal_payload_with_material,
+        CryptoEnvelopeConfig, CryptoEnvelopeError, CryptoEnvelopeInspection, NONCE_LEN, SALT_LEN,
+        inspect_envelope, open_payload, parse_header, seal_payload, seal_payload_with_material,
     };
 
     #[test]
@@ -348,5 +429,26 @@ mod tests {
             result,
             Err(CryptoEnvelopeError::InvalidEnvelope(_))
         ));
+    }
+
+    #[test]
+    fn inspect_envelope_reports_metadata_for_valid_envelope() {
+        let envelope = seal_payload(b"payload", b"secret").expect("seal should succeed");
+        let inspection = inspect_envelope(&envelope);
+        match inspection {
+            CryptoEnvelopeInspection::Metadata(metadata) => {
+                assert_eq!(metadata.version, 1);
+                assert_eq!(metadata.kdf_name(), "argon2id");
+                assert_eq!(metadata.aead_name(), "xchacha20poly1305");
+                assert_eq!(metadata.total_len, envelope.len());
+            }
+            _ => panic!("expected valid metadata inspection"),
+        }
+    }
+
+    #[test]
+    fn inspect_envelope_reports_not_envelope_for_plain_payload() {
+        let inspection = inspect_envelope(b"plain-text");
+        assert!(matches!(inspection, CryptoEnvelopeInspection::NotEnvelope));
     }
 }

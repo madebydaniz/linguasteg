@@ -52,6 +52,11 @@ pub(crate) struct TraceAnalysisSummary {
     pub(crate) contiguous_ranges: bool,
     pub(crate) integrity_ok: bool,
     pub(crate) integrity_error: Option<String>,
+    pub(crate) envelope_present: bool,
+    pub(crate) envelope_version: Option<u8>,
+    pub(crate) envelope_kdf: Option<String>,
+    pub(crate) envelope_aead: Option<String>,
+    pub(crate) envelope_error: Option<String>,
 }
 
 #[derive(Clone, Copy)]

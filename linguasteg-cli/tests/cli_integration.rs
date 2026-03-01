@@ -286,6 +286,8 @@ fn analyze_without_secret_reports_structural_only() {
     assert!(analysis_json.contains("\"integrity_ok\":true"));
     assert!(analysis_json.contains("\"payload_bytes\":null"));
     assert!(analysis_json.contains("\"payload_utf8\":null"));
+    assert!(analysis_json.contains("\"envelope_present\":true"));
+    assert!(analysis_json.contains("\"envelope_kdf\":\"argon2id\""));
 }
 
 #[test]
@@ -361,5 +363,6 @@ fn analyze_with_wrong_secret_reports_decrypt_integrity_error() {
     assert!(analyze_output.status.success());
     let analysis_json = stdout_string(&analyze_output);
     assert!(analysis_json.contains("\"integrity_ok\":false"));
+    assert!(analysis_json.contains("\"envelope_present\":true"));
     assert!(analysis_json.contains("failed to decrypt payload; verify provided secret"));
 }
