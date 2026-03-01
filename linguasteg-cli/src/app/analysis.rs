@@ -4,6 +4,7 @@ use linguasteg_core::{
 };
 
 use super::formatters::{build_trace_analysis_json, build_trace_analysis_text};
+use super::language::resolve_trace_target;
 use super::runtime::PrototypeRuntime;
 use super::trace::{frame_sequence_error, parse_frames_from_trace, schema_for_template};
 use super::types::{CliError, OutputFormat, ProtoTarget, TraceAnalysisSummary};
@@ -47,82 +48,6 @@ pub(crate) fn render_trace_analysis_output(
     }
 
     Ok(build_trace_analysis_text(&summary))
-}
-
-fn resolve_trace_target(
-    requested: ProtoTarget,
-    auto_detect_target: bool,
-    trace_text: &str,
-) -> Result<ProtoTarget, CliError> {
-    let detected = detect_target_from_trace(trace_text);
-    if !auto_detect_target {
-        if let Some(detected) = detected {
-            if detected.as_str() != requested.as_str() {
-                return Err(CliError::config(format!(
-                    "trace language '{}' does not match requested --lang '{}'",
-                    detected.as_str(),
-                    requested.as_str()
-                )));
-            }
-        }
-        return Ok(requested);
-    }
-
-    Ok(detected.unwrap_or(requested))
-}
-
-fn detect_target_from_trace(trace_text: &str) -> Option<ProtoTarget> {
-    let trimmed = trace_text.trim_start();
-    if trimmed.starts_with('{') {
-        if let Some(language) = extract_json_language(trimmed) {
-            if let Some(target) = target_from_language(language) {
-                return Some(target);
-            }
-        }
-    }
-
-    for line in trace_text.lines() {
-        let trimmed_line = line.trim();
-        if !trimmed_line.starts_with("frame ") {
-            continue;
-        }
-
-        let open = trimmed_line.find('[')?;
-        let close_relative = trimmed_line[open + 1..].find(']')?;
-        let close = open + 1 + close_relative;
-        let template_id = &trimmed_line[open + 1..close];
-        if let Some(target) = target_from_template_id(template_id) {
-            return Some(target);
-        }
-    }
-
-    None
-}
-
-fn extract_json_language(json_text: &str) -> Option<&str> {
-    let pattern = "\"language\":\"";
-    let start = json_text.find(pattern)? + pattern.len();
-    let tail = &json_text[start..];
-    let end = tail.find('"')?;
-    Some(&tail[..end])
-}
-
-fn target_from_language(language: &str) -> Option<ProtoTarget> {
-    match language {
-        "fa" => Some(ProtoTarget::Farsi),
-        "en" => Some(ProtoTarget::English),
-        _ => None,
-    }
-}
-
-fn target_from_template_id(template_id: &str) -> Option<ProtoTarget> {
-    if template_id.starts_with("fa-") {
-        return Some(ProtoTarget::Farsi);
-    }
-    if template_id.starts_with("en-") {
-        return Some(ProtoTarget::English);
-    }
-    None
 }
 
 fn analyze_trace(

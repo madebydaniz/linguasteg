@@ -168,6 +168,21 @@ fn decode_rejects_explicit_language_mismatch() {
 }
 
 #[test]
+fn decode_rejects_mixed_language_trace() {
+    let encode_output = run_lsteg(&["encode", "--lang", "en", "--message", "hello"]);
+    assert!(encode_output.status.success());
+    let trace_text = stdout_string(&encode_output);
+    let mixed_trace = trace_text.replacen("[en-", "[fa-", 1);
+
+    let decode_output = run_lsteg_with_stdin(&["decode", "--format", "json"], &mixed_trace);
+    assert_eq!(decode_output.status.code(), Some(1));
+
+    let stderr = stderr_string(&decode_output);
+    assert!(stderr.contains("LSTEG-CLI-CFG-001"));
+    assert!(stderr.contains("trace contains mixed language templates"));
+}
+
+#[test]
 fn analyze_from_trace_reports_integrity_ok() {
     let encode_output = run_lsteg(&["encode", "--message", "salam donya"]);
     assert!(encode_output.status.success());
@@ -213,6 +228,21 @@ fn analyze_rejects_explicit_language_mismatch() {
     let stderr = stderr_string(&analyze_output);
     assert!(stderr.contains("LSTEG-CLI-CFG-001"));
     assert!(stderr.contains("trace language 'en' does not match requested --lang 'fa'"));
+}
+
+#[test]
+fn analyze_rejects_mixed_language_trace() {
+    let encode_output = run_lsteg(&["encode", "--lang", "en", "--message", "hello world"]);
+    assert!(encode_output.status.success());
+    let trace_text = stdout_string(&encode_output);
+    let mixed_trace = trace_text.replacen("[en-", "[fa-", 1);
+
+    let analyze_output = run_lsteg_with_stdin(&["analyze", "--format", "json"], &mixed_trace);
+    assert_eq!(analyze_output.status.code(), Some(1));
+
+    let stderr = stderr_string(&analyze_output);
+    assert!(stderr.contains("LSTEG-CLI-CFG-001"));
+    assert!(stderr.contains("trace contains mixed language templates"));
 }
 
 #[test]

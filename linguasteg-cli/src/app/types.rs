@@ -73,7 +73,7 @@ pub(crate) enum DemoTarget {
     English,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ProtoTarget {
     Farsi,
     English,

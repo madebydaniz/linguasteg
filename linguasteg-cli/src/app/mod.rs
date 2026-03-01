@@ -2,6 +2,7 @@ mod analysis;
 mod args;
 mod commands;
 mod formatters;
+mod language;
 mod runtime;
 mod trace;
 mod types;
