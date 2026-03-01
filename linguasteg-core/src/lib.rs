@@ -1,4 +1,5 @@
 mod catalog;
+mod crypto;
 mod error;
 mod gateway;
 mod grammar;
@@ -14,6 +15,10 @@ pub use catalog::{
     LanguageDescriptor, ModelDescriptor, RealizationTemplateDescriptor, SlotRole,
     StrategyDescriptor, StyleInspiration, StyleProfileDescriptor, StyleStrength,
     TemplateSlotDescriptor, TemplateToken, TextDirection, WritingRegister,
+};
+pub use crypto::{
+    CryptoEnvelopeConfig, CryptoEnvelopeError, CryptoEnvelopeResult, KeyDerivationParams,
+    open_payload, open_payload_with_config, seal_payload, seal_payload_with_config,
 };
 pub use error::{CoreError, CoreResult};
 pub use gateway::{
