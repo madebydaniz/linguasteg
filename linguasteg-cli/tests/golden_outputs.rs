@@ -84,6 +84,36 @@ fn decode_json_matches_golden_fixture() {
 }
 
 #[test]
+fn decode_english_json_matches_golden_fixture() {
+    let input = fixture_path("encode_hello_en_text.out");
+    let input = input.to_string_lossy().into_owned();
+
+    let output = run_lsteg(&[
+        "decode", "--lang", "en", "--format", "json", "--input", &input,
+    ]);
+    assert!(output.status.success());
+    assert_eq!(
+        stdout_string(&output),
+        fixture_contents("decode_hello_en_json.out")
+    );
+}
+
+#[test]
+fn analyze_english_json_matches_golden_fixture() {
+    let input = fixture_path("encode_hello_en_text.out");
+    let input = input.to_string_lossy().into_owned();
+
+    let output = run_lsteg(&[
+        "analyze", "--lang", "en", "--format", "json", "--input", &input,
+    ]);
+    assert!(output.status.success());
+    assert_eq!(
+        stdout_string(&output),
+        fixture_contents("analyze_hello_en_json.out")
+    );
+}
+
+#[test]
 fn analyze_json_matches_golden_fixture() {
     let input = fixture_path("encode_salam_text.out");
     let input = input.to_string_lossy().into_owned();

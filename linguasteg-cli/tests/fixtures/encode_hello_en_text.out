@@ -1,0 +1,43 @@
+English prototype encode
+input text: hello
+payload bytes: 5
+encoded bytes (with length prefix): 76
+frames: 32
+padding bits: 16
+
+frame 01 [en-basic-svo] bits=0..18 values=subject:0,object:1,adjective:1,verb:9 => the writer writes new letter
+frame 02 [en-time-location-svo] bits=18..39 values=subject:6,time:1,location:2,object:13,verb:10 => the visitor yesterday in the market, reads flower
+frame 03 [en-basic-svo] bits=39..57 values=subject:4,object:14,adjective:0,verb:2 => the researcher reads old note
+frame 04 [en-time-location-svo] bits=57..78 values=subject:0,time:2,location:0,object:2,verb:4 => the writer at dawn at home, keeps photo
+frame 05 [en-basic-svo] bits=78..96 values=subject:0,object:24,adjective:0,verb:0 => the writer buys old book
+frame 06 [en-time-location-svo] bits=96..117 values=subject:0,time:0,location:0,object:0,verb:2 => the writer today at home, reads book
+frame 07 [en-basic-svo] bits=117..135 values=subject:21,object:5,adjective:0,verb:27 => the engineer sees old flower
+frame 08 [en-time-location-svo] bits=135..156 values=subject:30,time:6,location:3,object:17,verb:15 => the visitor in winter at school, moves letter
+frame 09 [en-basic-svo] bits=156..174 values=subject:28,object:26,adjective:2,verb:20 => the researcher keeps quiet photo
+frame 10 [en-time-location-svo] bits=174..195 values=subject:3,time:7,location:5,object:26,verb:8 => the teacher tomorrow at the office, buys photo
+frame 11 [en-basic-svo] bits=195..213 values=subject:14,object:15,adjective:6,verb:23 => the visitor moves small report
+frame 12 [en-time-location-svo] bits=213..234 values=subject:15,time:7,location:4,object:19,verb:8 => the manager tomorrow in the park, buys tea
+frame 13 [en-basic-svo] bits=234..252 values=subject:6,object:6,adjective:6,verb:23 => the visitor moves small note
+frame 14 [en-time-location-svo] bits=252..273 values=subject:3,time:5,location:4,object:30,verb:10 => the teacher tonight in the park, reads note
+frame 15 [en-basic-svo] bits=273..291 values=subject:11,object:10,adjective:5,verb:3 => the teacher sees fresh photo
+frame 16 [en-time-location-svo] bits=291..312 values=subject:16,time:6,location:3,object:26,verb:0 => the writer in winter at school, buys photo
+frame 17 [en-basic-svo] bits=312..330 values=subject:8,object:19,adjective:3,verb:7 => the writer moves bright tea
+frame 18 [en-time-location-svo] bits=330..351 values=subject:3,time:7,location:5,object:7,verb:29 => the teacher tomorrow at the office, builds report
+frame 19 [en-basic-svo] bits=351..369 values=subject:13,object:29,adjective:4,verb:3 => the engineer sees warm flower
+frame 20 [en-time-location-svo] bits=369..390 values=subject:13,time:4,location:7,object:12,verb:20 => the engineer in spring on the street, keeps food
+frame 21 [en-basic-svo] bits=390..408 values=subject:10,object:13,adjective:2,verb:28 => the artist keeps quiet flower
+frame 22 [en-time-location-svo] bits=408..429 values=subject:17,time:2,location:6,object:24,verb:6 => the student at dawn in the kitchen, finds book
+frame 23 [en-basic-svo] bits=429..447 values=subject:4,object:13,adjective:3,verb:5 => the researcher builds bright flower
+frame 24 [en-time-location-svo] bits=447..468 values=subject:12,time:5,location:1,object:29,verb:27 => the researcher tonight in the library, sees flower
+frame 25 [en-basic-svo] bits=468..486 values=subject:16,object:29,adjective:0,verb:21 => the writer builds old flower
+frame 26 [en-time-location-svo] bits=486..507 values=subject:29,time:2,location:5,object:17,verb:16 => the engineer at dawn at the office, buys letter
+frame 27 [en-basic-svo] bits=507..525 values=subject:31,object:13,adjective:4,verb:21 => the manager builds warm flower
+frame 28 [en-time-location-svo] bits=525..546 values=subject:27,time:4,location:5,object:26,verb:14 => the teacher in spring at the office, finds photo
+frame 29 [en-basic-svo] bits=546..564 values=subject:31,object:11,adjective:0,verb:1 => the manager writes old tea
+frame 30 [en-time-location-svo] bits=564..585 values=subject:24,time:5,location:6,object:9,verb:29 => the writer tonight in the kitchen, builds letter
+frame 31 [en-basic-svo] bits=585..603 values=subject:27,object:29,adjective:2,verb:29 => the teacher builds quiet flower
+frame 32 [en-time-location-svo] bits=603..608 values=subject:17,time:0,location:0,object:0,verb:0 => the student today at home, buys book
+
+final prototype text:
+the writer writes new letter. the visitor yesterday in the market, reads flower. the researcher reads old note. the writer at dawn at home, keeps photo. the writer buys old book. the writer today at home, reads book. the engineer sees old flower. the visitor in winter at school, moves letter. the researcher keeps quiet photo. the teacher tomorrow at the office, buys photo. the visitor moves small report. the manager tomorrow in the park, buys tea. the visitor moves small note. the teacher tonight in the park, reads note. the teacher sees fresh photo. the writer in winter at school, buys photo. the writer moves bright tea. the teacher tomorrow at the office, builds report. the engineer sees warm flower. the engineer in spring on the street, keeps food. the artist keeps quiet flower. the student at dawn in the kitchen, finds book. the researcher builds bright flower. the researcher tonight in the library, sees flower. the writer builds old flower. the engineer at dawn at the office, buys letter. the manager builds warm flower. the teacher in spring at the office, finds photo. the manager writes old tea. the writer tonight in the kitchen, builds letter. the teacher builds quiet flower. the student today at home, buys book.
+gateway response: stub:encode:en:symbolic-stub:hello
