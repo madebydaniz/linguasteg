@@ -5,6 +5,7 @@ mod formatters;
 mod language;
 mod runtime;
 mod trace;
+mod trace_contract;
 mod types;
 
 use std::process::ExitCode;

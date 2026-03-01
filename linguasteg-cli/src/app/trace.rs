@@ -3,24 +3,10 @@ use std::collections::HashMap;
 use linguasteg_core::{
     BitRange, SymbolicFramePlan, SymbolicFrameSchema, SymbolicSlotValue, TemplateId,
 };
-use serde::Deserialize;
+
+use super::trace_contract::parse_proto_encode_trace_json;
 
 type DynError = Box<dyn std::error::Error>;
-
-#[derive(Debug, Deserialize)]
-struct ProtoEncodeJsonTrace {
-    mode: String,
-    #[serde(default)]
-    frames: Vec<ProtoEncodeJsonFrame>,
-}
-
-#[derive(Debug, Deserialize)]
-struct ProtoEncodeJsonFrame {
-    template_id: String,
-    start_bit: usize,
-    end_bit: usize,
-    values: HashMap<String, u32>,
-}
 
 pub(crate) fn parse_frames_from_trace(
     trace_text: &str,
@@ -85,10 +71,11 @@ fn parse_frames_from_proto_encode_json(
     json_text: &str,
     schemas: &[SymbolicFrameSchema],
 ) -> Result<Option<Vec<SymbolicFramePlan>>, DynError> {
-    let trace = parse_proto_encode_json_trace(json_text)?;
-    if trace.mode != "proto-encode" {
+    let Some(trace) =
+        parse_proto_encode_trace_json(json_text).map_err(|error| -> DynError { error.into() })?
+    else {
         return Ok(None);
-    }
+    };
 
     let mut frames = Vec::with_capacity(trace.frames.len());
     for frame in trace.frames {
@@ -125,10 +112,6 @@ fn parse_frames_from_proto_encode_json(
     }
 
     Ok(Some(frames))
-}
-
-fn parse_proto_encode_json_trace(json_text: &str) -> Result<ProtoEncodeJsonTrace, DynError> {
-    serde_json::from_str(json_text).map_err(|error| format!("invalid json trace: {error}").into())
 }
 
 fn parse_trace_line(

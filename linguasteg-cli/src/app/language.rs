@@ -1,3 +1,4 @@
+use super::trace_contract::parse_proto_encode_trace_json;
 use super::types::{CliError, ProtoTarget};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -77,21 +78,16 @@ fn extract_template_id_from_frame_line(line: &str) -> Option<&str> {
 }
 
 fn inspect_json_trace_language(json_text: &str, seen_fa: &mut bool, seen_en: &mut bool) {
-    let Ok(value) = serde_json::from_str::<serde_json::Value>(json_text) else {
+    let Ok(Some(trace)) = parse_proto_encode_trace_json(json_text) else {
         return;
     };
 
-    if let Some(language) = value.get("language").and_then(serde_json::Value::as_str) {
+    if let Some(language) = trace.language.as_deref() {
         record_language(language, seen_fa, seen_en);
     }
 
-    if let Some(frames) = value.get("frames").and_then(serde_json::Value::as_array) {
-        for frame in frames {
-            if let Some(template_id) = frame.get("template_id").and_then(serde_json::Value::as_str)
-            {
-                record_template(template_id, seen_fa, seen_en);
-            }
-        }
+    for frame in &trace.frames {
+        record_template(&frame.template_id, seen_fa, seen_en);
     }
 }
 
