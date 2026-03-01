@@ -34,10 +34,14 @@ fn parse_encode_command(
     let mut message = env_optional("LSTEG_ENCODE_MESSAGE");
     let mut input_path = env_optional("LSTEG_INPUT");
     let mut output_path = env_optional("LSTEG_OUTPUT");
+    let mut secret = env_optional("LSTEG_SECRET");
+    let mut secret_file = None;
 
     let mut seen_message = false;
     let mut seen_input = false;
     let mut seen_output = false;
+    let mut seen_secret = false;
+    let mut seen_secret_file = false;
 
     while let Some(arg) = args.next() {
         match arg.as_str() {
@@ -77,6 +81,36 @@ fn parse_encode_command(
                 seen_output = true;
                 output_path = Some(next_arg_value(&mut args, "--output")?);
             }
+            "--secret" => {
+                if seen_secret {
+                    return Err(CliError::usage(
+                        "--secret cannot be provided multiple times".to_string(),
+                    ));
+                }
+                if seen_secret_file {
+                    return Err(CliError::usage(
+                        "encode accepts either --secret or --secret-file, not both".to_string(),
+                    ));
+                }
+                seen_secret = true;
+                secret = Some(next_arg_value(&mut args, "--secret")?);
+                secret_file = None;
+            }
+            "--secret-file" => {
+                if seen_secret_file {
+                    return Err(CliError::usage(
+                        "--secret-file cannot be provided multiple times".to_string(),
+                    ));
+                }
+                if seen_secret {
+                    return Err(CliError::usage(
+                        "encode accepts either --secret or --secret-file, not both".to_string(),
+                    ));
+                }
+                seen_secret_file = true;
+                secret_file = Some(next_arg_value(&mut args, "--secret-file")?);
+                secret = None;
+            }
             _ => {
                 return Err(CliError::usage(format!("unknown encode argument: {arg}")));
             }
@@ -93,12 +127,19 @@ fn parse_encode_command(
             "encode requires --message <text> or --input <file>".to_string(),
         ));
     }
+    if secret.is_some() && secret_file.is_some() {
+        return Err(CliError::usage(
+            "encode accepts either --secret or --secret-file, not both".to_string(),
+        ));
+    }
 
     Ok(Some(Command::Encode(EncodeOptions {
         target: lang,
         message,
         input_path,
         output_path,
+        secret,
+        secret_file,
         format,
     })))
 }
@@ -111,10 +152,14 @@ fn parse_decode_command(
     let mut trace = env_optional("LSTEG_TRACE");
     let mut input_path = env_optional("LSTEG_INPUT");
     let mut output_path = env_optional("LSTEG_OUTPUT");
+    let mut secret = env_optional("LSTEG_SECRET");
+    let mut secret_file = None;
 
     let mut seen_trace = false;
     let mut seen_input = false;
     let mut seen_output = false;
+    let mut seen_secret = false;
+    let mut seen_secret_file = false;
 
     while let Some(arg) = args.next() {
         match arg.as_str() {
@@ -153,6 +198,36 @@ fn parse_decode_command(
                 }
                 seen_output = true;
                 output_path = Some(next_arg_value(&mut args, "--output")?);
+            }
+            "--secret" => {
+                if seen_secret {
+                    return Err(CliError::usage(
+                        "--secret cannot be provided multiple times".to_string(),
+                    ));
+                }
+                if seen_secret_file {
+                    return Err(CliError::usage(
+                        "decode accepts either --secret or --secret-file, not both".to_string(),
+                    ));
+                }
+                seen_secret = true;
+                secret = Some(next_arg_value(&mut args, "--secret")?);
+                secret_file = None;
+            }
+            "--secret-file" => {
+                if seen_secret_file {
+                    return Err(CliError::usage(
+                        "--secret-file cannot be provided multiple times".to_string(),
+                    ));
+                }
+                if seen_secret {
+                    return Err(CliError::usage(
+                        "decode accepts either --secret or --secret-file, not both".to_string(),
+                    ));
+                }
+                seen_secret_file = true;
+                secret_file = Some(next_arg_value(&mut args, "--secret-file")?);
+                secret = None;
             }
             _ => {
                 return Err(CliError::usage(format!("unknown decode argument: {arg}")));
@@ -165,12 +240,19 @@ fn parse_decode_command(
             "decode accepts either --trace or --input, not both".to_string(),
         ));
     }
+    if secret.is_some() && secret_file.is_some() {
+        return Err(CliError::usage(
+            "decode accepts either --secret or --secret-file, not both".to_string(),
+        ));
+    }
 
     Ok(Some(Command::Decode(DecodeOptions {
         target: lang,
         trace,
         input_path,
         output_path,
+        secret,
+        secret_file,
         format,
     })))
 }
@@ -183,10 +265,14 @@ fn parse_analyze_command(
     let mut trace = env_optional("LSTEG_TRACE");
     let mut input_path = env_optional("LSTEG_INPUT");
     let mut output_path = env_optional("LSTEG_OUTPUT");
+    let mut secret = env_optional("LSTEG_SECRET");
+    let mut secret_file = None;
 
     let mut seen_trace = false;
     let mut seen_input = false;
     let mut seen_output = false;
+    let mut seen_secret = false;
+    let mut seen_secret_file = false;
 
     while let Some(arg) = args.next() {
         match arg.as_str() {
@@ -226,6 +312,36 @@ fn parse_analyze_command(
                 seen_output = true;
                 output_path = Some(next_arg_value(&mut args, "--output")?);
             }
+            "--secret" => {
+                if seen_secret {
+                    return Err(CliError::usage(
+                        "--secret cannot be provided multiple times".to_string(),
+                    ));
+                }
+                if seen_secret_file {
+                    return Err(CliError::usage(
+                        "analyze accepts either --secret or --secret-file, not both".to_string(),
+                    ));
+                }
+                seen_secret = true;
+                secret = Some(next_arg_value(&mut args, "--secret")?);
+                secret_file = None;
+            }
+            "--secret-file" => {
+                if seen_secret_file {
+                    return Err(CliError::usage(
+                        "--secret-file cannot be provided multiple times".to_string(),
+                    ));
+                }
+                if seen_secret {
+                    return Err(CliError::usage(
+                        "analyze accepts either --secret or --secret-file, not both".to_string(),
+                    ));
+                }
+                seen_secret_file = true;
+                secret_file = Some(next_arg_value(&mut args, "--secret-file")?);
+                secret = None;
+            }
             _ => {
                 return Err(CliError::usage(format!("unknown analyze argument: {arg}")));
             }
@@ -237,12 +353,19 @@ fn parse_analyze_command(
             "analyze accepts either --trace or --input, not both".to_string(),
         ));
     }
+    if secret.is_some() && secret_file.is_some() {
+        return Err(CliError::usage(
+            "analyze accepts either --secret or --secret-file, not both".to_string(),
+        ));
+    }
 
     Ok(Some(Command::Analyze(AnalyzeOptions {
         target: lang,
         trace,
         input_path,
         output_path,
+        secret,
+        secret_file,
         format,
     })))
 }
@@ -370,15 +493,15 @@ pub(crate) fn write_usage(mut writer: impl Write) -> std::io::Result<()> {
     )?;
     writeln!(
         writer,
-        "       lsteg encode [--lang fa] (--message <text> | --input <file>) [--format text|json] [--output <file>]"
+        "       lsteg encode [--lang fa] (--message <text> | --input <file>) [--secret <value> | --secret-file <file>] [--format text|json] [--output <file>]"
     )?;
     writeln!(
         writer,
-        "       lsteg decode [--lang fa] [--trace <text> | --input <file>] [--format text|json] [--output <file>]"
+        "       lsteg decode [--lang fa] [--trace <text> | --input <file>] [--secret <value> | --secret-file <file>] [--format text|json] [--output <file>]"
     )?;
     writeln!(
         writer,
-        "       lsteg analyze [--lang fa] [--trace <text> | --input <file>] [--format text|json] [--output <file>]"
+        "       lsteg analyze [--lang fa] [--trace <text> | --input <file>] [--secret <value> | --secret-file <file>] [--format text|json] [--output <file>]"
     )?;
     writeln!(writer, "       lsteg demo fa")?;
     writeln!(writer, "       lsteg proto-encode fa [message] [--json]")?;
@@ -392,7 +515,7 @@ pub(crate) fn write_usage(mut writer: impl Write) -> std::io::Result<()> {
     )?;
     writeln!(
         writer,
-        "Env defaults: LSTEG_LANG, LSTEG_FORMAT, LSTEG_INPUT, LSTEG_OUTPUT, LSTEG_ENCODE_MESSAGE, LSTEG_TRACE"
+        "Env defaults: LSTEG_LANG, LSTEG_FORMAT, LSTEG_INPUT, LSTEG_OUTPUT, LSTEG_ENCODE_MESSAGE, LSTEG_TRACE, LSTEG_SECRET"
     )?;
     Ok(())
 }

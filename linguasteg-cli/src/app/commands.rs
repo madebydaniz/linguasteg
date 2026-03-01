@@ -1,10 +1,10 @@
-use std::io::Read;
 use std::fmt::Display;
+use std::io::Read;
 
 use linguasteg_core::{
     DecodeRequest, EncodeRequest, FixedWidthPlanningOptions, GrammarConstraintChecker,
     LanguageRealizer, LanguageTag, RealizationPlan, SlotAssignment, SlotId, StyleProfileRegistry,
-    TemplateId, TemplateRegistry,
+    TemplateId, TemplateRegistry, open_payload, seal_payload,
 };
 
 use super::analysis::render_farsi_trace_analysis_output;
@@ -35,24 +35,42 @@ pub(crate) fn execute(command: Command) -> Result<(), CliError> {
 
 fn run_encode(options: EncodeOptions) -> Result<(), CliError> {
     let payload_text = resolve_encode_payload(&options)?;
+    let secret = resolve_required_secret_bytes(
+        options.secret.as_deref(),
+        options.secret_file.as_deref(),
+        "encode",
+    )?;
     let output = match options.target {
-        ProtoTarget::Farsi => render_farsi_proto_encode_output(&payload_text, options.format)?,
+        ProtoTarget::Farsi => {
+            render_farsi_proto_encode_output(&payload_text, options.format, Some(&secret))?
+        }
     };
     write_output(&output, options.output_path.as_deref())
 }
 
 fn run_decode(options: DecodeOptions) -> Result<(), CliError> {
     let trace_text = resolve_trace_input(options.trace.as_deref(), options.input_path.as_deref())?;
+    let secret = resolve_required_secret_bytes(
+        options.secret.as_deref(),
+        options.secret_file.as_deref(),
+        "decode",
+    )?;
     let output = match options.target {
-        ProtoTarget::Farsi => render_farsi_proto_decode_output(&trace_text, options.format)?,
+        ProtoTarget::Farsi => {
+            render_farsi_proto_decode_output(&trace_text, options.format, Some(&secret))?
+        }
     };
     write_output(&output, options.output_path.as_deref())
 }
 
 fn run_analyze(options: AnalyzeOptions) -> Result<(), CliError> {
     let trace_text = resolve_trace_input(options.trace.as_deref(), options.input_path.as_deref())?;
+    let secret =
+        resolve_optional_secret_bytes(options.secret.as_deref(), options.secret_file.as_deref())?;
     let output = match options.target {
-        ProtoTarget::Farsi => render_farsi_trace_analysis_output(&trace_text, options.format)?,
+        ProtoTarget::Farsi => {
+            render_farsi_trace_analysis_output(&trace_text, options.format, secret.as_deref())?
+        }
     };
     write_output(&output, options.output_path.as_deref())
 }
@@ -86,6 +104,55 @@ fn resolve_trace_input(trace: Option<&str>, input_path: Option<&str>) -> Result<
         .read_to_string(&mut buffer)
         .map_err(|error| CliError::io("failed to read trace from stdin", None, error))?;
     Ok(buffer)
+}
+
+fn resolve_required_secret_bytes(
+    secret: Option<&str>,
+    secret_file: Option<&str>,
+    command: &str,
+) -> Result<Vec<u8>, CliError> {
+    let secret = resolve_optional_secret_bytes(secret, secret_file)?;
+    match secret {
+        Some(value) => Ok(value),
+        None => Err(CliError::config(format!(
+            "{command} requires --secret <value> or --secret-file <file> (or LSTEG_SECRET)"
+        ))),
+    }
+}
+
+fn resolve_optional_secret_bytes(
+    secret: Option<&str>,
+    secret_file: Option<&str>,
+) -> Result<Option<Vec<u8>>, CliError> {
+    if secret.is_some() && secret_file.is_some() {
+        return Err(CliError::usage(
+            "secret source is ambiguous; use either --secret or --secret-file".to_string(),
+        ));
+    }
+
+    if let Some(secret) = secret {
+        let normalized = secret.trim();
+        if normalized.is_empty() {
+            return Err(CliError::config("secret cannot be empty"));
+        }
+        return Ok(Some(normalized.as_bytes().to_vec()));
+    }
+
+    if let Some(secret_file) = secret_file {
+        let file_value = std::fs::read_to_string(secret_file).map_err(|error| {
+            CliError::io("failed to read secret file", Some(secret_file), error)
+        })?;
+        let normalized = file_value.trim_end_matches(['\r', '\n']);
+        if normalized.trim().is_empty() {
+            return Err(CliError::config(format!(
+                "secret file '{}' is empty",
+                secret_file
+            )));
+        }
+        return Ok(Some(normalized.as_bytes().to_vec()));
+    }
+
+    Ok(None)
 }
 
 fn write_output(output: &str, output_path: Option<&str>) -> Result<(), CliError> {
@@ -137,7 +204,10 @@ fn run_farsi_demo() -> Result<(), CliError> {
         ],
     };
 
-    map_domain(checker.validate_plan(template, &valid_plan), "demo plan validation failed")?;
+    map_domain(
+        checker.validate_plan(template, &valid_plan),
+        "demo plan validation failed",
+    )?;
     let rendered = map_domain(
         realizer.render(template, &valid_plan),
         "demo realization failed",
@@ -181,7 +251,7 @@ fn run_farsi_proto_encode(payload_text: &str, json: bool) -> Result<(), CliError
     } else {
         OutputFormat::Text
     };
-    let output = render_farsi_proto_encode_output(payload_text, format)?;
+    let output = render_farsi_proto_encode_output(payload_text, format, None)?;
     println!("{output}");
     Ok(())
 }
@@ -189,22 +259,31 @@ fn run_farsi_proto_encode(payload_text: &str, json: bool) -> Result<(), CliError
 fn render_farsi_proto_encode_output(
     payload_text: &str,
     format: OutputFormat,
+    secret: Option<&[u8]>,
 ) -> Result<String, CliError> {
     let payload = payload_text.as_bytes();
+    let symbolic_payload = match secret {
+        Some(secret) => seal_payload(payload, secret)
+            .map_err(|error| CliError::domain(format!("failed to encrypt payload: {error}")))?,
+        None => payload.to_vec(),
+    };
     let runtime = FarsiProtoRuntime::new().map_err(|error| {
         CliError::internal(format!("failed to initialize Farsi runtime: {error}"))
     })?;
     let schemas = runtime.mapper.frame_schemas();
-    let orchestration = map_domain(runtime.orchestrator().orchestrate_encode(
-        EncodeRequest {
-            carrier_text: payload_text.to_string(),
-            payload: payload.to_vec(),
-            options: runtime.pipeline_options().map_err(|error| {
-                CliError::config(format!("invalid pipeline options: {error}"))
-            })?,
-        },
-        &schemas,
-    ), "encode orchestration failed")?;
+    let orchestration = map_domain(
+        runtime.orchestrator().orchestrate_encode(
+            EncodeRequest {
+                carrier_text: payload_text.to_string(),
+                payload: symbolic_payload,
+                options: runtime.pipeline_options().map_err(|error| {
+                    CliError::config(format!("invalid pipeline options: {error}"))
+                })?,
+            },
+            &schemas,
+        ),
+        "encode orchestration failed",
+    )?;
     let payload_plan = orchestration.symbolic_plan;
     let realization_plans = map_domain(
         runtime.mapper.map_payload_to_plans(&payload_plan),
@@ -293,9 +372,7 @@ fn run_farsi_proto_decode(trace_input: Option<String>, json: bool) -> Result<(),
             let mut buffer = String::new();
             std::io::stdin()
                 .read_to_string(&mut buffer)
-                .map_err(|error| {
-                    CliError::io("failed to read trace from stdin", None, error)
-                })?;
+                .map_err(|error| CliError::io("failed to read trace from stdin", None, error))?;
             buffer
         }
     };
@@ -305,7 +382,7 @@ fn run_farsi_proto_decode(trace_input: Option<String>, json: bool) -> Result<(),
     } else {
         OutputFormat::Text
     };
-    let output = render_farsi_proto_decode_output(&trace_text, format)?;
+    let output = render_farsi_proto_decode_output(&trace_text, format, None)?;
     println!("{output}");
     Ok(())
 }
@@ -313,6 +390,7 @@ fn run_farsi_proto_decode(trace_input: Option<String>, json: bool) -> Result<(),
 fn render_farsi_proto_decode_output(
     trace_text: &str,
     format: OutputFormat,
+    secret: Option<&[u8]>,
 ) -> Result<String, CliError> {
     if trace_text.trim().is_empty() {
         return Err(CliError::input(
@@ -344,21 +422,26 @@ fn render_farsi_proto_decode_output(
 
     let orchestration = map_domain(
         runtime
-        .orchestrator()
-        .with_symbolic_options(FixedWidthPlanningOptions::default())
-        .orchestrate_decode(
-            DecodeRequest {
-                stego_text: trace_text.to_string(),
-                options: runtime.pipeline_options().map_err(|error| {
-                    CliError::config(format!("invalid pipeline options: {error}"))
-                })?,
-            },
-            &frames,
-            &ordered_schemas,
-        ),
+            .orchestrator()
+            .with_symbolic_options(FixedWidthPlanningOptions::default())
+            .orchestrate_decode(
+                DecodeRequest {
+                    stego_text: trace_text.to_string(),
+                    options: runtime.pipeline_options().map_err(|error| {
+                        CliError::config(format!("invalid pipeline options: {error}"))
+                    })?,
+                },
+                &frames,
+                &ordered_schemas,
+            ),
         "decode orchestration failed",
     )?;
-    let payload = orchestration.payload;
+    let raw_payload = orchestration.payload;
+    let payload = match secret {
+        Some(secret) => open_payload(&raw_payload, secret)
+            .map_err(|error| CliError::domain(format!("failed to decrypt payload: {error}")))?,
+        None => raw_payload,
+    };
     let hex_payload = payload
         .iter()
         .map(|byte| format!("{byte:02x}"))

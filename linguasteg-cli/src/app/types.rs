@@ -14,6 +14,8 @@ pub(crate) struct EncodeOptions {
     pub(crate) message: Option<String>,
     pub(crate) input_path: Option<String>,
     pub(crate) output_path: Option<String>,
+    pub(crate) secret: Option<String>,
+    pub(crate) secret_file: Option<String>,
     pub(crate) format: OutputFormat,
 }
 
@@ -22,6 +24,8 @@ pub(crate) struct DecodeOptions {
     pub(crate) trace: Option<String>,
     pub(crate) input_path: Option<String>,
     pub(crate) output_path: Option<String>,
+    pub(crate) secret: Option<String>,
+    pub(crate) secret_file: Option<String>,
     pub(crate) format: OutputFormat,
 }
 
@@ -30,6 +34,8 @@ pub(crate) struct AnalyzeOptions {
     pub(crate) trace: Option<String>,
     pub(crate) input_path: Option<String>,
     pub(crate) output_path: Option<String>,
+    pub(crate) secret: Option<String>,
+    pub(crate) secret_file: Option<String>,
     pub(crate) format: OutputFormat,
 }
 
@@ -128,7 +134,11 @@ impl CliError {
     }
 
     pub(crate) fn exit_code(&self) -> u8 {
-        if self.kind == CliErrorKind::Usage { 2 } else { 1 }
+        if self.kind == CliErrorKind::Usage {
+            2
+        } else {
+            1
+        }
     }
 
     fn new(kind: CliErrorKind, code: &'static str, message: impl Into<String>) -> Self {

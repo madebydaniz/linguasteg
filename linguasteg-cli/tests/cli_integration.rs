@@ -1,13 +1,15 @@
 use std::io::Write;
 use std::process::{Command, Output, Stdio};
 
-const ENV_KEYS: [&str; 6] = [
+const TEST_SECRET: &str = "linguasteg-test-secret";
+const ENV_KEYS: [&str; 7] = [
     "LSTEG_LANG",
     "LSTEG_FORMAT",
     "LSTEG_INPUT",
     "LSTEG_OUTPUT",
     "LSTEG_ENCODE_MESSAGE",
     "LSTEG_TRACE",
+    "LSTEG_SECRET",
 ];
 
 fn base_lsteg_command() -> Command {
@@ -15,6 +17,7 @@ fn base_lsteg_command() -> Command {
     for key in ENV_KEYS {
         command.env_remove(key);
     }
+    command.env("LSTEG_SECRET", TEST_SECRET);
     command
 }
 
@@ -159,7 +162,10 @@ fn encode_uses_env_defaults_when_cli_values_missing() {
 fn cli_flags_override_env_defaults() {
     let output = run_lsteg_with_env(
         &["encode", "--message", "override", "--format", "json"],
-        &[("LSTEG_ENCODE_MESSAGE", "from-env"), ("LSTEG_FORMAT", "text")],
+        &[
+            ("LSTEG_ENCODE_MESSAGE", "from-env"),
+            ("LSTEG_FORMAT", "text"),
+        ],
     );
     assert!(output.status.success());
 
@@ -184,7 +190,10 @@ fn decode_uses_env_trace_when_stdin_missing() {
     assert!(encode_output.status.success());
     let trace_text = stdout_string(&encode_output);
 
-    let decode_output = run_lsteg_with_env(&["decode", "--format", "json"], &[("LSTEG_TRACE", &trace_text)]);
+    let decode_output = run_lsteg_with_env(
+        &["decode", "--format", "json"],
+        &[("LSTEG_TRACE", &trace_text)],
+    );
     assert!(decode_output.status.success());
     let decoded_json = stdout_string(&decode_output);
     assert!(decoded_json.contains("\"payload_utf8\":\"salam\""));
@@ -202,4 +211,47 @@ fn cli_trace_overrides_env_trace() {
     assert!(decode_output.status.success());
     let decoded_json = stdout_string(&decode_output);
     assert!(decoded_json.contains("\"payload_utf8\":\"salam\""));
+}
+
+#[test]
+fn encode_fails_without_secret() {
+    let output = run_lsteg_with_env(&["encode", "--message", "salam"], &[("LSTEG_SECRET", "")]);
+    assert_eq!(output.status.code(), Some(1));
+    let stderr = stderr_string(&output);
+    assert!(stderr.contains("LSTEG-CLI-CFG-001"));
+}
+
+#[test]
+fn decode_fails_with_wrong_secret() {
+    let encode_output = run_lsteg(&["encode", "--message", "salam"]);
+    assert!(encode_output.status.success());
+    let trace_text = stdout_string(&encode_output);
+
+    let decode_output = run_lsteg_with_env(
+        &["decode", "--format", "json"],
+        &[
+            ("LSTEG_TRACE", &trace_text),
+            ("LSTEG_SECRET", "wrong-secret"),
+        ],
+    );
+    assert_eq!(decode_output.status.code(), Some(1));
+    let stderr = stderr_string(&decode_output);
+    assert!(stderr.contains("failed to decrypt payload"));
+}
+
+#[test]
+fn analyze_without_secret_reports_structural_only() {
+    let encode_output = run_lsteg(&["encode", "--message", "salam"]);
+    assert!(encode_output.status.success());
+    let trace_text = stdout_string(&encode_output);
+
+    let analyze_output = run_lsteg_with_env(
+        &["analyze", "--format", "json"],
+        &[("LSTEG_TRACE", &trace_text), ("LSTEG_SECRET", "")],
+    );
+    assert!(analyze_output.status.success());
+    let analysis_json = stdout_string(&analyze_output);
+    assert!(analysis_json.contains("\"integrity_ok\":true"));
+    assert!(analysis_json.contains("\"payload_bytes\":null"));
+    assert!(analysis_json.contains("\"payload_utf8\":null"));
 }

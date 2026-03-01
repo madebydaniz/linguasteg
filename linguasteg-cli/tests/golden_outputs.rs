@@ -2,13 +2,15 @@ use std::fs;
 use std::path::PathBuf;
 use std::process::{Command, Output};
 
-const ENV_KEYS: [&str; 6] = [
+const TEST_SECRET: &str = "linguasteg-test-secret";
+const ENV_KEYS: [&str; 7] = [
     "LSTEG_LANG",
     "LSTEG_FORMAT",
     "LSTEG_INPUT",
     "LSTEG_OUTPUT",
     "LSTEG_ENCODE_MESSAGE",
     "LSTEG_TRACE",
+    "LSTEG_SECRET",
 ];
 
 fn base_lsteg_command() -> Command {
@@ -16,6 +18,7 @@ fn base_lsteg_command() -> Command {
     for key in ENV_KEYS {
         command.env_remove(key);
     }
+    command.env("LSTEG_SECRET", TEST_SECRET);
     command
 }
 
@@ -46,23 +49,25 @@ fn stderr_string(output: &Output) -> String {
 }
 
 #[test]
-fn encode_text_matches_golden_fixture() {
+fn encode_text_contains_expected_sections() {
     let output = run_lsteg(&["encode", "--message", "salam"]);
     assert!(output.status.success());
-    assert_eq!(
-        stdout_string(&output),
-        fixture_contents("encode_salam_text.out")
-    );
+    let stdout = stdout_string(&output);
+    assert!(stdout.contains("Farsi prototype encode"));
+    assert!(stdout.contains("input text: salam"));
+    assert!(stdout.contains("payload bytes: 5"));
+    assert!(stdout.contains("gateway response: stub:encode:fa:symbolic-stub:salam"));
 }
 
 #[test]
-fn encode_json_matches_golden_fixture() {
+fn encode_json_contains_expected_contract() {
     let output = run_lsteg(&["encode", "--message", "salam", "--format", "json"]);
     assert!(output.status.success());
-    assert_eq!(
-        stdout_string(&output),
-        fixture_contents("encode_salam_json.out")
-    );
+    let stdout = stdout_string(&output);
+    assert!(stdout.contains("\"mode\":\"proto-encode\""));
+    assert!(stdout.contains("\"language\":\"fa\""));
+    assert!(stdout.contains("\"input_text\":\"salam\""));
+    assert!(stdout.contains("\"payload_bytes\":5"));
 }
 
 #[test]
@@ -92,23 +97,27 @@ fn analyze_json_matches_golden_fixture() {
 }
 
 #[test]
-fn encode_json_unicode_mix_matches_golden_fixture() {
+fn encode_json_unicode_mix_contains_expected_contract() {
     let output = run_lsteg(&["encode", "--message", "salam دنیا 123", "--format", "json"]);
     assert!(output.status.success());
-    assert_eq!(
-        stdout_string(&output),
-        fixture_contents("encode_salam_donya_123_json.out")
-    );
+    let stdout = stdout_string(&output);
+    assert!(stdout.contains("\"input_text\":\"salam دنیا 123\""));
+    assert!(stdout.contains("\"payload_bytes\":18"));
 }
 
 #[test]
-fn encode_json_preserves_whitespace_matches_golden_fixture() {
-    let output = run_lsteg(&["encode", "--message", "  salam   donya  ", "--format", "json"]);
+fn encode_json_preserves_whitespace_in_input_text() {
+    let output = run_lsteg(&[
+        "encode",
+        "--message",
+        "  salam   donya  ",
+        "--format",
+        "json",
+    ]);
     assert!(output.status.success());
-    assert_eq!(
-        stdout_string(&output),
-        fixture_contents("encode_whitespace_json.out")
-    );
+    let stdout = stdout_string(&output);
+    assert!(stdout.contains("\"input_text\":\"  salam   donya  \""));
+    assert!(stdout.contains("\"payload_bytes\":17"));
 }
 
 #[test]

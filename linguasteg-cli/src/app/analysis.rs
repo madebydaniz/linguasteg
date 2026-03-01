@@ -1,6 +1,6 @@
 use linguasteg_core::{
     FixedWidthPlanningOptions, SymbolicFramePlan, SymbolicFrameSchema,
-    decode_payload_from_symbolic_frames,
+    decode_payload_from_symbolic_frames, open_payload,
 };
 
 use super::formatters::{build_trace_analysis_json, build_trace_analysis_text};
@@ -11,6 +11,7 @@ use super::types::{CliError, OutputFormat, TraceAnalysisSummary};
 pub(crate) fn render_farsi_trace_analysis_output(
     trace_text: &str,
     format: OutputFormat,
+    secret: Option<&[u8]>,
 ) -> Result<String, CliError> {
     if trace_text.trim().is_empty() {
         return Err(CliError::input(
@@ -28,7 +29,7 @@ pub(crate) fn render_farsi_trace_analysis_output(
         return Err(CliError::trace("no frame lines were found in trace input"));
     }
 
-    let summary = analyze_farsi_trace(&frames, &schemas)?;
+    let summary = analyze_farsi_trace(&frames, &schemas, secret)?;
     if matches!(format, OutputFormat::Json) {
         return Ok(build_trace_analysis_json(&summary));
     }
@@ -39,6 +40,7 @@ pub(crate) fn render_farsi_trace_analysis_output(
 fn analyze_farsi_trace(
     frames: &[SymbolicFramePlan],
     schemas: &[SymbolicFrameSchema],
+    secret: Option<&[u8]>,
 ) -> Result<TraceAnalysisSummary, CliError> {
     let mut ordered_schemas = Vec::with_capacity(frames.len());
     let mut symbolic_bits = 0usize;
@@ -49,8 +51,9 @@ fn analyze_farsi_trace(
     for frame in frames {
         consumed_bits += frame.source.consumed_bits;
 
-        let schema = schema_for_template(schemas, &frame.template_id)
-            .map_err(|error| CliError::trace(format!("failed to resolve trace schemas: {error}")))?;
+        let schema = schema_for_template(schemas, &frame.template_id).map_err(|error| {
+            CliError::trace(format!("failed to resolve trace schemas: {error}"))
+        })?;
         symbolic_bits += schema.total_bits();
         ordered_schemas.push(schema);
     }
@@ -78,16 +81,28 @@ fn analyze_farsi_trace(
         &ordered_schemas,
         &FixedWidthPlanningOptions::default(),
     ) {
-        Ok(payload) => {
-            payload_bytes = Some(payload.len());
-            payload_hex = Some(
-                payload
-                    .iter()
-                    .map(|byte| format!("{byte:02x}"))
-                    .collect::<Vec<_>>()
-                    .join(""),
-            );
-            payload_utf8 = String::from_utf8(payload).ok();
+        Ok(raw_payload) => {
+            if let Some(secret) = secret {
+                match open_payload(&raw_payload, secret) {
+                    Ok(payload) => {
+                        payload_bytes = Some(payload.len());
+                        payload_hex = Some(
+                            payload
+                                .iter()
+                                .map(|byte| format!("{byte:02x}"))
+                                .collect::<Vec<_>>()
+                                .join(""),
+                        );
+                        payload_utf8 = String::from_utf8(payload).ok();
+                    }
+                    Err(error) => {
+                        integrity_ok = false;
+                        if integrity_error.is_none() {
+                            integrity_error = Some(format!("failed to decrypt payload: {error}"));
+                        }
+                    }
+                }
+            }
         }
         Err(error) => {
             integrity_ok = false;
