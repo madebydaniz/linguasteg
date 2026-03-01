@@ -41,6 +41,10 @@ fn stdout_string(output: &Output) -> String {
     String::from_utf8(output.stdout.clone()).expect("stdout must be valid utf8")
 }
 
+fn stderr_string(output: &Output) -> String {
+    String::from_utf8(output.stderr.clone()).expect("stderr must be valid utf8")
+}
+
 #[test]
 fn encode_text_matches_golden_fixture() {
     let output = run_lsteg(&["encode", "--message", "salam"]);
@@ -84,5 +88,51 @@ fn analyze_json_matches_golden_fixture() {
     assert_eq!(
         stdout_string(&output),
         fixture_contents("analyze_salam_json.out")
+    );
+}
+
+#[test]
+fn encode_json_unicode_mix_matches_golden_fixture() {
+    let output = run_lsteg(&["encode", "--message", "salam دنیا 123", "--format", "json"]);
+    assert!(output.status.success());
+    assert_eq!(
+        stdout_string(&output),
+        fixture_contents("encode_salam_donya_123_json.out")
+    );
+}
+
+#[test]
+fn encode_json_preserves_whitespace_matches_golden_fixture() {
+    let output = run_lsteg(&["encode", "--message", "  salam   donya  ", "--format", "json"]);
+    assert!(output.status.success());
+    assert_eq!(
+        stdout_string(&output),
+        fixture_contents("encode_whitespace_json.out")
+    );
+}
+
+#[test]
+fn analyze_non_contiguous_trace_matches_golden_fixture() {
+    let input = fixture_path("trace_salam_non_contiguous.input");
+    let input = input.to_string_lossy().into_owned();
+
+    let output = run_lsteg(&["analyze", "--format", "json", "--input", &input]);
+    assert!(output.status.success());
+    assert_eq!(
+        stdout_string(&output),
+        fixture_contents("analyze_non_contiguous_json.out")
+    );
+}
+
+#[test]
+fn decode_non_contiguous_trace_stderr_matches_golden_fixture() {
+    let input = fixture_path("trace_salam_non_contiguous.input");
+    let input = input.to_string_lossy().into_owned();
+
+    let output = run_lsteg(&["decode", "--format", "json", "--input", &input]);
+    assert_eq!(output.status.code(), Some(1));
+    assert_eq!(
+        stderr_string(&output),
+        fixture_contents("decode_non_contiguous_stderr.out")
     );
 }

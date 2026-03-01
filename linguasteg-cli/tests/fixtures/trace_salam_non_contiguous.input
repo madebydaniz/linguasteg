@@ -1,0 +1,14 @@
+Farsi prototype encode
+input text: salam
+payload bytes: 5
+encoded bytes (with length prefix): 7
+frames: 3
+padding bits: 1
+
+frame 01 [fa-basic-sov] bits=0..18 values=subject:0,object:0,adjective:0,verb:21 => مرد کتاب زیبا را خرید
+frame 02 [fa-time-location-sov] bits=19..40 values=subject:25,time:5,location:4,object:5,verb:22 => زن سحر در باغ عکس را نوشت
+frame 03 [fa-basic-sov] bits=39..56 values=subject:6,object:2,adjective:6,verb:26 => دوست چای تازه را خورد
+
+final prototype text:
+مرد کتاب زیبا را خرید. زن سحر در باغ عکس را نوشت. دوست چای تازه را خورد.
+gateway response: stub:encode:fa:symbolic-stub:salam

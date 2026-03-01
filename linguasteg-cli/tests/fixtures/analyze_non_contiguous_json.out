@@ -1,0 +1,1 @@
+{"mode":"analyze","language":"fa","frame_count":3,"consumed_bits":56,"symbolic_bits":57,"padding_bits":1,"encoded_bytes":7,"payload_bytes":5,"payload_hex":"73616c616d","payload_utf8":"salam","contiguous_ranges":false,"integrity_ok":false,"integrity_error":"frame 02 starts at bit 19 but expected 18"}
