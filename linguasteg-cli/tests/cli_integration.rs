@@ -1,5 +1,7 @@
 use std::io::Write;
+use std::path::PathBuf;
 use std::process::{Command, Output, Stdio};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 const TEST_SECRET: &str = "linguasteg-test-secret";
 const ENV_KEYS: [&str; 7] = [
@@ -61,6 +63,35 @@ fn stdout_string(output: &Output) -> String {
 
 fn stderr_string(output: &Output) -> String {
     String::from_utf8(output.stderr.clone()).expect("stderr must be valid utf8")
+}
+
+struct TempSecretFile {
+    path: PathBuf,
+}
+
+impl TempSecretFile {
+    fn create(secret: &str) -> Self {
+        let mut path = std::env::temp_dir();
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock should be after unix epoch")
+            .as_nanos();
+        path.push(format!("linguasteg-secret-{nanos}.txt"));
+        std::fs::write(&path, secret).expect("failed to write temp secret file");
+        Self { path }
+    }
+
+    fn as_str(&self) -> &str {
+        self.path
+            .to_str()
+            .expect("temp secret file path must be valid utf8")
+    }
+}
+
+impl Drop for TempSecretFile {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.path);
+    }
 }
 
 #[test]
@@ -254,4 +285,60 @@ fn analyze_without_secret_reports_structural_only() {
     assert!(analysis_json.contains("\"integrity_ok\":true"));
     assert!(analysis_json.contains("\"payload_bytes\":null"));
     assert!(analysis_json.contains("\"payload_utf8\":null"));
+}
+
+#[test]
+fn secret_file_is_used_for_encode_and_decode() {
+    let secret_file = TempSecretFile::create("from-file-secret");
+
+    let encode_output = run_lsteg(&[
+        "encode",
+        "--message",
+        "salam",
+        "--secret-file",
+        secret_file.as_str(),
+    ]);
+    assert!(encode_output.status.success());
+    let trace_text = stdout_string(&encode_output);
+
+    let decode_with_env_output = run_lsteg_with_env(
+        &["decode", "--format", "json"],
+        &[("LSTEG_TRACE", &trace_text)],
+    );
+    assert_eq!(decode_with_env_output.status.code(), Some(1));
+    assert!(stderr_string(&decode_with_env_output).contains("failed to decrypt payload"));
+
+    let decode_with_file_output = run_lsteg_with_env(
+        &[
+            "decode",
+            "--format",
+            "json",
+            "--secret-file",
+            secret_file.as_str(),
+        ],
+        &[("LSTEG_TRACE", &trace_text)],
+    );
+    assert!(decode_with_file_output.status.success());
+    assert!(stdout_string(&decode_with_file_output).contains("\"payload_utf8\":\"salam\""));
+}
+
+#[test]
+fn cli_secret_overrides_env_secret() {
+    let encode_output = run_lsteg(&["encode", "--message", "salam", "--secret", "cli-secret"]);
+    assert!(encode_output.status.success());
+    let trace_text = stdout_string(&encode_output);
+
+    let decode_with_env_output = run_lsteg_with_env(
+        &["decode", "--format", "json"],
+        &[("LSTEG_TRACE", &trace_text)],
+    );
+    assert_eq!(decode_with_env_output.status.code(), Some(1));
+    assert!(stderr_string(&decode_with_env_output).contains("failed to decrypt payload"));
+
+    let decode_with_cli_output = run_lsteg_with_env(
+        &["decode", "--format", "json", "--secret", "cli-secret"],
+        &[("LSTEG_TRACE", &trace_text)],
+    );
+    assert!(decode_with_cli_output.status.success());
+    assert!(stdout_string(&decode_with_cli_output).contains("\"payload_utf8\":\"salam\""));
 }
