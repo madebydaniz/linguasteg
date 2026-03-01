@@ -267,6 +267,7 @@ fn decode_fails_with_wrong_secret() {
     );
     assert_eq!(decode_output.status.code(), Some(1));
     let stderr = stderr_string(&decode_output);
+    assert!(stderr.contains("LSTEG-CLI-SEC-001"));
     assert!(stderr.contains("failed to decrypt payload"));
 }
 
@@ -306,7 +307,9 @@ fn secret_file_is_used_for_encode_and_decode() {
         &[("LSTEG_TRACE", &trace_text)],
     );
     assert_eq!(decode_with_env_output.status.code(), Some(1));
-    assert!(stderr_string(&decode_with_env_output).contains("failed to decrypt payload"));
+    let stderr = stderr_string(&decode_with_env_output);
+    assert!(stderr.contains("LSTEG-CLI-SEC-001"));
+    assert!(stderr.contains("failed to decrypt payload"));
 
     let decode_with_file_output = run_lsteg_with_env(
         &[
@@ -333,7 +336,9 @@ fn cli_secret_overrides_env_secret() {
         &[("LSTEG_TRACE", &trace_text)],
     );
     assert_eq!(decode_with_env_output.status.code(), Some(1));
-    assert!(stderr_string(&decode_with_env_output).contains("failed to decrypt payload"));
+    let stderr = stderr_string(&decode_with_env_output);
+    assert!(stderr.contains("LSTEG-CLI-SEC-001"));
+    assert!(stderr.contains("failed to decrypt payload"));
 
     let decode_with_cli_output = run_lsteg_with_env(
         &["decode", "--format", "json", "--secret", "cli-secret"],
@@ -341,4 +346,20 @@ fn cli_secret_overrides_env_secret() {
     );
     assert!(decode_with_cli_output.status.success());
     assert!(stdout_string(&decode_with_cli_output).contains("\"payload_utf8\":\"salam\""));
+}
+
+#[test]
+fn analyze_with_wrong_secret_reports_decrypt_integrity_error() {
+    let encode_output = run_lsteg(&["encode", "--message", "salam", "--secret", "right-secret"]);
+    assert!(encode_output.status.success());
+    let trace_text = stdout_string(&encode_output);
+
+    let analyze_output = run_lsteg_with_env(
+        &["analyze", "--format", "json", "--secret", "wrong-secret"],
+        &[("LSTEG_TRACE", &trace_text)],
+    );
+    assert!(analyze_output.status.success());
+    let analysis_json = stdout_string(&analyze_output);
+    assert!(analysis_json.contains("\"integrity_ok\":false"));
+    assert!(analysis_json.contains("failed to decrypt payload; verify provided secret"));
 }

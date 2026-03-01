@@ -95,10 +95,12 @@ fn analyze_farsi_trace(
                         );
                         payload_utf8 = String::from_utf8(payload).ok();
                     }
-                    Err(error) => {
+                    Err(_) => {
                         integrity_ok = false;
                         if integrity_error.is_none() {
-                            integrity_error = Some(format!("failed to decrypt payload: {error}"));
+                            integrity_error = Some(
+                                "failed to decrypt payload; verify provided secret".to_string(),
+                            );
                         }
                     }
                 }

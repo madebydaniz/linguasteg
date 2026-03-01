@@ -264,7 +264,7 @@ fn render_farsi_proto_encode_output(
     let payload = payload_text.as_bytes();
     let symbolic_payload = match secret {
         Some(secret) => seal_payload(payload, secret)
-            .map_err(|error| CliError::domain(format!("failed to encrypt payload: {error}")))?,
+            .map_err(|_| CliError::security("failed to encrypt payload with provided secret"))?,
         None => payload.to_vec(),
     };
     let runtime = FarsiProtoRuntime::new().map_err(|error| {
@@ -439,7 +439,7 @@ fn render_farsi_proto_decode_output(
     let raw_payload = orchestration.payload;
     let payload = match secret {
         Some(secret) => open_payload(&raw_payload, secret)
-            .map_err(|error| CliError::domain(format!("failed to decrypt payload: {error}")))?,
+            .map_err(|_| CliError::security("failed to decrypt payload; verify provided secret"))?,
         None => raw_payload,
     };
     let hex_payload = payload

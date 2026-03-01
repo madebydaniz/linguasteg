@@ -74,6 +74,7 @@ pub(crate) enum CliErrorKind {
     Usage,
     Input,
     Config,
+    Security,
     Trace,
     Io,
     Domain,
@@ -102,6 +103,10 @@ impl CliError {
 
     pub(crate) fn trace(message: impl Into<String>) -> Self {
         Self::new(CliErrorKind::Trace, "LSTEG-CLI-TRC-001", message)
+    }
+
+    pub(crate) fn security(message: impl Into<String>) -> Self {
+        Self::new(CliErrorKind::Security, "LSTEG-CLI-SEC-001", message)
     }
 
     pub(crate) fn io(operation: &str, path: Option<&str>, error: impl Display) -> Self {
