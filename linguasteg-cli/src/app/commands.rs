@@ -2,9 +2,9 @@ use std::fmt::Display;
 use std::io::Read;
 
 use linguasteg_core::{
-    DecodeRequest, EncodeRequest, FixedWidthPlanningOptions, GrammarConstraintChecker,
-    LanguageRealizer, LanguageTag, RealizationPlan, SlotAssignment, SlotId, StyleProfileRegistry,
-    TemplateId, TemplateRegistry, open_payload, seal_payload,
+    DecodeRequest, EncodeRequest, FixedWidthPlanningOptions, LanguageTag, RealizationPlan,
+    SlotAssignment, SlotId, StyleProfileRegistry, TemplateId, TemplateRegistry, open_payload,
+    seal_payload,
 };
 
 use super::analysis::render_trace_analysis_output;

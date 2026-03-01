@@ -1,9 +1,10 @@
 use linguasteg_core::{
-    CoreResult, FixedWidthBitPlanner, GrammarConstraintChecker, LanguageRealizer, LanguageRegistry,
-    LanguageTag, ModelCapability, ModelDescriptor, ModelId, ModelRegistry, ModelSelection,
-    PipelineOptions, PipelineOrchestrator, ProviderId, RealizationPlan, StrategyDescriptor,
-    StrategyId, StrategyRegistry, StyleProfileRegistry, SymbolicFrameSchema, SymbolicPayloadPlan,
-    TemplateRegistry,
+    CoreResult, FixedWidthBitPlanner, GrammarConstraintChecker, LanguageDescriptor,
+    LanguageRealizer, LanguageRegistry, LanguageTag, ModelCapability, ModelDescriptor, ModelId,
+    ModelRegistry, ModelSelection, PipelineOptions, PipelineOrchestrator, ProviderId,
+    RealizationPlan, RealizationTemplateDescriptor, StrategyDescriptor, StrategyId,
+    StrategyRegistry, StyleProfileDescriptor, StyleProfileRegistry, SymbolicFrameSchema,
+    SymbolicPayloadPlan, TemplateRegistry,
 };
 use linguasteg_models::{
     EnglishPrototypeConstraintChecker, EnglishPrototypeLanguagePack, EnglishPrototypeRealizer,
@@ -33,13 +34,90 @@ impl ModelRegistry for InMemoryModelRegistry {
     }
 }
 
+trait RuntimeLanguagePack: LanguageRegistry + StyleProfileRegistry + TemplateRegistry {}
+
+impl<T> RuntimeLanguagePack for T where T: LanguageRegistry + StyleProfileRegistry + TemplateRegistry
+{}
+
+pub(crate) struct RuntimeLanguagePackHandle {
+    inner: Box<dyn RuntimeLanguagePack>,
+}
+
+impl RuntimeLanguagePackHandle {
+    fn new(inner: Box<dyn RuntimeLanguagePack>) -> Self {
+        Self { inner }
+    }
+}
+
+impl LanguageRegistry for RuntimeLanguagePackHandle {
+    fn all_languages(&self) -> &[LanguageDescriptor] {
+        self.inner.all_languages()
+    }
+}
+
+impl StyleProfileRegistry for RuntimeLanguagePackHandle {
+    fn all_style_profiles(&self) -> &[StyleProfileDescriptor] {
+        self.inner.all_style_profiles()
+    }
+}
+
+impl TemplateRegistry for RuntimeLanguagePackHandle {
+    fn all_templates(&self) -> &[RealizationTemplateDescriptor] {
+        self.inner.all_templates()
+    }
+}
+
+pub(crate) trait RuntimeSymbolicMapper: Send + Sync {
+    fn frame_schemas(&self) -> Vec<SymbolicFrameSchema>;
+
+    fn map_payload_to_plans(
+        &self,
+        payload_plan: &SymbolicPayloadPlan,
+    ) -> CoreResult<Vec<RealizationPlan>>;
+}
+
+impl RuntimeSymbolicMapper for FarsiPrototypeSymbolicMapper {
+    fn frame_schemas(&self) -> Vec<SymbolicFrameSchema> {
+        FarsiPrototypeSymbolicMapper::frame_schemas(self)
+    }
+
+    fn map_payload_to_plans(
+        &self,
+        payload_plan: &SymbolicPayloadPlan,
+    ) -> CoreResult<Vec<RealizationPlan>> {
+        FarsiPrototypeSymbolicMapper::map_payload_to_plans(self, payload_plan)
+    }
+}
+
+impl RuntimeSymbolicMapper for EnglishPrototypeSymbolicMapper {
+    fn frame_schemas(&self) -> Vec<SymbolicFrameSchema> {
+        EnglishPrototypeSymbolicMapper::frame_schemas(self)
+    }
+
+    fn map_payload_to_plans(
+        &self,
+        payload_plan: &SymbolicPayloadPlan,
+    ) -> CoreResult<Vec<RealizationPlan>> {
+        EnglishPrototypeSymbolicMapper::map_payload_to_plans(self, payload_plan)
+    }
+}
+
+struct RuntimeComponents {
+    language_code: &'static str,
+    language_display: &'static str,
+    pack: Box<dyn RuntimeLanguagePack>,
+    checker: Box<dyn GrammarConstraintChecker>,
+    realizer: Box<dyn LanguageRealizer>,
+    mapper: Box<dyn RuntimeSymbolicMapper>,
+}
+
 pub(crate) struct PrototypeRuntime {
     pub(crate) language_code: &'static str,
     pub(crate) language_display: &'static str,
-    pub(crate) pack: PackVariant,
-    pub(crate) checker: CheckerVariant,
-    pub(crate) realizer: RealizerVariant,
-    pub(crate) mapper: MapperVariant,
+    pub(crate) pack: RuntimeLanguagePackHandle,
+    pub(crate) checker: Box<dyn GrammarConstraintChecker>,
+    pub(crate) realizer: Box<dyn LanguageRealizer>,
+    pub(crate) mapper: Box<dyn RuntimeSymbolicMapper>,
     planner: FixedWidthBitPlanner,
     strategy_registry: InMemoryStrategyRegistry,
     model_registry: InMemoryModelRegistry,
@@ -51,34 +129,17 @@ impl PrototypeRuntime {
         let strategy_id = StrategyId::new("symbolic-stub")?;
         let provider = ProviderId::new("stub")?;
         let model = ModelId::new("stub-local")?;
-        let language = LanguageTag::new(target.as_str())?;
 
-        let (language_code, language_display, pack, checker, realizer, mapper) = match target {
-            ProtoTarget::Farsi => (
-                "fa",
-                "Farsi",
-                PackVariant::Farsi(FarsiPrototypeLanguagePack::default()),
-                CheckerVariant::Farsi(FarsiPrototypeConstraintChecker),
-                RealizerVariant::Farsi(FarsiPrototypeRealizer),
-                MapperVariant::Farsi(FarsiPrototypeSymbolicMapper),
-            ),
-            ProtoTarget::English => (
-                "en",
-                "English",
-                PackVariant::English(EnglishPrototypeLanguagePack::default()),
-                CheckerVariant::English(EnglishPrototypeConstraintChecker),
-                RealizerVariant::English(EnglishPrototypeRealizer),
-                MapperVariant::English(EnglishPrototypeSymbolicMapper),
-            ),
-        };
+        let components = runtime_components(target);
+        let language = LanguageTag::new(components.language_code)?;
 
         Ok(Self {
-            language_code,
-            language_display,
-            pack,
-            checker,
-            realizer,
-            mapper,
+            language_code: components.language_code,
+            language_display: components.language_display,
+            pack: RuntimeLanguagePackHandle::new(components.pack),
+            checker: components.checker,
+            realizer: components.realizer,
+            mapper: components.mapper,
             planner: FixedWidthBitPlanner::default(),
             strategy_registry: InMemoryStrategyRegistry {
                 strategies: vec![StrategyDescriptor {
@@ -122,94 +183,23 @@ impl PrototypeRuntime {
     }
 }
 
-pub(crate) enum PackVariant {
-    Farsi(FarsiPrototypeLanguagePack),
-    English(EnglishPrototypeLanguagePack),
-}
-
-impl LanguageRegistry for PackVariant {
-    fn all_languages(&self) -> &[linguasteg_core::LanguageDescriptor] {
-        match self {
-            Self::Farsi(pack) => pack.all_languages(),
-            Self::English(pack) => pack.all_languages(),
-        }
-    }
-}
-
-impl StyleProfileRegistry for PackVariant {
-    fn all_style_profiles(&self) -> &[linguasteg_core::StyleProfileDescriptor] {
-        match self {
-            Self::Farsi(pack) => pack.all_style_profiles(),
-            Self::English(pack) => pack.all_style_profiles(),
-        }
-    }
-}
-
-impl TemplateRegistry for PackVariant {
-    fn all_templates(&self) -> &[linguasteg_core::RealizationTemplateDescriptor] {
-        match self {
-            Self::Farsi(pack) => pack.all_templates(),
-            Self::English(pack) => pack.all_templates(),
-        }
-    }
-}
-
-pub(crate) enum CheckerVariant {
-    Farsi(FarsiPrototypeConstraintChecker),
-    English(EnglishPrototypeConstraintChecker),
-}
-
-impl GrammarConstraintChecker for CheckerVariant {
-    fn validate_plan(
-        &self,
-        template: &linguasteg_core::RealizationTemplateDescriptor,
-        plan: &linguasteg_core::RealizationPlan,
-    ) -> CoreResult<()> {
-        match self {
-            Self::Farsi(checker) => checker.validate_plan(template, plan),
-            Self::English(checker) => checker.validate_plan(template, plan),
-        }
-    }
-}
-
-pub(crate) enum RealizerVariant {
-    Farsi(FarsiPrototypeRealizer),
-    English(EnglishPrototypeRealizer),
-}
-
-impl LanguageRealizer for RealizerVariant {
-    fn render(
-        &self,
-        template: &linguasteg_core::RealizationTemplateDescriptor,
-        plan: &linguasteg_core::RealizationPlan,
-    ) -> CoreResult<String> {
-        match self {
-            Self::Farsi(realizer) => realizer.render(template, plan),
-            Self::English(realizer) => realizer.render(template, plan),
-        }
-    }
-}
-
-pub(crate) enum MapperVariant {
-    Farsi(FarsiPrototypeSymbolicMapper),
-    English(EnglishPrototypeSymbolicMapper),
-}
-
-impl MapperVariant {
-    pub(crate) fn frame_schemas(&self) -> Vec<SymbolicFrameSchema> {
-        match self {
-            Self::Farsi(mapper) => mapper.frame_schemas(),
-            Self::English(mapper) => mapper.frame_schemas(),
-        }
-    }
-
-    pub(crate) fn map_payload_to_plans(
-        &self,
-        payload_plan: &SymbolicPayloadPlan,
-    ) -> CoreResult<Vec<RealizationPlan>> {
-        match self {
-            Self::Farsi(mapper) => mapper.map_payload_to_plans(payload_plan),
-            Self::English(mapper) => mapper.map_payload_to_plans(payload_plan),
-        }
+fn runtime_components(target: ProtoTarget) -> RuntimeComponents {
+    match target {
+        ProtoTarget::Farsi => RuntimeComponents {
+            language_code: "fa",
+            language_display: "Farsi",
+            pack: Box::new(FarsiPrototypeLanguagePack::default()),
+            checker: Box::new(FarsiPrototypeConstraintChecker),
+            realizer: Box::new(FarsiPrototypeRealizer),
+            mapper: Box::new(FarsiPrototypeSymbolicMapper),
+        },
+        ProtoTarget::English => RuntimeComponents {
+            language_code: "en",
+            language_display: "English",
+            pack: Box::new(EnglishPrototypeLanguagePack::default()),
+            checker: Box::new(EnglishPrototypeConstraintChecker),
+            realizer: Box::new(EnglishPrototypeRealizer),
+            mapper: Box::new(EnglishPrototypeSymbolicMapper),
+        },
     }
 }
