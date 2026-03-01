@@ -106,6 +106,25 @@ fn encode_json_outputs_proto_encode_mode() {
 }
 
 #[test]
+fn encode_json_supports_english_target() {
+    let output = run_lsteg(&[
+        "encode",
+        "--lang",
+        "en",
+        "--message",
+        "hello",
+        "--format",
+        "json",
+    ]);
+    assert!(output.status.success());
+
+    let stdout = stdout_string(&output);
+    assert!(stdout.contains("\"mode\":\"proto-encode\""));
+    assert!(stdout.contains("\"language\":\"en\""));
+    assert!(stdout.contains("\"input_text\":\"hello\""));
+}
+
+#[test]
 fn decode_roundtrip_from_encode_trace_works() {
     let encode_output = run_lsteg(&["encode", "--message", "salam"]);
     assert!(encode_output.status.success());
@@ -117,6 +136,21 @@ fn decode_roundtrip_from_encode_trace_works() {
     let decoded_json = stdout_string(&decode_output);
     assert!(decoded_json.contains("\"mode\":\"proto-decode\""));
     assert!(decoded_json.contains("\"payload_utf8\":\"salam\""));
+}
+
+#[test]
+fn decode_roundtrip_from_english_trace_works() {
+    let encode_output = run_lsteg(&["encode", "--lang", "en", "--message", "hello"]);
+    assert!(encode_output.status.success());
+    let trace_text = stdout_string(&encode_output);
+
+    let decode_output =
+        run_lsteg_with_stdin(&["decode", "--lang", "en", "--format", "json"], &trace_text);
+    assert!(decode_output.status.success());
+
+    let decoded_json = stdout_string(&decode_output);
+    assert!(decoded_json.contains("\"language\":\"en\""));
+    assert!(decoded_json.contains("\"payload_utf8\":\"hello\""));
 }
 
 #[test]

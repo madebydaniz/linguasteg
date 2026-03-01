@@ -4,7 +4,7 @@ use super::types::TraceAnalysisSummary;
 
 pub(crate) fn build_trace_analysis_text(summary: &TraceAnalysisSummary) -> String {
     let mut lines = Vec::new();
-    lines.push("Farsi prototype analyze".to_string());
+    lines.push(format!("{} prototype analyze", summary.language_display));
     lines.push(format!("language: {}", summary.language));
     lines.push(format!("frames: {}", summary.frame_count));
     lines.push(format!("consumed bits: {}", summary.consumed_bits));
@@ -121,6 +121,7 @@ pub(crate) fn build_trace_analysis_json(summary: &TraceAnalysisSummary) -> Strin
 }
 
 pub(crate) fn build_proto_encode_json(
+    language: &str,
     input_text: &str,
     payload_bytes: usize,
     encoded_bytes: usize,
@@ -163,7 +164,8 @@ pub(crate) fn build_proto_encode_json(
     };
 
     format!(
-        "{{\"mode\":\"proto-encode\",\"language\":\"fa\",\"input_text\":\"{}\",\"payload_bytes\":{},\"encoded_bytes\":{},\"frame_count\":{},\"padding_bits\":{},\"frames\":[{}],\"final_text\":\"{}\",\"gateway_response\":{}}}",
+        "{{\"mode\":\"proto-encode\",\"language\":\"{}\",\"input_text\":\"{}\",\"payload_bytes\":{},\"encoded_bytes\":{},\"frame_count\":{},\"padding_bits\":{},\"frames\":[{}],\"final_text\":\"{}\",\"gateway_response\":{}}}",
+        json_escape(language),
         json_escape(input_text),
         payload_bytes,
         encoded_bytes,
@@ -176,6 +178,7 @@ pub(crate) fn build_proto_encode_json(
 }
 
 pub(crate) fn build_proto_decode_json(
+    language: &str,
     decoded_bytes: usize,
     payload_hex: &str,
     payload_utf8: Option<&str>,
@@ -191,7 +194,8 @@ pub(crate) fn build_proto_decode_json(
     };
 
     format!(
-        "{{\"mode\":\"proto-decode\",\"language\":\"fa\",\"decoded_bytes\":{},\"payload_hex\":\"{}\",\"payload_utf8\":{},\"gateway_response\":{}}}",
+        "{{\"mode\":\"proto-decode\",\"language\":\"{}\",\"decoded_bytes\":{},\"payload_hex\":\"{}\",\"payload_utf8\":{},\"gateway_response\":{}}}",
+        json_escape(language),
         decoded_bytes,
         json_escape(payload_hex),
         utf8_json,

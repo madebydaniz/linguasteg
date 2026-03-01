@@ -373,8 +373,9 @@ fn parse_analyze_command(
 fn parse_demo_command(mut args: impl Iterator<Item = String>) -> Result<Option<Command>, CliError> {
     match args.next().as_deref() {
         Some("fa") => Ok(Some(Command::Demo(DemoTarget::Farsi))),
+        Some("en") => Ok(Some(Command::Demo(DemoTarget::English))),
         _ => Err(CliError::usage(
-            "demo target is required (supported: fa)".to_string(),
+            "demo target is required (supported: fa, en)".to_string(),
         )),
     }
 }
@@ -383,9 +384,18 @@ fn parse_proto_encode_command(
     args: impl Iterator<Item = String>,
 ) -> Result<Option<Command>, CliError> {
     let mut args = args.collect::<Vec<_>>();
-    if args.first().map(String::as_str) != Some("fa") {
+    let target = match args.first().map(String::as_str) {
+        Some("fa") => ProtoTarget::Farsi,
+        Some("en") => ProtoTarget::English,
+        _ => {
+            return Err(CliError::usage(
+                "proto-encode target is required (supported: fa, en)".to_string(),
+            ));
+        }
+    };
+    if args.is_empty() {
         return Err(CliError::usage(
-            "proto-encode target is required (supported: fa)".to_string(),
+            "proto-encode target is required (supported: fa, en)".to_string(),
         ));
     }
 
@@ -398,20 +408,25 @@ fn parse_proto_encode_command(
         message
     };
 
-    Ok(Some(Command::ProtoEncode(
-        ProtoTarget::Farsi,
-        payload_text,
-        json,
-    )))
+    Ok(Some(Command::ProtoEncode(target, payload_text, json)))
 }
 
 fn parse_proto_decode_command(
     args: impl Iterator<Item = String>,
 ) -> Result<Option<Command>, CliError> {
     let mut args = args.collect::<Vec<_>>();
-    if args.first().map(String::as_str) != Some("fa") {
+    let target = match args.first().map(String::as_str) {
+        Some("fa") => ProtoTarget::Farsi,
+        Some("en") => ProtoTarget::English,
+        _ => {
+            return Err(CliError::usage(
+                "proto-decode target is required (supported: fa, en)".to_string(),
+            ));
+        }
+    };
+    if args.is_empty() {
         return Err(CliError::usage(
-            "proto-decode target is required (supported: fa)".to_string(),
+            "proto-decode target is required (supported: fa, en)".to_string(),
         ));
     }
 
@@ -424,7 +439,7 @@ fn parse_proto_decode_command(
         Some(trace_input)
     };
 
-    Ok(Some(Command::ProtoDecode(ProtoTarget::Farsi, trace, json)))
+    Ok(Some(Command::ProtoDecode(target, trace, json)))
 }
 
 fn next_arg_value(args: &mut impl Iterator<Item = String>, flag: &str) -> Result<String, CliError> {
@@ -435,8 +450,9 @@ fn next_arg_value(args: &mut impl Iterator<Item = String>, flag: &str) -> Result
 fn parse_proto_target(value: &str) -> Result<ProtoTarget, CliError> {
     match value {
         "fa" => Ok(ProtoTarget::Farsi),
+        "en" => Ok(ProtoTarget::English),
         _ => Err(CliError::config(format!(
-            "unsupported language '{value}' (supported: fa)"
+            "unsupported language '{value}' (supported: fa, en)"
         ))),
     }
 }
@@ -493,25 +509,28 @@ pub(crate) fn write_usage(mut writer: impl Write) -> std::io::Result<()> {
     )?;
     writeln!(
         writer,
-        "       lsteg encode [--lang fa] (--message <text> | --input <file>) [--secret <value> | --secret-file <file>] [--format text|json] [--output <file>]"
+        "       lsteg encode [--lang fa|en] (--message <text> | --input <file>) [--secret <value> | --secret-file <file>] [--format text|json] [--output <file>]"
     )?;
     writeln!(
         writer,
-        "       lsteg decode [--lang fa] [--trace <text> | --input <file>] [--secret <value> | --secret-file <file>] [--format text|json] [--output <file>]"
+        "       lsteg decode [--lang fa|en] [--trace <text> | --input <file>] [--secret <value> | --secret-file <file>] [--format text|json] [--output <file>]"
     )?;
     writeln!(
         writer,
-        "       lsteg analyze [--lang fa] [--trace <text> | --input <file>] [--secret <value> | --secret-file <file>] [--format text|json] [--output <file>]"
+        "       lsteg analyze [--lang fa|en] [--trace <text> | --input <file>] [--secret <value> | --secret-file <file>] [--format text|json] [--output <file>]"
     )?;
-    writeln!(writer, "       lsteg demo fa")?;
-    writeln!(writer, "       lsteg proto-encode fa [message] [--json]")?;
+    writeln!(writer, "       lsteg demo <fa|en>")?;
     writeln!(
         writer,
-        "       lsteg proto-encode fa [message] | lsteg proto-decode fa [--json]"
+        "       lsteg proto-encode <fa|en> [message] [--json]"
     )?;
     writeln!(
         writer,
-        "       lsteg proto-decode fa \"<frame trace lines>\" [--json]"
+        "       lsteg proto-encode <fa|en> [message] | lsteg proto-decode <fa|en> [--json]"
+    )?;
+    writeln!(
+        writer,
+        "       lsteg proto-decode <fa|en> \"<frame trace lines>\" [--json]"
     )?;
     writeln!(
         writer,

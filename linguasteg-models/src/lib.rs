@@ -1,8 +1,13 @@
+pub mod en;
 pub mod fa;
 pub mod gateway;
 
 use linguasteg_core::{ModelAdapter, ModelCapability};
 
+pub use en::{
+    EnglishPrototypeConstraintChecker, EnglishPrototypeLanguagePack, EnglishPrototypeRealizer,
+    EnglishPrototypeSymbolicMapper,
+};
 pub use fa::{
     FarsiPrototypeConstraintChecker, FarsiPrototypeLanguagePack, FarsiPrototypeLexicon,
     FarsiPrototypeRealizer, FarsiPrototypeSymbolicMapper,

@@ -4,11 +4,12 @@ use linguasteg_core::{
 };
 
 use super::formatters::{build_trace_analysis_json, build_trace_analysis_text};
-use super::runtime::FarsiProtoRuntime;
+use super::runtime::PrototypeRuntime;
 use super::trace::{frame_sequence_error, parse_frames_from_trace, schema_for_template};
-use super::types::{CliError, OutputFormat, TraceAnalysisSummary};
+use super::types::{CliError, OutputFormat, ProtoTarget, TraceAnalysisSummary};
 
-pub(crate) fn render_farsi_trace_analysis_output(
+pub(crate) fn render_trace_analysis_output(
+    target: ProtoTarget,
     trace_text: &str,
     format: OutputFormat,
     secret: Option<&[u8]>,
@@ -19,8 +20,11 @@ pub(crate) fn render_farsi_trace_analysis_output(
         ));
     }
 
-    let runtime = FarsiProtoRuntime::new().map_err(|error| {
-        CliError::internal(format!("failed to initialize Farsi runtime: {error}"))
+    let runtime = PrototypeRuntime::new(target).map_err(|error| {
+        CliError::internal(format!(
+            "failed to initialize {} runtime: {error}",
+            target.as_str()
+        ))
     })?;
     let schemas = runtime.mapper.frame_schemas();
     let frames = parse_frames_from_trace(trace_text, &schemas)
@@ -29,7 +33,13 @@ pub(crate) fn render_farsi_trace_analysis_output(
         return Err(CliError::trace("no frame lines were found in trace input"));
     }
 
-    let summary = analyze_farsi_trace(&frames, &schemas, secret)?;
+    let summary = analyze_trace(
+        runtime.language_code,
+        runtime.language_display,
+        &frames,
+        &schemas,
+        secret,
+    )?;
     if matches!(format, OutputFormat::Json) {
         return Ok(build_trace_analysis_json(&summary));
     }
@@ -37,7 +47,9 @@ pub(crate) fn render_farsi_trace_analysis_output(
     Ok(build_trace_analysis_text(&summary))
 }
 
-fn analyze_farsi_trace(
+fn analyze_trace(
+    language: &'static str,
+    language_display: &'static str,
     frames: &[SymbolicFramePlan],
     schemas: &[SymbolicFrameSchema],
     secret: Option<&[u8]>,
@@ -147,7 +159,8 @@ fn analyze_farsi_trace(
     }
 
     Ok(TraceAnalysisSummary {
-        language: "fa",
+        language,
+        language_display,
         frame_count: frames.len(),
         consumed_bits,
         symbolic_bits,

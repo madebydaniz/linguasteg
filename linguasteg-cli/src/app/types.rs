@@ -41,6 +41,7 @@ pub(crate) struct AnalyzeOptions {
 
 pub(crate) struct TraceAnalysisSummary {
     pub(crate) language: &'static str,
+    pub(crate) language_display: &'static str,
     pub(crate) frame_count: usize,
     pub(crate) consumed_bits: usize,
     pub(crate) symbolic_bits: usize,
@@ -67,11 +68,22 @@ pub(crate) enum OutputFormat {
 
 pub(crate) enum DemoTarget {
     Farsi,
+    English,
 }
 
 #[derive(Clone, Copy)]
 pub(crate) enum ProtoTarget {
     Farsi,
+    English,
+}
+
+impl ProtoTarget {
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::Farsi => "fa",
+            Self::English => "en",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
