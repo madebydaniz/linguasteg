@@ -1,15 +1,32 @@
 use std::io::Write;
 use std::process::{Command, Output, Stdio};
 
+const ENV_KEYS: [&str; 6] = [
+    "LSTEG_LANG",
+    "LSTEG_FORMAT",
+    "LSTEG_INPUT",
+    "LSTEG_OUTPUT",
+    "LSTEG_ENCODE_MESSAGE",
+    "LSTEG_TRACE",
+];
+
+fn base_lsteg_command() -> Command {
+    let mut command = Command::new(env!("CARGO_BIN_EXE_lsteg"));
+    for key in ENV_KEYS {
+        command.env_remove(key);
+    }
+    command
+}
+
 fn run_lsteg(args: &[&str]) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_lsteg"))
+    base_lsteg_command()
         .args(args)
         .output()
         .expect("failed to run lsteg")
 }
 
 fn run_lsteg_with_env(args: &[&str], envs: &[(&str, &str)]) -> Output {
-    let mut command = Command::new(env!("CARGO_BIN_EXE_lsteg"));
+    let mut command = base_lsteg_command();
     command.args(args);
     for (key, value) in envs {
         command.env(key, value);
@@ -18,7 +35,7 @@ fn run_lsteg_with_env(args: &[&str], envs: &[(&str, &str)]) -> Output {
 }
 
 fn run_lsteg_with_stdin(args: &[&str], stdin: &str) -> Output {
-    let mut child = Command::new(env!("CARGO_BIN_EXE_lsteg"))
+    let mut child = base_lsteg_command()
         .args(args)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
