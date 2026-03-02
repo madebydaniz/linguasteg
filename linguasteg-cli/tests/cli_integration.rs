@@ -197,6 +197,38 @@ fn models_json_exposes_contract() {
 }
 
 #[test]
+fn catalog_text_contains_all_sections() {
+    let output = run_lsteg(&["catalog"]);
+    assert!(output.status.success());
+
+    let stdout = stdout_string(&output);
+    assert!(stdout.contains("catalog:"));
+    assert!(stdout.contains("languages:"));
+    assert!(stdout.contains("strategies:"));
+    assert!(stdout.contains("models:"));
+    assert!(stdout.contains("- fa (Farsi, rtl)"));
+    assert!(stdout.contains("- symbolic-stub (Symbolic Stub) capabilities: deterministic-seed"));
+    assert!(stdout.contains(
+        "- stub/stub-local (Stub Local) languages: fa,en capabilities: deterministic-seed"
+    ));
+}
+
+#[test]
+fn catalog_json_exposes_all_sections() {
+    let output = run_lsteg(&["catalog", "--format", "json"]);
+    assert!(output.status.success());
+
+    let stdout = stdout_string(&output);
+    assert!(stdout.contains("\"mode\":\"catalog\""));
+    assert!(stdout.contains("\"languages\":["));
+    assert!(stdout.contains("\"strategies\":["));
+    assert!(stdout.contains("\"models\":["));
+    assert!(stdout.contains("\"code\":\"fa\""));
+    assert!(stdout.contains("\"id\":\"symbolic-stub\""));
+    assert!(stdout.contains("\"provider\":\"stub\""));
+}
+
+#[test]
 fn decode_roundtrip_from_encode_trace_works() {
     let encode_output = run_lsteg(&["encode", "--message", "salam"]);
     assert!(encode_output.status.success());

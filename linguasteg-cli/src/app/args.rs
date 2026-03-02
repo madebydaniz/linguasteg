@@ -22,6 +22,7 @@ pub(crate) fn parse_command(args: Vec<String>) -> Result<Option<Command>, CliErr
         "languages" => parse_languages_command(args),
         "strategies" => parse_strategies_command(args),
         "models" => parse_models_command(args),
+        "catalog" => parse_catalog_command(args),
         "demo" => parse_demo_command(args),
         "proto-encode" => parse_proto_encode_command(args),
         "proto-decode" => parse_proto_decode_command(args),
@@ -456,6 +457,25 @@ fn parse_models_command(
     Ok(Some(Command::Models(format)))
 }
 
+fn parse_catalog_command(
+    mut args: impl Iterator<Item = String>,
+) -> Result<Option<Command>, CliError> {
+    let mut format = env_output_format("LSTEG_FORMAT")?.unwrap_or(OutputFormat::Text);
+
+    while let Some(arg) = args.next() {
+        match arg.as_str() {
+            "--help" | "-h" => return Ok(None),
+            "--format" => {
+                let value = next_arg_value(&mut args, "--format")?;
+                format = parse_output_format(&value)?;
+            }
+            _ => return Err(CliError::usage(format!("unknown catalog argument: {arg}"))),
+        }
+    }
+
+    Ok(Some(Command::Catalog(format)))
+}
+
 fn parse_proto_encode_command(
     args: impl Iterator<Item = String>,
 ) -> Result<Option<Command>, CliError> {
@@ -599,7 +619,7 @@ pub(crate) fn write_usage(mut writer: impl Write) -> std::io::Result<()> {
     writeln!(writer, "LinguaSteg CLI (scaffold)")?;
     writeln!(
         writer,
-        "Usage: lsteg <encode|decode|analyze|languages|strategies|models|demo|proto-encode|proto-decode>"
+        "Usage: lsteg <encode|decode|analyze|languages|strategies|models|catalog|demo|proto-encode|proto-decode>"
     )?;
     writeln!(
         writer,
@@ -616,6 +636,7 @@ pub(crate) fn write_usage(mut writer: impl Write) -> std::io::Result<()> {
     writeln!(writer, "       lsteg languages [--format text|json]")?;
     writeln!(writer, "       lsteg strategies [--format text|json]")?;
     writeln!(writer, "       lsteg models [--format text|json]")?;
+    writeln!(writer, "       lsteg catalog [--format text|json]")?;
     writeln!(writer, "       lsteg demo <fa|en>")?;
     writeln!(
         writer,

@@ -27,6 +27,7 @@ pub(crate) fn execute(command: Command) -> Result<(), CliError> {
         Command::Languages(format) => run_languages(format),
         Command::Strategies(format) => run_strategies(format),
         Command::Models(format) => run_models(format),
+        Command::Catalog(format) => run_catalog(format),
         Command::Demo(DemoTarget::Farsi) => run_demo(ProtoTarget::Farsi)?,
         Command::Demo(DemoTarget::English) => run_demo(ProtoTarget::English)?,
         Command::ProtoEncode(target, payload_text, json) => {
@@ -38,6 +39,112 @@ pub(crate) fn execute(command: Command) -> Result<(), CliError> {
     }
 
     Ok(())
+}
+
+fn run_catalog(format: OutputFormat) {
+    let languages = supported_languages();
+    let strategies = supported_strategies();
+    let models = supported_models();
+
+    if matches!(format, OutputFormat::Json) {
+        let language_items = languages
+            .iter()
+            .map(|item| {
+                format!(
+                    "{{\"code\":\"{}\",\"display\":\"{}\",\"direction\":\"{}\"}}",
+                    json_escape(item.code),
+                    json_escape(item.display),
+                    json_escape(item.direction)
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(",");
+        let strategy_items = strategies
+            .iter()
+            .map(|item| {
+                let capabilities = item
+                    .required_capabilities
+                    .iter()
+                    .map(|capability| format!("\"{}\"", json_escape(capability)))
+                    .collect::<Vec<_>>()
+                    .join(",");
+                format!(
+                    "{{\"id\":\"{}\",\"display\":\"{}\",\"required_capabilities\":[{}]}}",
+                    json_escape(item.id),
+                    json_escape(item.display),
+                    capabilities
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(",");
+        let model_items = models
+            .iter()
+            .map(|item| {
+                let languages = item
+                    .languages
+                    .iter()
+                    .map(|language| format!("\"{}\"", json_escape(language)))
+                    .collect::<Vec<_>>()
+                    .join(",");
+                let capabilities = item
+                    .capabilities
+                    .iter()
+                    .map(|capability| format!("\"{}\"", json_escape(capability)))
+                    .collect::<Vec<_>>()
+                    .join(",");
+                format!(
+                    "{{\"provider\":\"{}\",\"id\":\"{}\",\"display\":\"{}\",\"languages\":[{}],\"capabilities\":[{}]}}",
+                    json_escape(item.provider),
+                    json_escape(item.id),
+                    json_escape(item.display),
+                    languages,
+                    capabilities
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(",");
+
+        println!(
+            "{{\"mode\":\"catalog\",\"languages\":[{}],\"strategies\":[{}],\"models\":[{}]}}",
+            language_items, strategy_items, model_items
+        );
+        return;
+    }
+
+    println!("catalog:");
+    println!("languages:");
+    for item in languages {
+        println!("- {} ({}, {})", item.code, item.display, item.direction);
+    }
+    println!("strategies:");
+    for item in strategies {
+        let capabilities = if item.required_capabilities.is_empty() {
+            "<none>".to_string()
+        } else {
+            item.required_capabilities.join(",")
+        };
+        println!(
+            "- {} ({}) capabilities: {}",
+            item.id, item.display, capabilities
+        );
+    }
+    println!("models:");
+    for item in models {
+        let languages = if item.languages.is_empty() {
+            "<none>".to_string()
+        } else {
+            item.languages.join(",")
+        };
+        let capabilities = if item.capabilities.is_empty() {
+            "<none>".to_string()
+        } else {
+            item.capabilities.join(",")
+        };
+        println!(
+            "- {}/{} ({}) languages: {} capabilities: {}",
+            item.provider, item.id, item.display, languages, capabilities
+        );
+    }
 }
 
 fn run_models(format: OutputFormat) {

@@ -7,6 +7,7 @@ pub(crate) enum Command {
     Languages(OutputFormat),
     Strategies(OutputFormat),
     Models(OutputFormat),
+    Catalog(OutputFormat),
     Demo(DemoTarget),
     ProtoEncode(ProtoTarget, String, bool),
     ProtoDecode(ProtoTarget, Option<String>, bool),
