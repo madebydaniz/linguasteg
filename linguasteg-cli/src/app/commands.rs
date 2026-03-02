@@ -10,7 +10,7 @@ use linguasteg_core::{
 use super::analysis::render_trace_analysis_output;
 use super::formatters::{build_proto_decode_json, build_proto_encode_json, json_escape};
 use super::language::resolve_trace_target;
-use super::runtime::{PrototypeRuntime, supported_languages};
+use super::runtime::{PrototypeRuntime, supported_languages, supported_strategies};
 use super::trace::{frame_sequence_error, parse_frames_from_trace, schema_for_template};
 use super::types::{
     AnalyzeOptions, CliError, Command, DecodeOptions, DemoTarget, EncodeOptions, OutputFormat,
@@ -23,6 +23,7 @@ pub(crate) fn execute(command: Command) -> Result<(), CliError> {
         Command::Decode(options) => run_decode(options)?,
         Command::Analyze(options) => run_analyze(options)?,
         Command::Languages(format) => run_languages(format),
+        Command::Strategies(format) => run_strategies(format),
         Command::Demo(DemoTarget::Farsi) => run_demo(ProtoTarget::Farsi)?,
         Command::Demo(DemoTarget::English) => run_demo(ProtoTarget::English)?,
         Command::ProtoEncode(target, payload_text, json) => {
@@ -34,6 +35,45 @@ pub(crate) fn execute(command: Command) -> Result<(), CliError> {
     }
 
     Ok(())
+}
+
+fn run_strategies(format: OutputFormat) {
+    let items = supported_strategies();
+    if matches!(format, OutputFormat::Json) {
+        let json_items = items
+            .iter()
+            .map(|item| {
+                let capabilities = item
+                    .required_capabilities
+                    .iter()
+                    .map(|capability| format!("\"{}\"", json_escape(capability)))
+                    .collect::<Vec<_>>()
+                    .join(",");
+                format!(
+                    "{{\"id\":\"{}\",\"display\":\"{}\",\"required_capabilities\":[{}]}}",
+                    json_escape(item.id),
+                    json_escape(item.display),
+                    capabilities
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(",");
+        println!("{{\"mode\":\"strategies\",\"items\":[{json_items}]}}");
+        return;
+    }
+
+    println!("supported strategies:");
+    for item in items {
+        let capabilities = if item.required_capabilities.is_empty() {
+            "<none>".to_string()
+        } else {
+            item.required_capabilities.join(",")
+        };
+        println!(
+            "- {} ({}) capabilities: {}",
+            item.id, item.display, capabilities
+        );
+    }
 }
 
 fn run_languages(format: OutputFormat) {

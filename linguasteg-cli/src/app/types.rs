@@ -5,6 +5,7 @@ pub(crate) enum Command {
     Decode(DecodeOptions),
     Analyze(AnalyzeOptions),
     Languages(OutputFormat),
+    Strategies(OutputFormat),
     Demo(DemoTarget),
     ProtoEncode(ProtoTarget, String, bool),
     ProtoDecode(ProtoTarget, Option<String>, bool),

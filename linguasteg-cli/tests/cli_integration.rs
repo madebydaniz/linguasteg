@@ -149,6 +149,28 @@ fn languages_json_exposes_contract() {
 }
 
 #[test]
+fn strategies_text_lists_supported_strategies() {
+    let output = run_lsteg(&["strategies"]);
+    assert!(output.status.success());
+
+    let stdout = stdout_string(&output);
+    assert!(stdout.contains("supported strategies:"));
+    assert!(stdout.contains("- symbolic-stub (Symbolic Stub) capabilities: deterministic-seed"));
+}
+
+#[test]
+fn strategies_json_exposes_contract() {
+    let output = run_lsteg(&["strategies", "--format", "json"]);
+    assert!(output.status.success());
+
+    let stdout = stdout_string(&output);
+    assert!(stdout.contains("\"mode\":\"strategies\""));
+    assert!(stdout.contains("\"id\":\"symbolic-stub\""));
+    assert!(stdout.contains("\"display\":\"Symbolic Stub\""));
+    assert!(stdout.contains("\"required_capabilities\":[\"deterministic-seed\"]"));
+}
+
+#[test]
 fn decode_roundtrip_from_encode_trace_works() {
     let encode_output = run_lsteg(&["encode", "--message", "salam"]);
     assert!(encode_output.status.success());

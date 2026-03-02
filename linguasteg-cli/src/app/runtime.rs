@@ -20,6 +20,12 @@ pub(crate) struct SupportedLanguageInfo {
     pub(crate) direction: &'static str,
 }
 
+pub(crate) struct SupportedStrategyInfo {
+    pub(crate) id: &'static str,
+    pub(crate) display: &'static str,
+    pub(crate) required_capabilities: &'static [&'static str],
+}
+
 const SUPPORTED_LANGUAGES: [SupportedLanguageInfo; 2] = [
     SupportedLanguageInfo {
         code: "fa",
@@ -35,6 +41,16 @@ const SUPPORTED_LANGUAGES: [SupportedLanguageInfo; 2] = [
 
 pub(crate) fn supported_languages() -> &'static [SupportedLanguageInfo] {
     &SUPPORTED_LANGUAGES
+}
+
+const SUPPORTED_STRATEGIES: [SupportedStrategyInfo; 1] = [SupportedStrategyInfo {
+    id: "symbolic-stub",
+    display: "Symbolic Stub",
+    required_capabilities: &["deterministic-seed"],
+}];
+
+pub(crate) fn supported_strategies() -> &'static [SupportedStrategyInfo] {
+    &SUPPORTED_STRATEGIES
 }
 
 struct InMemoryStrategyRegistry {
