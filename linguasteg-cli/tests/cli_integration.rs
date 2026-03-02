@@ -171,6 +171,32 @@ fn strategies_json_exposes_contract() {
 }
 
 #[test]
+fn models_text_lists_supported_models() {
+    let output = run_lsteg(&["models"]);
+    assert!(output.status.success());
+
+    let stdout = stdout_string(&output);
+    assert!(stdout.contains("supported models:"));
+    assert!(stdout.contains(
+        "- stub/stub-local (Stub Local) languages: fa,en capabilities: deterministic-seed"
+    ));
+}
+
+#[test]
+fn models_json_exposes_contract() {
+    let output = run_lsteg(&["models", "--format", "json"]);
+    assert!(output.status.success());
+
+    let stdout = stdout_string(&output);
+    assert!(stdout.contains("\"mode\":\"models\""));
+    assert!(stdout.contains("\"provider\":\"stub\""));
+    assert!(stdout.contains("\"id\":\"stub-local\""));
+    assert!(stdout.contains("\"display\":\"Stub Local\""));
+    assert!(stdout.contains("\"languages\":[\"fa\",\"en\"]"));
+    assert!(stdout.contains("\"capabilities\":[\"deterministic-seed\"]"));
+}
+
+#[test]
 fn decode_roundtrip_from_encode_trace_works() {
     let encode_output = run_lsteg(&["encode", "--message", "salam"]);
     assert!(encode_output.status.success());

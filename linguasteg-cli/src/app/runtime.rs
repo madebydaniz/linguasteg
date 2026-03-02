@@ -26,6 +26,14 @@ pub(crate) struct SupportedStrategyInfo {
     pub(crate) required_capabilities: &'static [&'static str],
 }
 
+pub(crate) struct SupportedModelInfo {
+    pub(crate) provider: &'static str,
+    pub(crate) id: &'static str,
+    pub(crate) display: &'static str,
+    pub(crate) languages: &'static [&'static str],
+    pub(crate) capabilities: &'static [&'static str],
+}
+
 const SUPPORTED_LANGUAGES: [SupportedLanguageInfo; 2] = [
     SupportedLanguageInfo {
         code: "fa",
@@ -51,6 +59,18 @@ const SUPPORTED_STRATEGIES: [SupportedStrategyInfo; 1] = [SupportedStrategyInfo 
 
 pub(crate) fn supported_strategies() -> &'static [SupportedStrategyInfo] {
     &SUPPORTED_STRATEGIES
+}
+
+const SUPPORTED_MODELS: [SupportedModelInfo; 1] = [SupportedModelInfo {
+    provider: "stub",
+    id: "stub-local",
+    display: "Stub Local",
+    languages: &["fa", "en"],
+    capabilities: &["deterministic-seed"],
+}];
+
+pub(crate) fn supported_models() -> &'static [SupportedModelInfo] {
+    &SUPPORTED_MODELS
 }
 
 struct InMemoryStrategyRegistry {

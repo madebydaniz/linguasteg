@@ -10,7 +10,9 @@ use linguasteg_core::{
 use super::analysis::render_trace_analysis_output;
 use super::formatters::{build_proto_decode_json, build_proto_encode_json, json_escape};
 use super::language::resolve_trace_target;
-use super::runtime::{PrototypeRuntime, supported_languages, supported_strategies};
+use super::runtime::{
+    PrototypeRuntime, supported_languages, supported_models, supported_strategies,
+};
 use super::trace::{frame_sequence_error, parse_frames_from_trace, schema_for_template};
 use super::types::{
     AnalyzeOptions, CliError, Command, DecodeOptions, DemoTarget, EncodeOptions, OutputFormat,
@@ -24,6 +26,7 @@ pub(crate) fn execute(command: Command) -> Result<(), CliError> {
         Command::Analyze(options) => run_analyze(options)?,
         Command::Languages(format) => run_languages(format),
         Command::Strategies(format) => run_strategies(format),
+        Command::Models(format) => run_models(format),
         Command::Demo(DemoTarget::Farsi) => run_demo(ProtoTarget::Farsi)?,
         Command::Demo(DemoTarget::English) => run_demo(ProtoTarget::English)?,
         Command::ProtoEncode(target, payload_text, json) => {
@@ -35,6 +38,58 @@ pub(crate) fn execute(command: Command) -> Result<(), CliError> {
     }
 
     Ok(())
+}
+
+fn run_models(format: OutputFormat) {
+    let items = supported_models();
+    if matches!(format, OutputFormat::Json) {
+        let json_items = items
+            .iter()
+            .map(|item| {
+                let languages = item
+                    .languages
+                    .iter()
+                    .map(|language| format!("\"{}\"", json_escape(language)))
+                    .collect::<Vec<_>>()
+                    .join(",");
+                let capabilities = item
+                    .capabilities
+                    .iter()
+                    .map(|capability| format!("\"{}\"", json_escape(capability)))
+                    .collect::<Vec<_>>()
+                    .join(",");
+                format!(
+                    "{{\"provider\":\"{}\",\"id\":\"{}\",\"display\":\"{}\",\"languages\":[{}],\"capabilities\":[{}]}}",
+                    json_escape(item.provider),
+                    json_escape(item.id),
+                    json_escape(item.display),
+                    languages,
+                    capabilities
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(",");
+        println!("{{\"mode\":\"models\",\"items\":[{json_items}]}}");
+        return;
+    }
+
+    println!("supported models:");
+    for item in items {
+        let languages = if item.languages.is_empty() {
+            "<none>".to_string()
+        } else {
+            item.languages.join(",")
+        };
+        let capabilities = if item.capabilities.is_empty() {
+            "<none>".to_string()
+        } else {
+            item.capabilities.join(",")
+        };
+        println!(
+            "- {}/{} ({}) languages: {} capabilities: {}",
+            item.provider, item.id, item.display, languages, capabilities
+        );
+    }
 }
 
 fn run_strategies(format: OutputFormat) {
