@@ -47,12 +47,10 @@ fn parse_encode_command(
         match arg.as_str() {
             "--help" | "-h" => return Ok(None),
             "--lang" => {
-                let value = next_arg_value(&mut args, "--lang")?;
-                lang = parse_proto_target(&value)?;
+                parse_proto_lang_arg(&mut args, &mut lang)?;
             }
             "--format" => {
-                let value = next_arg_value(&mut args, "--format")?;
-                format = parse_output_format(&value)?;
+                parse_output_format_arg(&mut args, &mut format)?;
             }
             _ => {
                 if payload.handle_flag(arg.as_str(), &mut args)? {
@@ -167,14 +165,10 @@ fn parse_trace_like_command_args(
         match arg.as_str() {
             "--help" | "-h" => return Ok(None),
             "--lang" => {
-                let value = next_arg_value(&mut args, "--lang")?;
-                let (resolved_lang, resolved_auto_detect) = parse_trace_proto_target(&value)?;
-                lang = resolved_lang;
-                auto_detect_target = resolved_auto_detect;
+                parse_trace_lang_arg(&mut args, &mut lang, &mut auto_detect_target)?;
             }
             "--format" => {
-                let value = next_arg_value(&mut args, "--format")?;
-                format = parse_output_format(&value)?;
+                parse_output_format_arg(&mut args, &mut format)?;
             }
             "--trace" => {
                 if seen_trace {
@@ -253,8 +247,7 @@ fn parse_languages_command(
         match arg.as_str() {
             "--help" | "-h" => return Ok(None),
             "--format" => {
-                let value = next_arg_value(&mut args, "--format")?;
-                format = parse_output_format(&value)?;
+                parse_output_format_arg(&mut args, &mut format)?;
             }
             _ => {
                 return Err(CliError::usage(format!(
@@ -276,8 +269,7 @@ fn parse_strategies_command(
         match arg.as_str() {
             "--help" | "-h" => return Ok(None),
             "--format" => {
-                let value = next_arg_value(&mut args, "--format")?;
-                format = parse_output_format(&value)?;
+                parse_output_format_arg(&mut args, &mut format)?;
             }
             _ => {
                 return Err(CliError::usage(format!(
@@ -299,8 +291,7 @@ fn parse_models_command(
         match arg.as_str() {
             "--help" | "-h" => return Ok(None),
             "--format" => {
-                let value = next_arg_value(&mut args, "--format")?;
-                format = parse_output_format(&value)?;
+                parse_output_format_arg(&mut args, &mut format)?;
             }
             _ => return Err(CliError::usage(format!("unknown models argument: {arg}"))),
         }
@@ -376,18 +367,10 @@ fn parse_discovery_command_args(
         match arg.as_str() {
             "--help" | "-h" => return Ok(None),
             "--format" => {
-                let value = next_arg_value(&mut args, "--format")?;
-                format = parse_output_format(&value)?;
+                parse_output_format_arg(&mut args, &mut format)?;
             }
             "--lang" => {
-                if seen_lang {
-                    return Err(CliError::usage(
-                        "--lang cannot be provided multiple times".to_string(),
-                    ));
-                }
-                seen_lang = true;
-                let value = next_arg_value(&mut args, "--lang")?;
-                target = Some(parse_proto_target(&value)?);
+                parse_discovery_lang_arg(&mut args, &mut target, &mut seen_lang)?;
             }
             _ => {
                 return Err(CliError::usage(format!(
@@ -619,6 +602,52 @@ impl SecretArgs {
 fn next_arg_value(args: &mut impl Iterator<Item = String>, flag: &str) -> Result<String, CliError> {
     args.next()
         .ok_or_else(|| CliError::usage(format!("{flag} requires a value")))
+}
+
+fn parse_output_format_arg(
+    args: &mut impl Iterator<Item = String>,
+    format: &mut OutputFormat,
+) -> Result<(), CliError> {
+    let value = next_arg_value(args, "--format")?;
+    *format = parse_output_format(&value)?;
+    Ok(())
+}
+
+fn parse_proto_lang_arg(
+    args: &mut impl Iterator<Item = String>,
+    target: &mut ProtoTarget,
+) -> Result<(), CliError> {
+    let value = next_arg_value(args, "--lang")?;
+    *target = parse_proto_target(&value)?;
+    Ok(())
+}
+
+fn parse_trace_lang_arg(
+    args: &mut impl Iterator<Item = String>,
+    target: &mut ProtoTarget,
+    auto_detect_target: &mut bool,
+) -> Result<(), CliError> {
+    let value = next_arg_value(args, "--lang")?;
+    let (resolved_lang, resolved_auto_detect) = parse_trace_proto_target(&value)?;
+    *target = resolved_lang;
+    *auto_detect_target = resolved_auto_detect;
+    Ok(())
+}
+
+fn parse_discovery_lang_arg(
+    args: &mut impl Iterator<Item = String>,
+    target: &mut Option<ProtoTarget>,
+    seen_lang: &mut bool,
+) -> Result<(), CliError> {
+    if *seen_lang {
+        return Err(CliError::usage(
+            "--lang cannot be provided multiple times".to_string(),
+        ));
+    }
+    *seen_lang = true;
+    let value = next_arg_value(args, "--lang")?;
+    *target = Some(parse_proto_target(&value)?);
+    Ok(())
 }
 
 fn parse_proto_target(value: &str) -> Result<ProtoTarget, CliError> {
