@@ -62,6 +62,7 @@ fn run_catalog(options: CatalogQueryOptions) -> Result<(), CliError> {
         .collect::<Vec<_>>();
     let template_items = collect_template_items(options.target)?;
     let profile_items = collect_profile_items(options.target)?;
+    let schema_items = collect_schema_items(options.target)?;
 
     if matches!(options.format, OutputFormat::Json) {
         let language_items = languages
@@ -155,10 +156,41 @@ fn run_catalog(options: CatalogQueryOptions) -> Result<(), CliError> {
             })
             .collect::<Vec<_>>()
             .join(",");
+        let schema_json_items = schema_items
+            .iter()
+            .map(|item| {
+                let fields = item
+                    .fields
+                    .iter()
+                    .map(|field| {
+                        format!(
+                            "{{\"slot\":\"{}\",\"bit_width\":{}}}",
+                            json_escape(&field.slot),
+                            field.bit_width
+                        )
+                    })
+                    .collect::<Vec<_>>()
+                    .join(",");
+                format!(
+                    "{{\"language\":\"{}\",\"language_display\":\"{}\",\"template_id\":\"{}\",\"total_bits\":{},\"fields\":[{}]}}",
+                    json_escape(&item.language_code),
+                    json_escape(&item.language_display),
+                    json_escape(&item.template_id),
+                    item.total_bits,
+                    fields
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(",");
 
         println!(
-            "{{\"mode\":\"catalog\",\"languages\":[{}],\"strategies\":[{}],\"models\":[{}],\"templates\":[{}],\"profiles\":[{}]}}",
-            language_items, strategy_items, model_items, template_json_items, profile_json_items
+            "{{\"mode\":\"catalog\",\"languages\":[{}],\"strategies\":[{}],\"models\":[{}],\"templates\":[{}],\"profiles\":[{}],\"schemas\":[{}]}}",
+            language_items,
+            strategy_items,
+            model_items,
+            template_json_items,
+            profile_json_items,
+            schema_json_items
         );
         return Ok(());
     }
@@ -219,6 +251,19 @@ fn run_catalog(options: CatalogQueryOptions) -> Result<(), CliError> {
             strength_label(item.strength),
             item.inspiration_kind,
             inspiration_label
+        );
+    }
+    println!("schemas:");
+    for item in &schema_items {
+        let fields = item
+            .fields
+            .iter()
+            .map(|field| format!("{}:{}", field.slot, field.bit_width))
+            .collect::<Vec<_>>()
+            .join(",");
+        println!(
+            "- {}/{} total_bits: {} fields: {}",
+            item.language_code, item.template_id, item.total_bits, fields
         );
     }
 

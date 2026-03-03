@@ -208,6 +208,7 @@ fn catalog_text_contains_all_sections() {
     assert!(stdout.contains("models:"));
     assert!(stdout.contains("templates:"));
     assert!(stdout.contains("profiles:"));
+    assert!(stdout.contains("schemas:"));
     assert!(stdout.contains("- fa (Farsi, rtl)"));
     assert!(stdout.contains("- symbolic-stub (Symbolic Stub) capabilities: deterministic-seed"));
     assert!(stdout.contains(
@@ -217,6 +218,7 @@ fn catalog_text_contains_all_sections() {
     assert!(stdout.contains(
         "- en/en-neutral-prototype (Neutral English Prototype) register: neutral strength: light inspiration: register-only (<none>)"
     ));
+    assert!(stdout.contains("- en/en-basic-svo total_bits: 18"));
 }
 
 #[test]
@@ -231,11 +233,13 @@ fn catalog_json_exposes_all_sections() {
     assert!(stdout.contains("\"models\":["));
     assert!(stdout.contains("\"templates\":["));
     assert!(stdout.contains("\"profiles\":["));
+    assert!(stdout.contains("\"schemas\":["));
     assert!(stdout.contains("\"code\":\"fa\""));
     assert!(stdout.contains("\"id\":\"symbolic-stub\""));
     assert!(stdout.contains("\"provider\":\"stub\""));
     assert!(stdout.contains("\"id\":\"fa-basic-sov\""));
     assert!(stdout.contains("\"id\":\"fa-neutral-formal\""));
+    assert!(stdout.contains("\"template_id\":\"fa-basic-sov\""));
 }
 
 #[test]
@@ -251,6 +255,8 @@ fn catalog_lang_filter_limits_language_scoped_sections() {
     assert!(!stdout.contains("\"id\":\"fa-basic-sov\""));
     assert!(stdout.contains("\"id\":\"en-neutral-prototype\""));
     assert!(!stdout.contains("\"id\":\"fa-neutral-formal\""));
+    assert!(stdout.contains("\"template_id\":\"en-basic-svo\""));
+    assert!(!stdout.contains("\"template_id\":\"fa-basic-sov\""));
 }
 
 #[test]
