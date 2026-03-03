@@ -331,6 +331,42 @@ fn profiles_lang_filter_limits_output() {
 }
 
 #[test]
+fn schemas_text_lists_supported_schemas() {
+    let output = run_lsteg(&["schemas"]);
+    assert!(output.status.success());
+
+    let stdout = stdout_string(&output);
+    assert!(stdout.contains("supported schemas:"));
+    assert!(stdout.contains("- fa/fa-basic-sov total_bits: 18"));
+    assert!(stdout.contains("- en/en-time-location-svo total_bits: 21"));
+}
+
+#[test]
+fn schemas_json_exposes_contract() {
+    let output = run_lsteg(&["schemas", "--format", "json"]);
+    assert!(output.status.success());
+
+    let stdout = stdout_string(&output);
+    assert!(stdout.contains("\"mode\":\"schemas\""));
+    assert!(stdout.contains("\"language\":\"fa\""));
+    assert!(stdout.contains("\"template_id\":\"fa-basic-sov\""));
+    assert!(stdout.contains("\"slot\":\"subject\""));
+    assert!(stdout.contains("\"bit_width\":5"));
+}
+
+#[test]
+fn schemas_lang_filter_limits_output() {
+    let output = run_lsteg(&["schemas", "--lang", "en", "--format", "json"]);
+    assert!(output.status.success());
+
+    let stdout = stdout_string(&output);
+    assert!(stdout.contains("\"mode\":\"schemas\""));
+    assert!(stdout.contains("\"language\":\"en\""));
+    assert!(stdout.contains("\"template_id\":\"en-basic-svo\""));
+    assert!(!stdout.contains("\"template_id\":\"fa-basic-sov\""));
+}
+
+#[test]
 fn validate_json_reports_integrity_ok() {
     let encode_output = run_lsteg(&["encode", "--message", "salam"]);
     assert!(encode_output.status.success());

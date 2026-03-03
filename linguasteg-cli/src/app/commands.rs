@@ -16,8 +16,8 @@ use super::runtime::{
 use super::trace::{frame_sequence_error, parse_frames_from_trace, schema_for_template};
 use super::types::{
     AnalyzeOptions, CatalogQueryOptions, CliError, Command, DecodeOptions, DemoTarget,
-    EncodeOptions, OutputFormat, ProfileQueryOptions, ProtoTarget, TemplateQueryOptions,
-    ValidateOptions,
+    EncodeOptions, OutputFormat, ProfileQueryOptions, ProtoTarget, SchemaQueryOptions,
+    TemplateQueryOptions, ValidateOptions,
 };
 
 pub(crate) fn execute(command: Command) -> Result<(), CliError> {
@@ -32,6 +32,7 @@ pub(crate) fn execute(command: Command) -> Result<(), CliError> {
         Command::Catalog(options) => run_catalog(options)?,
         Command::Templates(options) => run_templates(options)?,
         Command::Profiles(options) => run_profiles(options)?,
+        Command::Schemas(options) => run_schemas(options)?,
         Command::Demo(DemoTarget::Farsi) => run_demo(ProtoTarget::Farsi)?,
         Command::Demo(DemoTarget::English) => run_demo(ProtoTarget::English)?,
         Command::ProtoEncode(target, payload_text, json) => {
@@ -276,6 +277,19 @@ struct ProfileCatalogItem {
     inspiration_label: Option<String>,
 }
 
+struct SchemaFieldItem {
+    slot: String,
+    bit_width: u8,
+}
+
+struct SchemaCatalogItem {
+    language_code: String,
+    language_display: String,
+    template_id: String,
+    total_bits: usize,
+    fields: Vec<SchemaFieldItem>,
+}
+
 fn selected_targets(target: Option<ProtoTarget>) -> Vec<ProtoTarget> {
     match target {
         Some(value) => vec![value],
@@ -345,6 +359,38 @@ fn collect_profile_items(target: Option<ProtoTarget>) -> Result<Vec<ProfileCatal
     Ok(items)
 }
 
+fn collect_schema_items(target: Option<ProtoTarget>) -> Result<Vec<SchemaCatalogItem>, CliError> {
+    let targets = selected_targets(target);
+    let mut items = Vec::new();
+
+    for target in targets {
+        let runtime = runtime_for_target(target)?;
+        let schemas = runtime.mapper.frame_schemas();
+        for schema in schemas {
+            let fields = schema
+                .fields
+                .iter()
+                .map(|field| SchemaFieldItem {
+                    slot: field.slot.to_string(),
+                    bit_width: field.bit_width,
+                })
+                .collect::<Vec<_>>();
+            items.push(SchemaCatalogItem {
+                language_code: runtime.language_code.to_string(),
+                language_display: runtime.language_display.to_string(),
+                template_id: schema.template_id.to_string(),
+                total_bits: schema.total_bits(),
+                fields,
+            });
+        }
+    }
+
+    items.sort_by(|left, right| {
+        (&left.language_code, &left.template_id).cmp(&(&right.language_code, &right.template_id))
+    });
+    Ok(items)
+}
+
 fn run_profiles(options: ProfileQueryOptions) -> Result<(), CliError> {
     let items = collect_profile_items(options.target)?;
 
@@ -389,6 +435,57 @@ fn run_profiles(options: ProfileQueryOptions) -> Result<(), CliError> {
             strength_label(item.strength),
             item.inspiration_kind,
             inspiration_label
+        );
+    }
+
+    Ok(())
+}
+
+fn run_schemas(options: SchemaQueryOptions) -> Result<(), CliError> {
+    let items = collect_schema_items(options.target)?;
+
+    if matches!(options.format, OutputFormat::Json) {
+        let json_items = items
+            .iter()
+            .map(|item| {
+                let fields = item
+                    .fields
+                    .iter()
+                    .map(|field| {
+                        format!(
+                            "{{\"slot\":\"{}\",\"bit_width\":{}}}",
+                            json_escape(&field.slot),
+                            field.bit_width
+                        )
+                    })
+                    .collect::<Vec<_>>()
+                    .join(",");
+                format!(
+                    "{{\"language\":\"{}\",\"language_display\":\"{}\",\"template_id\":\"{}\",\"total_bits\":{},\"fields\":[{}]}}",
+                    json_escape(&item.language_code),
+                    json_escape(&item.language_display),
+                    json_escape(&item.template_id),
+                    item.total_bits,
+                    fields
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(",");
+        println!("{{\"mode\":\"schemas\",\"items\":[{json_items}]}}");
+        return Ok(());
+    }
+
+    println!("supported schemas:");
+    for item in items {
+        let fields = item
+            .fields
+            .iter()
+            .map(|field| format!("{}:{}", field.slot, field.bit_width))
+            .collect::<Vec<_>>()
+            .join(",");
+        println!(
+            "- {}/{} total_bits: {} fields: {}",
+            item.language_code, item.template_id, item.total_bits, fields
         );
     }
 
