@@ -120,87 +120,21 @@ fn parse_encode_command(
     })))
 }
 
-fn parse_decode_command(
-    mut args: impl Iterator<Item = String>,
-) -> Result<Option<Command>, CliError> {
-    let (mut lang, mut auto_detect_target) =
-        env_trace_proto_target("LSTEG_LANG")?.unwrap_or((ProtoTarget::Farsi, true));
-    let mut format = env_output_format("LSTEG_FORMAT")?.unwrap_or(OutputFormat::Text);
-    let mut trace = env_optional("LSTEG_TRACE");
-    let mut input_path = env_optional("LSTEG_INPUT");
-    let mut output_path = env_optional("LSTEG_OUTPUT");
-    let mut secrets = SecretArgs::from_env();
-
-    let mut seen_trace = false;
-    let mut seen_input = false;
-    let mut seen_output = false;
-
-    while let Some(arg) = args.next() {
-        match arg.as_str() {
-            "--help" | "-h" => return Ok(None),
-            "--lang" => {
-                let value = next_arg_value(&mut args, "--lang")?;
-                let (resolved_lang, resolved_auto_detect) = parse_trace_proto_target(&value)?;
-                lang = resolved_lang;
-                auto_detect_target = resolved_auto_detect;
-            }
-            "--format" => {
-                let value = next_arg_value(&mut args, "--format")?;
-                format = parse_output_format(&value)?;
-            }
-            "--trace" => {
-                if seen_trace {
-                    return Err(CliError::usage(
-                        "--trace cannot be provided multiple times".to_string(),
-                    ));
-                }
-                seen_trace = true;
-                trace = Some(next_arg_value(&mut args, "--trace")?);
-            }
-            "--input" => {
-                if seen_input {
-                    return Err(CliError::usage(
-                        "--input cannot be provided multiple times".to_string(),
-                    ));
-                }
-                seen_input = true;
-                input_path = Some(next_arg_value(&mut args, "--input")?);
-            }
-            "--output" => {
-                if seen_output {
-                    return Err(CliError::usage(
-                        "--output cannot be provided multiple times".to_string(),
-                    ));
-                }
-                seen_output = true;
-                output_path = Some(next_arg_value(&mut args, "--output")?);
-            }
-            _ => {
-                if secrets.handle_flag(arg.as_str(), &mut args, "decode")? {
-                    continue;
-                }
-                return Err(CliError::usage(format!("unknown decode argument: {arg}")));
-            }
-        }
-    }
-
-    if trace.is_some() && input_path.is_some() {
-        return Err(CliError::usage(
-            "decode accepts either --trace or --input, not both".to_string(),
-        ));
-    }
-    secrets.ensure_not_ambiguous("decode")?;
-    let (secret, secret_file) = secrets.into_parts();
+fn parse_decode_command(args: impl Iterator<Item = String>) -> Result<Option<Command>, CliError> {
+    let parsed = match parse_trace_like_command_args(args, "decode")? {
+        Some(value) => value,
+        None => return Ok(None),
+    };
 
     Ok(Some(Command::Decode(DecodeOptions {
-        target: lang,
-        auto_detect_target,
-        trace,
-        input_path,
-        output_path,
-        secret,
-        secret_file,
-        format,
+        target: parsed.lang,
+        auto_detect_target: parsed.auto_detect_target,
+        trace: parsed.trace,
+        input_path: parsed.input_path,
+        output_path: parsed.output_path,
+        secret: parsed.secret,
+        secret_file: parsed.secret_file,
+        format: parsed.format,
     })))
 }
 
