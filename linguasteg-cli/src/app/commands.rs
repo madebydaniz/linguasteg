@@ -16,7 +16,7 @@ use super::runtime::{
 use super::trace::{frame_sequence_error, parse_frames_from_trace, schema_for_template};
 use super::types::{
     AnalyzeOptions, CliError, Command, DecodeOptions, DemoTarget, EncodeOptions, OutputFormat,
-    ProtoTarget,
+    ProtoTarget, TemplateQueryOptions,
 };
 
 pub(crate) fn execute(command: Command) -> Result<(), CliError> {
@@ -28,6 +28,7 @@ pub(crate) fn execute(command: Command) -> Result<(), CliError> {
         Command::Strategies(format) => run_strategies(format),
         Command::Models(format) => run_models(format),
         Command::Catalog(format) => run_catalog(format),
+        Command::Templates(options) => run_templates(options)?,
         Command::Demo(DemoTarget::Farsi) => run_demo(ProtoTarget::Farsi)?,
         Command::Demo(DemoTarget::English) => run_demo(ProtoTarget::English)?,
         Command::ProtoEncode(target, payload_text, json) => {
@@ -145,6 +146,72 @@ fn run_catalog(format: OutputFormat) {
             item.provider, item.id, item.display, languages, capabilities
         );
     }
+}
+
+struct TemplateCatalogItem {
+    language_code: String,
+    language_display: String,
+    template_id: String,
+    template_display: String,
+    slot_count: usize,
+}
+
+fn run_templates(options: TemplateQueryOptions) -> Result<(), CliError> {
+    let mut items = Vec::new();
+    let targets = match options.target {
+        Some(target) => vec![target],
+        None => vec![ProtoTarget::Farsi, ProtoTarget::English],
+    };
+
+    for target in targets {
+        let runtime = runtime_for_target(target)?;
+        let language = map_domain(
+            LanguageTag::new(runtime.language_code),
+            "invalid language tag",
+        )?;
+        for template in runtime.pack.templates_for_language(&language) {
+            items.push(TemplateCatalogItem {
+                language_code: runtime.language_code.to_string(),
+                language_display: runtime.language_display.to_string(),
+                template_id: template.id.to_string(),
+                template_display: template.display_name.clone(),
+                slot_count: template.slots.len(),
+            });
+        }
+    }
+
+    items.sort_by(|left, right| {
+        (&left.language_code, &left.template_id).cmp(&(&right.language_code, &right.template_id))
+    });
+
+    if matches!(options.format, OutputFormat::Json) {
+        let json_items = items
+            .iter()
+            .map(|item| {
+                format!(
+                    "{{\"language\":\"{}\",\"language_display\":\"{}\",\"id\":\"{}\",\"display\":\"{}\",\"slot_count\":{}}}",
+                    json_escape(&item.language_code),
+                    json_escape(&item.language_display),
+                    json_escape(&item.template_id),
+                    json_escape(&item.template_display),
+                    item.slot_count
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(",");
+        println!("{{\"mode\":\"templates\",\"items\":[{json_items}]}}");
+        return Ok(());
+    }
+
+    println!("supported templates:");
+    for item in items {
+        println!(
+            "- {}/{} ({}) slots: {}",
+            item.language_code, item.template_id, item.template_display, item.slot_count
+        );
+    }
+
+    Ok(())
 }
 
 fn run_models(format: OutputFormat) {

@@ -229,6 +229,45 @@ fn catalog_json_exposes_all_sections() {
 }
 
 #[test]
+fn templates_text_lists_supported_templates() {
+    let output = run_lsteg(&["templates"]);
+    assert!(output.status.success());
+
+    let stdout = stdout_string(&output);
+    assert!(stdout.contains("supported templates:"));
+    assert!(stdout.contains("- fa/fa-basic-sov (Basic SOV) slots: 4"));
+    assert!(stdout.contains("- fa/fa-time-location-sov (Time + Location + SOV) slots: 5"));
+    assert!(stdout.contains("- en/en-basic-svo (English Basic SVO) slots: 4"));
+    assert!(stdout.contains("- en/en-time-location-svo (English Time Location SVO) slots: 5"));
+}
+
+#[test]
+fn templates_json_exposes_contract() {
+    let output = run_lsteg(&["templates", "--format", "json"]);
+    assert!(output.status.success());
+
+    let stdout = stdout_string(&output);
+    assert!(stdout.contains("\"mode\":\"templates\""));
+    assert!(stdout.contains("\"language\":\"fa\""));
+    assert!(stdout.contains("\"language_display\":\"Farsi\""));
+    assert!(stdout.contains("\"id\":\"fa-basic-sov\""));
+    assert!(stdout.contains("\"id\":\"en-basic-svo\""));
+    assert!(stdout.contains("\"slot_count\":4"));
+}
+
+#[test]
+fn templates_lang_filter_limits_output() {
+    let output = run_lsteg(&["templates", "--lang", "en", "--format", "json"]);
+    assert!(output.status.success());
+
+    let stdout = stdout_string(&output);
+    assert!(stdout.contains("\"mode\":\"templates\""));
+    assert!(stdout.contains("\"language\":\"en\""));
+    assert!(stdout.contains("\"id\":\"en-basic-svo\""));
+    assert!(!stdout.contains("\"id\":\"fa-basic-sov\""));
+}
+
+#[test]
 fn decode_roundtrip_from_encode_trace_works() {
     let encode_output = run_lsteg(&["encode", "--message", "salam"]);
     assert!(encode_output.status.success());

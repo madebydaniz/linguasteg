@@ -8,6 +8,7 @@ pub(crate) enum Command {
     Strategies(OutputFormat),
     Models(OutputFormat),
     Catalog(OutputFormat),
+    Templates(TemplateQueryOptions),
     Demo(DemoTarget),
     ProtoEncode(ProtoTarget, String, bool),
     ProtoDecode(ProtoTarget, Option<String>, bool),
@@ -43,6 +44,11 @@ pub(crate) struct AnalyzeOptions {
     pub(crate) secret: Option<String>,
     pub(crate) secret_file: Option<String>,
     pub(crate) format: OutputFormat,
+}
+
+pub(crate) struct TemplateQueryOptions {
+    pub(crate) format: OutputFormat,
+    pub(crate) target: Option<ProtoTarget>,
 }
 
 pub(crate) struct TraceAnalysisSummary {
