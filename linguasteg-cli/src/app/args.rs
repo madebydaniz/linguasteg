@@ -2,7 +2,7 @@ use std::io::Write;
 
 use super::types::{
     AnalyzeOptions, CliError, Command, DecodeOptions, DemoTarget, EncodeOptions, OutputFormat,
-    ProtoTarget, TemplateQueryOptions,
+    ProfileQueryOptions, ProtoTarget, TemplateQueryOptions,
 };
 
 pub(crate) fn parse_command(args: Vec<String>) -> Result<Option<Command>, CliError> {
@@ -24,6 +24,7 @@ pub(crate) fn parse_command(args: Vec<String>) -> Result<Option<Command>, CliErr
         "models" => parse_models_command(args),
         "catalog" => parse_catalog_command(args),
         "templates" => parse_templates_command(args),
+        "profiles" => parse_profiles_command(args),
         "demo" => parse_demo_command(args),
         "proto-encode" => parse_proto_encode_command(args),
         "proto-decode" => parse_proto_decode_command(args),
@@ -515,6 +516,40 @@ fn parse_templates_command(
     })))
 }
 
+fn parse_profiles_command(
+    mut args: impl Iterator<Item = String>,
+) -> Result<Option<Command>, CliError> {
+    let mut format = env_output_format("LSTEG_FORMAT")?.unwrap_or(OutputFormat::Text);
+    let mut target = None;
+    let mut seen_lang = false;
+
+    while let Some(arg) = args.next() {
+        match arg.as_str() {
+            "--help" | "-h" => return Ok(None),
+            "--format" => {
+                let value = next_arg_value(&mut args, "--format")?;
+                format = parse_output_format(&value)?;
+            }
+            "--lang" => {
+                if seen_lang {
+                    return Err(CliError::usage(
+                        "--lang cannot be provided multiple times".to_string(),
+                    ));
+                }
+                seen_lang = true;
+                let value = next_arg_value(&mut args, "--lang")?;
+                target = Some(parse_proto_target(&value)?);
+            }
+            _ => return Err(CliError::usage(format!("unknown profiles argument: {arg}"))),
+        }
+    }
+
+    Ok(Some(Command::Profiles(ProfileQueryOptions {
+        format,
+        target,
+    })))
+}
+
 fn parse_proto_encode_command(
     args: impl Iterator<Item = String>,
 ) -> Result<Option<Command>, CliError> {
@@ -658,7 +693,7 @@ pub(crate) fn write_usage(mut writer: impl Write) -> std::io::Result<()> {
     writeln!(writer, "LinguaSteg CLI (scaffold)")?;
     writeln!(
         writer,
-        "Usage: lsteg <encode|decode|analyze|languages|strategies|models|catalog|templates|demo|proto-encode|proto-decode>"
+        "Usage: lsteg <encode|decode|analyze|languages|strategies|models|catalog|templates|profiles|demo|proto-encode|proto-decode>"
     )?;
     writeln!(
         writer,
@@ -679,6 +714,10 @@ pub(crate) fn write_usage(mut writer: impl Write) -> std::io::Result<()> {
     writeln!(
         writer,
         "       lsteg templates [--lang fa|en] [--format text|json]"
+    )?;
+    writeln!(
+        writer,
+        "       lsteg profiles [--lang fa|en] [--format text|json]"
     )?;
     writeln!(writer, "       lsteg demo <fa|en>")?;
     writeln!(

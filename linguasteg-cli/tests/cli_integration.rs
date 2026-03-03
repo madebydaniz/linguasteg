@@ -268,6 +268,44 @@ fn templates_lang_filter_limits_output() {
 }
 
 #[test]
+fn profiles_text_lists_supported_profiles() {
+    let output = run_lsteg(&["profiles"]);
+    assert!(output.status.success());
+
+    let stdout = stdout_string(&output);
+    assert!(stdout.contains("supported profiles:"));
+    assert!(stdout.contains("- fa/fa-neutral-formal (Formal Persian (Neutral))"));
+    assert!(stdout.contains("- fa/fa-saadi-inspired-light (Saadi-inspired (Light))"));
+    assert!(stdout.contains("- en/en-neutral-prototype (Neutral English Prototype)"));
+}
+
+#[test]
+fn profiles_json_exposes_contract() {
+    let output = run_lsteg(&["profiles", "--format", "json"]);
+    assert!(output.status.success());
+
+    let stdout = stdout_string(&output);
+    assert!(stdout.contains("\"mode\":\"profiles\""));
+    assert!(stdout.contains("\"language\":\"fa\""));
+    assert!(stdout.contains("\"id\":\"fa-saadi-inspired-light\""));
+    assert!(stdout.contains("\"inspiration_kind\":\"author-inspired\""));
+    assert!(stdout.contains("\"inspiration_label\":\"Saadi\""));
+    assert!(stdout.contains("\"language\":\"en\""));
+}
+
+#[test]
+fn profiles_lang_filter_limits_output() {
+    let output = run_lsteg(&["profiles", "--lang", "en", "--format", "json"]);
+    assert!(output.status.success());
+
+    let stdout = stdout_string(&output);
+    assert!(stdout.contains("\"mode\":\"profiles\""));
+    assert!(stdout.contains("\"language\":\"en\""));
+    assert!(stdout.contains("\"id\":\"en-neutral-prototype\""));
+    assert!(!stdout.contains("\"id\":\"fa-neutral-formal\""));
+}
+
+#[test]
 fn decode_roundtrip_from_encode_trace_works() {
     let encode_output = run_lsteg(&["encode", "--message", "salam"]);
     assert!(encode_output.status.success());

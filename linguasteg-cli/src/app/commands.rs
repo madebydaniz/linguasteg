@@ -3,8 +3,8 @@ use std::io::Read;
 
 use linguasteg_core::{
     DecodeRequest, EncodeRequest, FixedWidthPlanningOptions, LanguageTag, RealizationPlan,
-    SlotAssignment, SlotId, StyleProfileRegistry, TemplateId, TemplateRegistry, open_payload,
-    seal_payload,
+    SlotAssignment, SlotId, StyleInspiration, StyleProfileRegistry, StyleStrength, TemplateId,
+    TemplateRegistry, WritingRegister, open_payload, seal_payload,
 };
 
 use super::analysis::render_trace_analysis_output;
@@ -16,7 +16,7 @@ use super::runtime::{
 use super::trace::{frame_sequence_error, parse_frames_from_trace, schema_for_template};
 use super::types::{
     AnalyzeOptions, CliError, Command, DecodeOptions, DemoTarget, EncodeOptions, OutputFormat,
-    ProtoTarget, TemplateQueryOptions,
+    ProfileQueryOptions, ProtoTarget, TemplateQueryOptions,
 };
 
 pub(crate) fn execute(command: Command) -> Result<(), CliError> {
@@ -29,6 +29,7 @@ pub(crate) fn execute(command: Command) -> Result<(), CliError> {
         Command::Models(format) => run_models(format),
         Command::Catalog(format) => run_catalog(format),
         Command::Templates(options) => run_templates(options)?,
+        Command::Profiles(options) => run_profiles(options)?,
         Command::Demo(DemoTarget::Farsi) => run_demo(ProtoTarget::Farsi)?,
         Command::Demo(DemoTarget::English) => run_demo(ProtoTarget::English)?,
         Command::ProtoEncode(target, payload_text, json) => {
@@ -212,6 +213,127 @@ fn run_templates(options: TemplateQueryOptions) -> Result<(), CliError> {
     }
 
     Ok(())
+}
+
+struct ProfileCatalogItem {
+    language_code: String,
+    language_display: String,
+    profile_id: String,
+    profile_display: String,
+    register: WritingRegister,
+    strength: StyleStrength,
+    inspiration_kind: String,
+    inspiration_label: Option<String>,
+}
+
+fn run_profiles(options: ProfileQueryOptions) -> Result<(), CliError> {
+    let mut items = Vec::new();
+    let targets = match options.target {
+        Some(target) => vec![target],
+        None => vec![ProtoTarget::Farsi, ProtoTarget::English],
+    };
+
+    for target in targets {
+        let runtime = runtime_for_target(target)?;
+        let language = map_domain(
+            LanguageTag::new(runtime.language_code),
+            "invalid language tag",
+        )?;
+        for profile in runtime.pack.style_profiles_for_language(&language) {
+            let (inspiration_kind, inspiration_label) = inspiration_metadata(&profile.inspiration);
+            items.push(ProfileCatalogItem {
+                language_code: runtime.language_code.to_string(),
+                language_display: runtime.language_display.to_string(),
+                profile_id: profile.id.to_string(),
+                profile_display: profile.display_name.clone(),
+                register: profile.register,
+                strength: profile.strength,
+                inspiration_kind,
+                inspiration_label,
+            });
+        }
+    }
+
+    items.sort_by(|left, right| {
+        (&left.language_code, &left.profile_id).cmp(&(&right.language_code, &right.profile_id))
+    });
+
+    if matches!(options.format, OutputFormat::Json) {
+        let json_items = items
+            .iter()
+            .map(|item| {
+                let inspiration_label = item.inspiration_label.as_ref().map_or_else(
+                    || "null".to_string(),
+                    |value| format!("\"{}\"", json_escape(value)),
+                );
+                format!(
+                    "{{\"language\":\"{}\",\"language_display\":\"{}\",\"id\":\"{}\",\"display\":\"{}\",\"register\":\"{}\",\"strength\":\"{}\",\"inspiration_kind\":\"{}\",\"inspiration_label\":{}}}",
+                    json_escape(&item.language_code),
+                    json_escape(&item.language_display),
+                    json_escape(&item.profile_id),
+                    json_escape(&item.profile_display),
+                    json_escape(register_label(item.register)),
+                    json_escape(strength_label(item.strength)),
+                    json_escape(&item.inspiration_kind),
+                    inspiration_label
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(",");
+        println!("{{\"mode\":\"profiles\",\"items\":[{json_items}]}}");
+        return Ok(());
+    }
+
+    println!("supported profiles:");
+    for item in items {
+        let inspiration_label = item
+            .inspiration_label
+            .as_ref()
+            .map_or("<none>", String::as_str);
+        println!(
+            "- {}/{} ({}) register: {} strength: {} inspiration: {} ({})",
+            item.language_code,
+            item.profile_id,
+            item.profile_display,
+            register_label(item.register),
+            strength_label(item.strength),
+            item.inspiration_kind,
+            inspiration_label
+        );
+    }
+
+    Ok(())
+}
+
+fn register_label(register: WritingRegister) -> &'static str {
+    match register {
+        WritingRegister::Neutral => "neutral",
+        WritingRegister::Formal => "formal",
+        WritingRegister::Colloquial => "colloquial",
+        WritingRegister::Literary => "literary",
+        WritingRegister::Academic => "academic",
+    }
+}
+
+fn strength_label(strength: StyleStrength) -> &'static str {
+    match strength {
+        StyleStrength::Light => "light",
+        StyleStrength::Medium => "medium",
+        StyleStrength::Strong => "strong",
+    }
+}
+
+fn inspiration_metadata(inspiration: &StyleInspiration) -> (String, Option<String>) {
+    match inspiration {
+        StyleInspiration::Neutral => ("neutral".to_string(), None),
+        StyleInspiration::RegisterOnly => ("register-only".to_string(), None),
+        StyleInspiration::EraInspired { era_label } => {
+            ("era-inspired".to_string(), Some(era_label.clone()))
+        }
+        StyleInspiration::PublicDomainAuthorInspired { author_label } => {
+            ("author-inspired".to_string(), Some(author_label.clone()))
+        }
+    }
 }
 
 fn run_models(format: OutputFormat) {

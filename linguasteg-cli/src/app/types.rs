@@ -9,6 +9,7 @@ pub(crate) enum Command {
     Models(OutputFormat),
     Catalog(OutputFormat),
     Templates(TemplateQueryOptions),
+    Profiles(ProfileQueryOptions),
     Demo(DemoTarget),
     ProtoEncode(ProtoTarget, String, bool),
     ProtoDecode(ProtoTarget, Option<String>, bool),
@@ -47,6 +48,11 @@ pub(crate) struct AnalyzeOptions {
 }
 
 pub(crate) struct TemplateQueryOptions {
+    pub(crate) format: OutputFormat,
+    pub(crate) target: Option<ProtoTarget>,
+}
+
+pub(crate) struct ProfileQueryOptions {
     pub(crate) format: OutputFormat,
     pub(crate) target: Option<ProtoTarget>,
 }
