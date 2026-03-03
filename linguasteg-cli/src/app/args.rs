@@ -43,14 +43,11 @@ fn parse_encode_command(
     let mut message = env_optional("LSTEG_ENCODE_MESSAGE");
     let mut input_path = env_optional("LSTEG_INPUT");
     let mut output_path = env_optional("LSTEG_OUTPUT");
-    let mut secret = env_optional("LSTEG_SECRET");
-    let mut secret_file = None;
+    let mut secrets = SecretArgs::from_env();
 
     let mut seen_message = false;
     let mut seen_input = false;
     let mut seen_output = false;
-    let mut seen_secret = false;
-    let mut seen_secret_file = false;
 
     while let Some(arg) = args.next() {
         match arg.as_str() {
@@ -90,37 +87,10 @@ fn parse_encode_command(
                 seen_output = true;
                 output_path = Some(next_arg_value(&mut args, "--output")?);
             }
-            "--secret" => {
-                if seen_secret {
-                    return Err(CliError::usage(
-                        "--secret cannot be provided multiple times".to_string(),
-                    ));
-                }
-                if seen_secret_file {
-                    return Err(CliError::usage(
-                        "encode accepts either --secret or --secret-file, not both".to_string(),
-                    ));
-                }
-                seen_secret = true;
-                secret = Some(next_arg_value(&mut args, "--secret")?);
-                secret_file = None;
-            }
-            "--secret-file" => {
-                if seen_secret_file {
-                    return Err(CliError::usage(
-                        "--secret-file cannot be provided multiple times".to_string(),
-                    ));
-                }
-                if seen_secret {
-                    return Err(CliError::usage(
-                        "encode accepts either --secret or --secret-file, not both".to_string(),
-                    ));
-                }
-                seen_secret_file = true;
-                secret_file = Some(next_arg_value(&mut args, "--secret-file")?);
-                secret = None;
-            }
             _ => {
+                if secrets.handle_flag(arg.as_str(), &mut args, "encode")? {
+                    continue;
+                }
                 return Err(CliError::usage(format!("unknown encode argument: {arg}")));
             }
         }
@@ -136,11 +106,8 @@ fn parse_encode_command(
             "encode requires --message <text> or --input <file>".to_string(),
         ));
     }
-    if secret.is_some() && secret_file.is_some() {
-        return Err(CliError::usage(
-            "encode accepts either --secret or --secret-file, not both".to_string(),
-        ));
-    }
+    secrets.ensure_not_ambiguous("encode")?;
+    let (secret, secret_file) = secrets.into_parts();
 
     Ok(Some(Command::Encode(EncodeOptions {
         target: lang,
@@ -162,14 +129,11 @@ fn parse_decode_command(
     let mut trace = env_optional("LSTEG_TRACE");
     let mut input_path = env_optional("LSTEG_INPUT");
     let mut output_path = env_optional("LSTEG_OUTPUT");
-    let mut secret = env_optional("LSTEG_SECRET");
-    let mut secret_file = None;
+    let mut secrets = SecretArgs::from_env();
 
     let mut seen_trace = false;
     let mut seen_input = false;
     let mut seen_output = false;
-    let mut seen_secret = false;
-    let mut seen_secret_file = false;
 
     while let Some(arg) = args.next() {
         match arg.as_str() {
@@ -211,37 +175,10 @@ fn parse_decode_command(
                 seen_output = true;
                 output_path = Some(next_arg_value(&mut args, "--output")?);
             }
-            "--secret" => {
-                if seen_secret {
-                    return Err(CliError::usage(
-                        "--secret cannot be provided multiple times".to_string(),
-                    ));
-                }
-                if seen_secret_file {
-                    return Err(CliError::usage(
-                        "decode accepts either --secret or --secret-file, not both".to_string(),
-                    ));
-                }
-                seen_secret = true;
-                secret = Some(next_arg_value(&mut args, "--secret")?);
-                secret_file = None;
-            }
-            "--secret-file" => {
-                if seen_secret_file {
-                    return Err(CliError::usage(
-                        "--secret-file cannot be provided multiple times".to_string(),
-                    ));
-                }
-                if seen_secret {
-                    return Err(CliError::usage(
-                        "decode accepts either --secret or --secret-file, not both".to_string(),
-                    ));
-                }
-                seen_secret_file = true;
-                secret_file = Some(next_arg_value(&mut args, "--secret-file")?);
-                secret = None;
-            }
             _ => {
+                if secrets.handle_flag(arg.as_str(), &mut args, "decode")? {
+                    continue;
+                }
                 return Err(CliError::usage(format!("unknown decode argument: {arg}")));
             }
         }
@@ -252,11 +189,8 @@ fn parse_decode_command(
             "decode accepts either --trace or --input, not both".to_string(),
         ));
     }
-    if secret.is_some() && secret_file.is_some() {
-        return Err(CliError::usage(
-            "decode accepts either --secret or --secret-file, not both".to_string(),
-        ));
-    }
+    secrets.ensure_not_ambiguous("decode")?;
+    let (secret, secret_file) = secrets.into_parts();
 
     Ok(Some(Command::Decode(DecodeOptions {
         target: lang,
@@ -327,14 +261,11 @@ fn parse_trace_like_command_args(
     let mut trace = env_optional("LSTEG_TRACE");
     let mut input_path = env_optional("LSTEG_INPUT");
     let mut output_path = env_optional("LSTEG_OUTPUT");
-    let mut secret = env_optional("LSTEG_SECRET");
-    let mut secret_file = None;
+    let mut secrets = SecretArgs::from_env();
 
     let mut seen_trace = false;
     let mut seen_input = false;
     let mut seen_output = false;
-    let mut seen_secret = false;
-    let mut seen_secret_file = false;
 
     while let Some(arg) = args.next() {
         match arg.as_str() {
@@ -376,37 +307,10 @@ fn parse_trace_like_command_args(
                 seen_output = true;
                 output_path = Some(next_arg_value(&mut args, "--output")?);
             }
-            "--secret" => {
-                if seen_secret {
-                    return Err(CliError::usage(
-                        "--secret cannot be provided multiple times".to_string(),
-                    ));
-                }
-                if seen_secret_file {
-                    return Err(CliError::usage(format!(
-                        "{command} accepts either --secret or --secret-file, not both"
-                    )));
-                }
-                seen_secret = true;
-                secret = Some(next_arg_value(&mut args, "--secret")?);
-                secret_file = None;
-            }
-            "--secret-file" => {
-                if seen_secret_file {
-                    return Err(CliError::usage(
-                        "--secret-file cannot be provided multiple times".to_string(),
-                    ));
-                }
-                if seen_secret {
-                    return Err(CliError::usage(format!(
-                        "{command} accepts either --secret or --secret-file, not both"
-                    )));
-                }
-                seen_secret_file = true;
-                secret_file = Some(next_arg_value(&mut args, "--secret-file")?);
-                secret = None;
-            }
             _ => {
+                if secrets.handle_flag(arg.as_str(), &mut args, command)? {
+                    continue;
+                }
                 return Err(CliError::usage(format!(
                     "unknown {command} argument: {arg}"
                 )));
@@ -419,11 +323,8 @@ fn parse_trace_like_command_args(
             "{command} accepts either --trace or --input, not both"
         )));
     }
-    if secret.is_some() && secret_file.is_some() {
-        return Err(CliError::usage(format!(
-            "{command} accepts either --secret or --secret-file, not both"
-        )));
-    }
+    secrets.ensure_not_ambiguous(command)?;
+    let (secret, secret_file) = secrets.into_parts();
 
     Ok(Some(ParsedTraceLikeCommand {
         lang,
@@ -663,6 +564,80 @@ fn parse_proto_decode_command(
     };
 
     Ok(Some(Command::ProtoDecode(target, trace, json)))
+}
+
+struct SecretArgs {
+    secret: Option<String>,
+    secret_file: Option<String>,
+    seen_secret: bool,
+    seen_secret_file: bool,
+}
+
+impl SecretArgs {
+    fn from_env() -> Self {
+        Self {
+            secret: env_optional("LSTEG_SECRET"),
+            secret_file: None,
+            seen_secret: false,
+            seen_secret_file: false,
+        }
+    }
+
+    fn handle_flag(
+        &mut self,
+        arg: &str,
+        args: &mut impl Iterator<Item = String>,
+        command: &str,
+    ) -> Result<bool, CliError> {
+        match arg {
+            "--secret" => {
+                if self.seen_secret {
+                    return Err(CliError::usage(
+                        "--secret cannot be provided multiple times".to_string(),
+                    ));
+                }
+                if self.seen_secret_file {
+                    return Err(CliError::usage(format!(
+                        "{command} accepts either --secret or --secret-file, not both"
+                    )));
+                }
+                self.seen_secret = true;
+                self.secret = Some(next_arg_value(args, "--secret")?);
+                self.secret_file = None;
+                Ok(true)
+            }
+            "--secret-file" => {
+                if self.seen_secret_file {
+                    return Err(CliError::usage(
+                        "--secret-file cannot be provided multiple times".to_string(),
+                    ));
+                }
+                if self.seen_secret {
+                    return Err(CliError::usage(format!(
+                        "{command} accepts either --secret or --secret-file, not both"
+                    )));
+                }
+                self.seen_secret_file = true;
+                self.secret_file = Some(next_arg_value(args, "--secret-file")?);
+                self.secret = None;
+                Ok(true)
+            }
+            _ => Ok(false),
+        }
+    }
+
+    fn ensure_not_ambiguous(&self, command: &str) -> Result<(), CliError> {
+        if self.secret.is_some() && self.secret_file.is_some() {
+            return Err(CliError::usage(format!(
+                "{command} accepts either --secret or --secret-file, not both"
+            )));
+        }
+        Ok(())
+    }
+
+    fn into_parts(self) -> (Option<String>, Option<String>) {
+        (self.secret, self.secret_file)
+    }
 }
 
 fn next_arg_value(args: &mut impl Iterator<Item = String>, flag: &str) -> Result<String, CliError> {
