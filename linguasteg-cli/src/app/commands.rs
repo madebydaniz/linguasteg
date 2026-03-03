@@ -342,14 +342,23 @@ fn selected_targets(target: Option<ProtoTarget>) -> Vec<ProtoTarget> {
     }
 }
 
+fn for_each_runtime(
+    target: Option<ProtoTarget>,
+    mut visitor: impl FnMut(&PrototypeRuntime) -> Result<(), CliError>,
+) -> Result<(), CliError> {
+    for target in selected_targets(target) {
+        let runtime = runtime_for_target(target)?;
+        visitor(&runtime)?;
+    }
+    Ok(())
+}
+
 fn collect_template_items(
     target: Option<ProtoTarget>,
 ) -> Result<Vec<TemplateCatalogItem>, CliError> {
-    let targets = selected_targets(target);
     let mut items = Vec::new();
 
-    for target in targets {
-        let runtime = runtime_for_target(target)?;
+    for_each_runtime(target, |runtime| {
         let language = map_domain(
             LanguageTag::new(runtime.language_code),
             "invalid language tag",
@@ -363,7 +372,8 @@ fn collect_template_items(
                 slot_count: template.slots.len(),
             });
         }
-    }
+        Ok(())
+    })?;
 
     items.sort_by(|left, right| {
         (&left.language_code, &left.template_id).cmp(&(&right.language_code, &right.template_id))
@@ -373,11 +383,9 @@ fn collect_template_items(
 }
 
 fn collect_profile_items(target: Option<ProtoTarget>) -> Result<Vec<ProfileCatalogItem>, CliError> {
-    let targets = selected_targets(target);
     let mut items = Vec::new();
 
-    for target in targets {
-        let runtime = runtime_for_target(target)?;
+    for_each_runtime(target, |runtime| {
         let language = map_domain(
             LanguageTag::new(runtime.language_code),
             "invalid language tag",
@@ -395,7 +403,8 @@ fn collect_profile_items(target: Option<ProtoTarget>) -> Result<Vec<ProfileCatal
                 inspiration_label,
             });
         }
-    }
+        Ok(())
+    })?;
 
     items.sort_by(|left, right| {
         (&left.language_code, &left.profile_id).cmp(&(&right.language_code, &right.profile_id))
@@ -405,11 +414,9 @@ fn collect_profile_items(target: Option<ProtoTarget>) -> Result<Vec<ProfileCatal
 }
 
 fn collect_schema_items(target: Option<ProtoTarget>) -> Result<Vec<SchemaCatalogItem>, CliError> {
-    let targets = selected_targets(target);
     let mut items = Vec::new();
 
-    for target in targets {
-        let runtime = runtime_for_target(target)?;
+    for_each_runtime(target, |runtime| {
         let schemas = runtime.mapper.frame_schemas();
         for schema in schemas {
             let fields = schema
@@ -428,7 +435,8 @@ fn collect_schema_items(target: Option<ProtoTarget>) -> Result<Vec<SchemaCatalog
                 fields,
             });
         }
-    }
+        Ok(())
+    })?;
 
     items.sort_by(|left, right| {
         (&left.language_code, &left.template_id).cmp(&(&right.language_code, &right.template_id))
