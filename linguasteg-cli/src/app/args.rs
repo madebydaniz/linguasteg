@@ -512,43 +512,65 @@ fn parse_models_command(
     Ok(Some(Command::Models(format)))
 }
 
-fn parse_catalog_command(
-    mut args: impl Iterator<Item = String>,
-) -> Result<Option<Command>, CliError> {
-    let mut format = env_output_format("LSTEG_FORMAT")?.unwrap_or(OutputFormat::Text);
-    let mut target = None;
-    let mut seen_lang = false;
-
-    while let Some(arg) = args.next() {
-        match arg.as_str() {
-            "--help" | "-h" => return Ok(None),
-            "--format" => {
-                let value = next_arg_value(&mut args, "--format")?;
-                format = parse_output_format(&value)?;
-            }
-            "--lang" => {
-                if seen_lang {
-                    return Err(CliError::usage(
-                        "--lang cannot be provided multiple times".to_string(),
-                    ));
-                }
-                seen_lang = true;
-                let value = next_arg_value(&mut args, "--lang")?;
-                target = Some(parse_proto_target(&value)?);
-            }
-            _ => return Err(CliError::usage(format!("unknown catalog argument: {arg}"))),
-        }
-    }
+fn parse_catalog_command(args: impl Iterator<Item = String>) -> Result<Option<Command>, CliError> {
+    let parsed = match parse_discovery_command_args(args, "catalog")? {
+        Some(value) => value,
+        None => return Ok(None),
+    };
 
     Ok(Some(Command::Catalog(CatalogQueryOptions {
-        format,
-        target,
+        format: parsed.format,
+        target: parsed.target,
     })))
 }
 
 fn parse_templates_command(
-    mut args: impl Iterator<Item = String>,
+    args: impl Iterator<Item = String>,
 ) -> Result<Option<Command>, CliError> {
+    let parsed = match parse_discovery_command_args(args, "templates")? {
+        Some(value) => value,
+        None => return Ok(None),
+    };
+
+    Ok(Some(Command::Templates(TemplateQueryOptions {
+        format: parsed.format,
+        target: parsed.target,
+    })))
+}
+
+fn parse_profiles_command(args: impl Iterator<Item = String>) -> Result<Option<Command>, CliError> {
+    let parsed = match parse_discovery_command_args(args, "profiles")? {
+        Some(value) => value,
+        None => return Ok(None),
+    };
+
+    Ok(Some(Command::Profiles(ProfileQueryOptions {
+        format: parsed.format,
+        target: parsed.target,
+    })))
+}
+
+fn parse_schemas_command(args: impl Iterator<Item = String>) -> Result<Option<Command>, CliError> {
+    let parsed = match parse_discovery_command_args(args, "schemas")? {
+        Some(value) => value,
+        None => return Ok(None),
+    };
+
+    Ok(Some(Command::Schemas(SchemaQueryOptions {
+        format: parsed.format,
+        target: parsed.target,
+    })))
+}
+
+struct ParsedDiscoveryCommand {
+    format: OutputFormat,
+    target: Option<ProtoTarget>,
+}
+
+fn parse_discovery_command_args(
+    mut args: impl Iterator<Item = String>,
+    command: &str,
+) -> Result<Option<ParsedDiscoveryCommand>, CliError> {
     let mut format = env_output_format("LSTEG_FORMAT")?.unwrap_or(OutputFormat::Text);
     let mut target = None;
     let mut seen_lang = false;
@@ -572,84 +594,13 @@ fn parse_templates_command(
             }
             _ => {
                 return Err(CliError::usage(format!(
-                    "unknown templates argument: {arg}"
+                    "unknown {command} argument: {arg}"
                 )));
             }
         }
     }
 
-    Ok(Some(Command::Templates(TemplateQueryOptions {
-        format,
-        target,
-    })))
-}
-
-fn parse_profiles_command(
-    mut args: impl Iterator<Item = String>,
-) -> Result<Option<Command>, CliError> {
-    let mut format = env_output_format("LSTEG_FORMAT")?.unwrap_or(OutputFormat::Text);
-    let mut target = None;
-    let mut seen_lang = false;
-
-    while let Some(arg) = args.next() {
-        match arg.as_str() {
-            "--help" | "-h" => return Ok(None),
-            "--format" => {
-                let value = next_arg_value(&mut args, "--format")?;
-                format = parse_output_format(&value)?;
-            }
-            "--lang" => {
-                if seen_lang {
-                    return Err(CliError::usage(
-                        "--lang cannot be provided multiple times".to_string(),
-                    ));
-                }
-                seen_lang = true;
-                let value = next_arg_value(&mut args, "--lang")?;
-                target = Some(parse_proto_target(&value)?);
-            }
-            _ => return Err(CliError::usage(format!("unknown profiles argument: {arg}"))),
-        }
-    }
-
-    Ok(Some(Command::Profiles(ProfileQueryOptions {
-        format,
-        target,
-    })))
-}
-
-fn parse_schemas_command(
-    mut args: impl Iterator<Item = String>,
-) -> Result<Option<Command>, CliError> {
-    let mut format = env_output_format("LSTEG_FORMAT")?.unwrap_or(OutputFormat::Text);
-    let mut target = None;
-    let mut seen_lang = false;
-
-    while let Some(arg) = args.next() {
-        match arg.as_str() {
-            "--help" | "-h" => return Ok(None),
-            "--format" => {
-                let value = next_arg_value(&mut args, "--format")?;
-                format = parse_output_format(&value)?;
-            }
-            "--lang" => {
-                if seen_lang {
-                    return Err(CliError::usage(
-                        "--lang cannot be provided multiple times".to_string(),
-                    ));
-                }
-                seen_lang = true;
-                let value = next_arg_value(&mut args, "--lang")?;
-                target = Some(parse_proto_target(&value)?);
-            }
-            _ => return Err(CliError::usage(format!("unknown schemas argument: {arg}"))),
-        }
-    }
-
-    Ok(Some(Command::Schemas(SchemaQueryOptions {
-        format,
-        target,
-    })))
+    Ok(Some(ParsedDiscoveryCommand { format, target }))
 }
 
 fn parse_proto_encode_command(
