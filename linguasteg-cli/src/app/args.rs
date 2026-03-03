@@ -270,126 +270,57 @@ fn parse_decode_command(
     })))
 }
 
-fn parse_analyze_command(
-    mut args: impl Iterator<Item = String>,
-) -> Result<Option<Command>, CliError> {
-    let (mut lang, mut auto_detect_target) =
-        env_trace_proto_target("LSTEG_LANG")?.unwrap_or((ProtoTarget::Farsi, true));
-    let mut format = env_output_format("LSTEG_FORMAT")?.unwrap_or(OutputFormat::Text);
-    let mut trace = env_optional("LSTEG_TRACE");
-    let mut input_path = env_optional("LSTEG_INPUT");
-    let mut output_path = env_optional("LSTEG_OUTPUT");
-    let mut secret = env_optional("LSTEG_SECRET");
-    let mut secret_file = None;
-
-    let mut seen_trace = false;
-    let mut seen_input = false;
-    let mut seen_output = false;
-    let mut seen_secret = false;
-    let mut seen_secret_file = false;
-
-    while let Some(arg) = args.next() {
-        match arg.as_str() {
-            "--help" | "-h" => return Ok(None),
-            "--lang" => {
-                let value = next_arg_value(&mut args, "--lang")?;
-                let (resolved_lang, resolved_auto_detect) = parse_trace_proto_target(&value)?;
-                lang = resolved_lang;
-                auto_detect_target = resolved_auto_detect;
-            }
-            "--format" => {
-                let value = next_arg_value(&mut args, "--format")?;
-                format = parse_output_format(&value)?;
-            }
-            "--trace" => {
-                if seen_trace {
-                    return Err(CliError::usage(
-                        "--trace cannot be provided multiple times".to_string(),
-                    ));
-                }
-                seen_trace = true;
-                trace = Some(next_arg_value(&mut args, "--trace")?);
-            }
-            "--input" => {
-                if seen_input {
-                    return Err(CliError::usage(
-                        "--input cannot be provided multiple times".to_string(),
-                    ));
-                }
-                seen_input = true;
-                input_path = Some(next_arg_value(&mut args, "--input")?);
-            }
-            "--output" => {
-                if seen_output {
-                    return Err(CliError::usage(
-                        "--output cannot be provided multiple times".to_string(),
-                    ));
-                }
-                seen_output = true;
-                output_path = Some(next_arg_value(&mut args, "--output")?);
-            }
-            "--secret" => {
-                if seen_secret {
-                    return Err(CliError::usage(
-                        "--secret cannot be provided multiple times".to_string(),
-                    ));
-                }
-                if seen_secret_file {
-                    return Err(CliError::usage(
-                        "analyze accepts either --secret or --secret-file, not both".to_string(),
-                    ));
-                }
-                seen_secret = true;
-                secret = Some(next_arg_value(&mut args, "--secret")?);
-                secret_file = None;
-            }
-            "--secret-file" => {
-                if seen_secret_file {
-                    return Err(CliError::usage(
-                        "--secret-file cannot be provided multiple times".to_string(),
-                    ));
-                }
-                if seen_secret {
-                    return Err(CliError::usage(
-                        "analyze accepts either --secret or --secret-file, not both".to_string(),
-                    ));
-                }
-                seen_secret_file = true;
-                secret_file = Some(next_arg_value(&mut args, "--secret-file")?);
-                secret = None;
-            }
-            _ => {
-                return Err(CliError::usage(format!("unknown analyze argument: {arg}")));
-            }
-        }
-    }
-
-    if trace.is_some() && input_path.is_some() {
-        return Err(CliError::usage(
-            "analyze accepts either --trace or --input, not both".to_string(),
-        ));
-    }
-    if secret.is_some() && secret_file.is_some() {
-        return Err(CliError::usage(
-            "analyze accepts either --secret or --secret-file, not both".to_string(),
-        ));
-    }
+fn parse_analyze_command(args: impl Iterator<Item = String>) -> Result<Option<Command>, CliError> {
+    let parsed = match parse_trace_like_command_args(args, "analyze")? {
+        Some(value) => value,
+        None => return Ok(None),
+    };
 
     Ok(Some(Command::Analyze(AnalyzeOptions {
-        target: lang,
-        auto_detect_target,
-        trace,
-        input_path,
-        output_path,
-        secret,
-        secret_file,
-        format,
+        target: parsed.lang,
+        auto_detect_target: parsed.auto_detect_target,
+        trace: parsed.trace,
+        input_path: parsed.input_path,
+        output_path: parsed.output_path,
+        secret: parsed.secret,
+        secret_file: parsed.secret_file,
+        format: parsed.format,
     })))
 }
 
-fn parse_validate_command(
+fn parse_validate_command(args: impl Iterator<Item = String>) -> Result<Option<Command>, CliError> {
+    let parsed = match parse_trace_like_command_args(args, "validate")? {
+        Some(value) => value,
+        None => return Ok(None),
+    };
+
+    Ok(Some(Command::Validate(ValidateOptions {
+        target: parsed.lang,
+        auto_detect_target: parsed.auto_detect_target,
+        trace: parsed.trace,
+        input_path: parsed.input_path,
+        output_path: parsed.output_path,
+        secret: parsed.secret,
+        secret_file: parsed.secret_file,
+        format: parsed.format,
+    })))
+}
+
+struct ParsedTraceLikeCommand {
+    lang: ProtoTarget,
+    auto_detect_target: bool,
+    trace: Option<String>,
+    input_path: Option<String>,
+    output_path: Option<String>,
+    secret: Option<String>,
+    secret_file: Option<String>,
+    format: OutputFormat,
+}
+
+fn parse_trace_like_command_args(
     mut args: impl Iterator<Item = String>,
-) -> Result<Option<Command>, CliError> {
+    command: &str,
+) -> Result<Option<ParsedTraceLikeCommand>, CliError> {
     let (mut lang, mut auto_detect_target) =
         env_trace_proto_target("LSTEG_LANG")?.unwrap_or((ProtoTarget::Farsi, true));
     let mut format = env_output_format("LSTEG_FORMAT")?.unwrap_or(OutputFormat::Text);
@@ -452,9 +383,9 @@ fn parse_validate_command(
                     ));
                 }
                 if seen_secret_file {
-                    return Err(CliError::usage(
-                        "validate accepts either --secret or --secret-file, not both".to_string(),
-                    ));
+                    return Err(CliError::usage(format!(
+                        "{command} accepts either --secret or --secret-file, not both"
+                    )));
                 }
                 seen_secret = true;
                 secret = Some(next_arg_value(&mut args, "--secret")?);
@@ -467,33 +398,35 @@ fn parse_validate_command(
                     ));
                 }
                 if seen_secret {
-                    return Err(CliError::usage(
-                        "validate accepts either --secret or --secret-file, not both".to_string(),
-                    ));
+                    return Err(CliError::usage(format!(
+                        "{command} accepts either --secret or --secret-file, not both"
+                    )));
                 }
                 seen_secret_file = true;
                 secret_file = Some(next_arg_value(&mut args, "--secret-file")?);
                 secret = None;
             }
             _ => {
-                return Err(CliError::usage(format!("unknown validate argument: {arg}")));
+                return Err(CliError::usage(format!(
+                    "unknown {command} argument: {arg}"
+                )));
             }
         }
     }
 
     if trace.is_some() && input_path.is_some() {
-        return Err(CliError::usage(
-            "validate accepts either --trace or --input, not both".to_string(),
-        ));
+        return Err(CliError::usage(format!(
+            "{command} accepts either --trace or --input, not both"
+        )));
     }
     if secret.is_some() && secret_file.is_some() {
-        return Err(CliError::usage(
-            "validate accepts either --secret or --secret-file, not both".to_string(),
-        ));
+        return Err(CliError::usage(format!(
+            "{command} accepts either --secret or --secret-file, not both"
+        )));
     }
 
-    Ok(Some(Command::Validate(ValidateOptions {
-        target: lang,
+    Ok(Some(ParsedTraceLikeCommand {
+        lang,
         auto_detect_target,
         trace,
         input_path,
@@ -501,7 +434,7 @@ fn parse_validate_command(
         secret,
         secret_file,
         format,
-    })))
+    }))
 }
 
 fn parse_demo_command(mut args: impl Iterator<Item = String>) -> Result<Option<Command>, CliError> {
