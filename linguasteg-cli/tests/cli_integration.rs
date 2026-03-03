@@ -331,6 +331,38 @@ fn profiles_lang_filter_limits_output() {
 }
 
 #[test]
+fn validate_json_reports_integrity_ok() {
+    let encode_output = run_lsteg(&["encode", "--message", "salam"]);
+    assert!(encode_output.status.success());
+    let trace_text = stdout_string(&encode_output);
+
+    let validate_output = run_lsteg_with_stdin(&["validate", "--format", "json"], &trace_text);
+    assert!(validate_output.status.success());
+    let stdout = stdout_string(&validate_output);
+    assert!(stdout.contains("\"mode\":\"validate\""));
+    assert!(stdout.contains("\"language\":\"fa\""));
+    assert!(stdout.contains("\"integrity_ok\":true"));
+}
+
+#[test]
+fn validate_fails_for_non_contiguous_trace() {
+    let encode_output = run_lsteg(&["encode", "--message", "salam"]);
+    assert!(encode_output.status.success());
+    let trace_text = stdout_string(&encode_output);
+    let broken_trace = trace_text.replacen("bits=18..39", "bits=19..40", 1);
+
+    let validate_output = run_lsteg_with_stdin(&["validate", "--format", "json"], &broken_trace);
+    assert_eq!(validate_output.status.code(), Some(1));
+
+    let stdout = stdout_string(&validate_output);
+    assert!(stdout.contains("\"mode\":\"validate\""));
+    assert!(stdout.contains("\"integrity_ok\":false"));
+    let stderr = stderr_string(&validate_output);
+    assert!(stderr.contains("LSTEG-CLI-TRC-001"));
+    assert!(stderr.contains("validation failed"));
+}
+
+#[test]
 fn decode_roundtrip_from_encode_trace_works() {
     let encode_output = run_lsteg(&["encode", "--message", "salam"]);
     assert!(encode_output.status.success());

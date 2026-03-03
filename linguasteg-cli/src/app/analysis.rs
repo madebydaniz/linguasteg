@@ -16,6 +16,20 @@ pub(crate) fn render_trace_analysis_output(
     format: OutputFormat,
     secret: Option<&[u8]>,
 ) -> Result<String, CliError> {
+    let summary = analyze_trace_summary(target, auto_detect_target, trace_text, secret)?;
+    if matches!(format, OutputFormat::Json) {
+        return Ok(build_trace_analysis_json(&summary));
+    }
+
+    Ok(build_trace_analysis_text(&summary))
+}
+
+pub(crate) fn analyze_trace_summary(
+    target: ProtoTarget,
+    auto_detect_target: bool,
+    trace_text: &str,
+    secret: Option<&[u8]>,
+) -> Result<TraceAnalysisSummary, CliError> {
     if trace_text.trim().is_empty() {
         return Err(CliError::input(
             "analyze requires trace input from proto-encode output",
@@ -36,18 +50,13 @@ pub(crate) fn render_trace_analysis_output(
         return Err(CliError::trace("no frame lines were found in trace input"));
     }
 
-    let summary = analyze_trace(
+    analyze_trace(
         runtime.language_code,
         runtime.language_display,
         &frames,
         &schemas,
         secret,
-    )?;
-    if matches!(format, OutputFormat::Json) {
-        return Ok(build_trace_analysis_json(&summary));
-    }
-
-    Ok(build_trace_analysis_text(&summary))
+    )
 }
 
 fn analyze_trace(

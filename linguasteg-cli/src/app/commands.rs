@@ -7,7 +7,7 @@ use linguasteg_core::{
     TemplateRegistry, WritingRegister, open_payload, seal_payload,
 };
 
-use super::analysis::render_trace_analysis_output;
+use super::analysis::{analyze_trace_summary, render_trace_analysis_output};
 use super::formatters::{build_proto_decode_json, build_proto_encode_json, json_escape};
 use super::language::resolve_trace_target;
 use super::runtime::{
@@ -17,6 +17,7 @@ use super::trace::{frame_sequence_error, parse_frames_from_trace, schema_for_tem
 use super::types::{
     AnalyzeOptions, CatalogQueryOptions, CliError, Command, DecodeOptions, DemoTarget,
     EncodeOptions, OutputFormat, ProfileQueryOptions, ProtoTarget, TemplateQueryOptions,
+    ValidateOptions,
 };
 
 pub(crate) fn execute(command: Command) -> Result<(), CliError> {
@@ -24,6 +25,7 @@ pub(crate) fn execute(command: Command) -> Result<(), CliError> {
         Command::Encode(options) => run_encode(options)?,
         Command::Decode(options) => run_decode(options)?,
         Command::Analyze(options) => run_analyze(options)?,
+        Command::Validate(options) => run_validate(options)?,
         Command::Languages(format) => run_languages(format),
         Command::Strategies(format) => run_strategies(format),
         Command::Models(format) => run_models(format),
@@ -581,6 +583,71 @@ fn run_analyze(options: AnalyzeOptions) -> Result<(), CliError> {
         secret.as_deref(),
     )?;
     write_output(&output, options.output_path.as_deref())
+}
+
+fn run_validate(options: ValidateOptions) -> Result<(), CliError> {
+    let trace_text = resolve_trace_input(options.trace.as_deref(), options.input_path.as_deref())?;
+    let secret =
+        resolve_optional_secret_bytes(options.secret.as_deref(), options.secret_file.as_deref())?;
+    let summary = analyze_trace_summary(
+        options.target,
+        options.auto_detect_target,
+        &trace_text,
+        secret.as_deref(),
+    )?;
+    let output = render_validate_output(&summary, options.format);
+    write_output(&output, options.output_path.as_deref())?;
+
+    if summary.integrity_ok {
+        Ok(())
+    } else {
+        let reason = summary
+            .integrity_error
+            .clone()
+            .unwrap_or_else(|| "trace integrity check failed".to_string());
+        Err(CliError::trace(format!("validation failed: {reason}")))
+    }
+}
+
+fn render_validate_output(
+    summary: &super::types::TraceAnalysisSummary,
+    format: OutputFormat,
+) -> String {
+    if matches!(format, OutputFormat::Json) {
+        let integrity_error = summary.integrity_error.as_ref().map_or_else(
+            || "null".to_string(),
+            |value| format!("\"{}\"", json_escape(value)),
+        );
+        return format!(
+            "{{\"mode\":\"validate\",\"language\":\"{}\",\"frame_count\":{},\"contiguous_ranges\":{},\"integrity_ok\":{},\"integrity_error\":{}}}",
+            json_escape(summary.language),
+            summary.frame_count,
+            summary.contiguous_ranges,
+            summary.integrity_ok,
+            integrity_error
+        );
+    }
+
+    let mut lines = Vec::new();
+    lines.push(format!("{} trace validation", summary.language_display));
+    lines.push(format!("language: {}", summary.language));
+    lines.push(format!("frames: {}", summary.frame_count));
+    lines.push(format!(
+        "contiguous ranges: {}",
+        if summary.contiguous_ranges {
+            "yes"
+        } else {
+            "no"
+        }
+    ));
+    lines.push(format!(
+        "integrity: {}",
+        if summary.integrity_ok { "ok" } else { "failed" }
+    ));
+    if let Some(error) = &summary.integrity_error {
+        lines.push(format!("error: {error}"));
+    }
+    lines.join("\n")
 }
 
 fn run_demo(target: ProtoTarget) -> Result<(), CliError> {

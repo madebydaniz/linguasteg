@@ -3,6 +3,7 @@ use std::io::Write;
 use super::types::{
     AnalyzeOptions, CatalogQueryOptions, CliError, Command, DecodeOptions, DemoTarget,
     EncodeOptions, OutputFormat, ProfileQueryOptions, ProtoTarget, TemplateQueryOptions,
+    ValidateOptions,
 };
 
 pub(crate) fn parse_command(args: Vec<String>) -> Result<Option<Command>, CliError> {
@@ -19,6 +20,7 @@ pub(crate) fn parse_command(args: Vec<String>) -> Result<Option<Command>, CliErr
         "encode" => parse_encode_command(args),
         "decode" => parse_decode_command(args),
         "analyze" => parse_analyze_command(args),
+        "validate" => parse_validate_command(args),
         "languages" => parse_languages_command(args),
         "strategies" => parse_strategies_command(args),
         "models" => parse_models_command(args),
@@ -384,6 +386,123 @@ fn parse_analyze_command(
     })))
 }
 
+fn parse_validate_command(
+    mut args: impl Iterator<Item = String>,
+) -> Result<Option<Command>, CliError> {
+    let (mut lang, mut auto_detect_target) =
+        env_trace_proto_target("LSTEG_LANG")?.unwrap_or((ProtoTarget::Farsi, true));
+    let mut format = env_output_format("LSTEG_FORMAT")?.unwrap_or(OutputFormat::Text);
+    let mut trace = env_optional("LSTEG_TRACE");
+    let mut input_path = env_optional("LSTEG_INPUT");
+    let mut output_path = env_optional("LSTEG_OUTPUT");
+    let mut secret = env_optional("LSTEG_SECRET");
+    let mut secret_file = None;
+
+    let mut seen_trace = false;
+    let mut seen_input = false;
+    let mut seen_output = false;
+    let mut seen_secret = false;
+    let mut seen_secret_file = false;
+
+    while let Some(arg) = args.next() {
+        match arg.as_str() {
+            "--help" | "-h" => return Ok(None),
+            "--lang" => {
+                let value = next_arg_value(&mut args, "--lang")?;
+                let (resolved_lang, resolved_auto_detect) = parse_trace_proto_target(&value)?;
+                lang = resolved_lang;
+                auto_detect_target = resolved_auto_detect;
+            }
+            "--format" => {
+                let value = next_arg_value(&mut args, "--format")?;
+                format = parse_output_format(&value)?;
+            }
+            "--trace" => {
+                if seen_trace {
+                    return Err(CliError::usage(
+                        "--trace cannot be provided multiple times".to_string(),
+                    ));
+                }
+                seen_trace = true;
+                trace = Some(next_arg_value(&mut args, "--trace")?);
+            }
+            "--input" => {
+                if seen_input {
+                    return Err(CliError::usage(
+                        "--input cannot be provided multiple times".to_string(),
+                    ));
+                }
+                seen_input = true;
+                input_path = Some(next_arg_value(&mut args, "--input")?);
+            }
+            "--output" => {
+                if seen_output {
+                    return Err(CliError::usage(
+                        "--output cannot be provided multiple times".to_string(),
+                    ));
+                }
+                seen_output = true;
+                output_path = Some(next_arg_value(&mut args, "--output")?);
+            }
+            "--secret" => {
+                if seen_secret {
+                    return Err(CliError::usage(
+                        "--secret cannot be provided multiple times".to_string(),
+                    ));
+                }
+                if seen_secret_file {
+                    return Err(CliError::usage(
+                        "validate accepts either --secret or --secret-file, not both".to_string(),
+                    ));
+                }
+                seen_secret = true;
+                secret = Some(next_arg_value(&mut args, "--secret")?);
+                secret_file = None;
+            }
+            "--secret-file" => {
+                if seen_secret_file {
+                    return Err(CliError::usage(
+                        "--secret-file cannot be provided multiple times".to_string(),
+                    ));
+                }
+                if seen_secret {
+                    return Err(CliError::usage(
+                        "validate accepts either --secret or --secret-file, not both".to_string(),
+                    ));
+                }
+                seen_secret_file = true;
+                secret_file = Some(next_arg_value(&mut args, "--secret-file")?);
+                secret = None;
+            }
+            _ => {
+                return Err(CliError::usage(format!("unknown validate argument: {arg}")));
+            }
+        }
+    }
+
+    if trace.is_some() && input_path.is_some() {
+        return Err(CliError::usage(
+            "validate accepts either --trace or --input, not both".to_string(),
+        ));
+    }
+    if secret.is_some() && secret_file.is_some() {
+        return Err(CliError::usage(
+            "validate accepts either --secret or --secret-file, not both".to_string(),
+        ));
+    }
+
+    Ok(Some(Command::Validate(ValidateOptions {
+        target: lang,
+        auto_detect_target,
+        trace,
+        input_path,
+        output_path,
+        secret,
+        secret_file,
+        format,
+    })))
+}
+
 fn parse_demo_command(mut args: impl Iterator<Item = String>) -> Result<Option<Command>, CliError> {
     match args.next().as_deref() {
         Some("fa") => Ok(Some(Command::Demo(DemoTarget::Farsi))),
@@ -708,7 +827,7 @@ pub(crate) fn write_usage(mut writer: impl Write) -> std::io::Result<()> {
     writeln!(writer, "LinguaSteg CLI (scaffold)")?;
     writeln!(
         writer,
-        "Usage: lsteg <encode|decode|analyze|languages|strategies|models|catalog|templates|profiles|demo|proto-encode|proto-decode>"
+        "Usage: lsteg <encode|decode|analyze|validate|languages|strategies|models|catalog|templates|profiles|demo|proto-encode|proto-decode>"
     )?;
     writeln!(
         writer,
@@ -721,6 +840,10 @@ pub(crate) fn write_usage(mut writer: impl Write) -> std::io::Result<()> {
     writeln!(
         writer,
         "       lsteg analyze [--lang auto|fa|en] [--trace <text> | --input <file>] [--secret <value> | --secret-file <file>] [--format text|json] [--output <file>]"
+    )?;
+    writeln!(
+        writer,
+        "       lsteg validate [--lang auto|fa|en] [--trace <text> | --input <file>] [--secret <value> | --secret-file <file>] [--format text|json] [--output <file>]"
     )?;
     writeln!(writer, "       lsteg languages [--format text|json]")?;
     writeln!(writer, "       lsteg strategies [--format text|json]")?;
@@ -752,7 +875,7 @@ pub(crate) fn write_usage(mut writer: impl Write) -> std::io::Result<()> {
     )?;
     writeln!(
         writer,
-        "Env defaults: LSTEG_LANG (decode/analyze accepts auto), LSTEG_FORMAT, LSTEG_INPUT, LSTEG_OUTPUT, LSTEG_ENCODE_MESSAGE, LSTEG_TRACE, LSTEG_SECRET"
+        "Env defaults: LSTEG_LANG (decode/analyze/validate accepts auto), LSTEG_FORMAT, LSTEG_INPUT, LSTEG_OUTPUT, LSTEG_ENCODE_MESSAGE, LSTEG_TRACE, LSTEG_SECRET"
     )?;
     Ok(())
 }
