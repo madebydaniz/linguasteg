@@ -175,3 +175,70 @@ fn decode_non_contiguous_trace_stderr_matches_golden_fixture() {
         fixture_contents("decode_non_contiguous_stderr.out")
     );
 }
+
+#[test]
+fn templates_json_matches_golden_fixture() {
+    let output = run_lsteg(&["templates", "--format", "json"]);
+    assert!(output.status.success());
+    assert_eq!(
+        stdout_string(&output),
+        fixture_contents("templates_json.out")
+    );
+}
+
+#[test]
+fn profiles_json_matches_golden_fixture() {
+    let output = run_lsteg(&["profiles", "--format", "json"]);
+    assert!(output.status.success());
+    assert_eq!(
+        stdout_string(&output),
+        fixture_contents("profiles_json.out")
+    );
+}
+
+#[test]
+fn catalog_json_matches_golden_fixture() {
+    let output = run_lsteg(&["catalog", "--format", "json"]);
+    assert!(output.status.success());
+    assert_eq!(stdout_string(&output), fixture_contents("catalog_json.out"));
+}
+
+#[test]
+fn catalog_en_json_matches_golden_fixture() {
+    let output = run_lsteg(&["catalog", "--lang", "en", "--format", "json"]);
+    assert!(output.status.success());
+    assert_eq!(
+        stdout_string(&output),
+        fixture_contents("catalog_en_json.out")
+    );
+}
+
+#[test]
+fn validate_json_matches_golden_fixture() {
+    let input = fixture_path("encode_salam_text.out");
+    let input = input.to_string_lossy().into_owned();
+
+    let output = run_lsteg(&["validate", "--format", "json", "--input", &input]);
+    assert!(output.status.success());
+    assert_eq!(
+        stdout_string(&output),
+        fixture_contents("validate_salam_json.out")
+    );
+}
+
+#[test]
+fn validate_non_contiguous_trace_matches_golden_fixtures() {
+    let input = fixture_path("trace_salam_non_contiguous.input");
+    let input = input.to_string_lossy().into_owned();
+
+    let output = run_lsteg(&["validate", "--format", "json", "--input", &input]);
+    assert_eq!(output.status.code(), Some(1));
+    assert_eq!(
+        stdout_string(&output),
+        fixture_contents("validate_non_contiguous_stdout.out")
+    );
+    assert_eq!(
+        stderr_string(&output),
+        fixture_contents("validate_non_contiguous_stderr.out")
+    );
+}
