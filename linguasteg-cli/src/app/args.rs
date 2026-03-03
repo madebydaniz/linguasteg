@@ -40,14 +40,8 @@ fn parse_encode_command(
 ) -> Result<Option<Command>, CliError> {
     let mut lang = env_proto_target("LSTEG_LANG")?.unwrap_or(ProtoTarget::Farsi);
     let mut format = env_output_format("LSTEG_FORMAT")?.unwrap_or(OutputFormat::Text);
-    let mut message = env_optional("LSTEG_ENCODE_MESSAGE");
-    let mut input_path = env_optional("LSTEG_INPUT");
-    let mut output_path = env_optional("LSTEG_OUTPUT");
+    let mut payload = EncodePayloadArgs::from_env();
     let mut secrets = SecretArgs::from_env();
-
-    let mut seen_message = false;
-    let mut seen_input = false;
-    let mut seen_output = false;
 
     while let Some(arg) = args.next() {
         match arg.as_str() {
@@ -60,34 +54,10 @@ fn parse_encode_command(
                 let value = next_arg_value(&mut args, "--format")?;
                 format = parse_output_format(&value)?;
             }
-            "--message" => {
-                if seen_message {
-                    return Err(CliError::usage(
-                        "--message cannot be provided multiple times".to_string(),
-                    ));
-                }
-                seen_message = true;
-                message = Some(next_arg_value(&mut args, "--message")?);
-            }
-            "--input" => {
-                if seen_input {
-                    return Err(CliError::usage(
-                        "--input cannot be provided multiple times".to_string(),
-                    ));
-                }
-                seen_input = true;
-                input_path = Some(next_arg_value(&mut args, "--input")?);
-            }
-            "--output" => {
-                if seen_output {
-                    return Err(CliError::usage(
-                        "--output cannot be provided multiple times".to_string(),
-                    ));
-                }
-                seen_output = true;
-                output_path = Some(next_arg_value(&mut args, "--output")?);
-            }
             _ => {
+                if payload.handle_flag(arg.as_str(), &mut args)? {
+                    continue;
+                }
                 if secrets.handle_flag(arg.as_str(), &mut args, "encode")? {
                     continue;
                 }
@@ -96,16 +66,8 @@ fn parse_encode_command(
         }
     }
 
-    if message.is_some() && input_path.is_some() {
-        return Err(CliError::usage(
-            "encode accepts either --message or --input, not both".to_string(),
-        ));
-    }
-    if message.is_none() && input_path.is_none() {
-        return Err(CliError::usage(
-            "encode requires --message <text> or --input <file>".to_string(),
-        ));
-    }
+    payload.ensure_valid()?;
+    let (message, input_path, output_path) = payload.into_parts();
     secrets.ensure_not_ambiguous("encode")?;
     let (secret, secret_file) = secrets.into_parts();
 
@@ -498,6 +460,86 @@ fn parse_proto_decode_command(
     };
 
     Ok(Some(Command::ProtoDecode(target, trace, json)))
+}
+
+struct EncodePayloadArgs {
+    message: Option<String>,
+    input_path: Option<String>,
+    output_path: Option<String>,
+    seen_message: bool,
+    seen_input: bool,
+    seen_output: bool,
+}
+
+impl EncodePayloadArgs {
+    fn from_env() -> Self {
+        Self {
+            message: env_optional("LSTEG_ENCODE_MESSAGE"),
+            input_path: env_optional("LSTEG_INPUT"),
+            output_path: env_optional("LSTEG_OUTPUT"),
+            seen_message: false,
+            seen_input: false,
+            seen_output: false,
+        }
+    }
+
+    fn handle_flag(
+        &mut self,
+        arg: &str,
+        args: &mut impl Iterator<Item = String>,
+    ) -> Result<bool, CliError> {
+        match arg {
+            "--message" => {
+                if self.seen_message {
+                    return Err(CliError::usage(
+                        "--message cannot be provided multiple times".to_string(),
+                    ));
+                }
+                self.seen_message = true;
+                self.message = Some(next_arg_value(args, "--message")?);
+                Ok(true)
+            }
+            "--input" => {
+                if self.seen_input {
+                    return Err(CliError::usage(
+                        "--input cannot be provided multiple times".to_string(),
+                    ));
+                }
+                self.seen_input = true;
+                self.input_path = Some(next_arg_value(args, "--input")?);
+                Ok(true)
+            }
+            "--output" => {
+                if self.seen_output {
+                    return Err(CliError::usage(
+                        "--output cannot be provided multiple times".to_string(),
+                    ));
+                }
+                self.seen_output = true;
+                self.output_path = Some(next_arg_value(args, "--output")?);
+                Ok(true)
+            }
+            _ => Ok(false),
+        }
+    }
+
+    fn ensure_valid(&self) -> Result<(), CliError> {
+        if self.message.is_some() && self.input_path.is_some() {
+            return Err(CliError::usage(
+                "encode accepts either --message or --input, not both".to_string(),
+            ));
+        }
+        if self.message.is_none() && self.input_path.is_none() {
+            return Err(CliError::usage(
+                "encode requires --message <text> or --input <file>".to_string(),
+            ));
+        }
+        Ok(())
+    }
+
+    fn into_parts(self) -> (Option<String>, Option<String>, Option<String>) {
+        (self.message, self.input_path, self.output_path)
+    }
 }
 
 struct SecretArgs {
