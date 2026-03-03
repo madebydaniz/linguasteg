@@ -242,3 +242,20 @@ fn validate_non_contiguous_trace_matches_golden_fixtures() {
         fixture_contents("validate_non_contiguous_stderr.out")
     );
 }
+
+#[test]
+fn schemas_json_matches_golden_fixture() {
+    let output = run_lsteg(&["schemas", "--format", "json"]);
+    assert!(output.status.success());
+    assert_eq!(stdout_string(&output), fixture_contents("schemas_json.out"));
+}
+
+#[test]
+fn schemas_en_json_matches_golden_fixture() {
+    let output = run_lsteg(&["schemas", "--lang", "en", "--format", "json"]);
+    assert!(output.status.success());
+    assert_eq!(
+        stdout_string(&output),
+        fixture_contents("schemas_en_json.out")
+    );
+}
