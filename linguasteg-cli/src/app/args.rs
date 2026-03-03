@@ -1,8 +1,8 @@
 use std::io::Write;
 
 use super::types::{
-    AnalyzeOptions, CliError, Command, DecodeOptions, DemoTarget, EncodeOptions, OutputFormat,
-    ProfileQueryOptions, ProtoTarget, TemplateQueryOptions,
+    AnalyzeOptions, CatalogQueryOptions, CliError, Command, DecodeOptions, DemoTarget,
+    EncodeOptions, OutputFormat, ProfileQueryOptions, ProtoTarget, TemplateQueryOptions,
 };
 
 pub(crate) fn parse_command(args: Vec<String>) -> Result<Option<Command>, CliError> {
@@ -463,6 +463,8 @@ fn parse_catalog_command(
     mut args: impl Iterator<Item = String>,
 ) -> Result<Option<Command>, CliError> {
     let mut format = env_output_format("LSTEG_FORMAT")?.unwrap_or(OutputFormat::Text);
+    let mut target = None;
+    let mut seen_lang = false;
 
     while let Some(arg) = args.next() {
         match arg.as_str() {
@@ -471,11 +473,24 @@ fn parse_catalog_command(
                 let value = next_arg_value(&mut args, "--format")?;
                 format = parse_output_format(&value)?;
             }
+            "--lang" => {
+                if seen_lang {
+                    return Err(CliError::usage(
+                        "--lang cannot be provided multiple times".to_string(),
+                    ));
+                }
+                seen_lang = true;
+                let value = next_arg_value(&mut args, "--lang")?;
+                target = Some(parse_proto_target(&value)?);
+            }
             _ => return Err(CliError::usage(format!("unknown catalog argument: {arg}"))),
         }
     }
 
-    Ok(Some(Command::Catalog(format)))
+    Ok(Some(Command::Catalog(CatalogQueryOptions {
+        format,
+        target,
+    })))
 }
 
 fn parse_templates_command(
@@ -710,7 +725,10 @@ pub(crate) fn write_usage(mut writer: impl Write) -> std::io::Result<()> {
     writeln!(writer, "       lsteg languages [--format text|json]")?;
     writeln!(writer, "       lsteg strategies [--format text|json]")?;
     writeln!(writer, "       lsteg models [--format text|json]")?;
-    writeln!(writer, "       lsteg catalog [--format text|json]")?;
+    writeln!(
+        writer,
+        "       lsteg catalog [--lang fa|en] [--format text|json]"
+    )?;
     writeln!(
         writer,
         "       lsteg templates [--lang fa|en] [--format text|json]"

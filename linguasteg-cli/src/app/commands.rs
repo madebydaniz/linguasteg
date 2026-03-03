@@ -15,8 +15,8 @@ use super::runtime::{
 };
 use super::trace::{frame_sequence_error, parse_frames_from_trace, schema_for_template};
 use super::types::{
-    AnalyzeOptions, CliError, Command, DecodeOptions, DemoTarget, EncodeOptions, OutputFormat,
-    ProfileQueryOptions, ProtoTarget, TemplateQueryOptions,
+    AnalyzeOptions, CatalogQueryOptions, CliError, Command, DecodeOptions, DemoTarget,
+    EncodeOptions, OutputFormat, ProfileQueryOptions, ProtoTarget, TemplateQueryOptions,
 };
 
 pub(crate) fn execute(command: Command) -> Result<(), CliError> {
@@ -27,7 +27,7 @@ pub(crate) fn execute(command: Command) -> Result<(), CliError> {
         Command::Languages(format) => run_languages(format),
         Command::Strategies(format) => run_strategies(format),
         Command::Models(format) => run_models(format),
-        Command::Catalog(format) => run_catalog(format),
+        Command::Catalog(options) => run_catalog(options)?,
         Command::Templates(options) => run_templates(options)?,
         Command::Profiles(options) => run_profiles(options)?,
         Command::Demo(DemoTarget::Farsi) => run_demo(ProtoTarget::Farsi)?,
@@ -43,12 +43,24 @@ pub(crate) fn execute(command: Command) -> Result<(), CliError> {
     Ok(())
 }
 
-fn run_catalog(format: OutputFormat) {
-    let languages = supported_languages();
+fn run_catalog(options: CatalogQueryOptions) -> Result<(), CliError> {
+    let language_filter = options.target.map(ProtoTarget::as_str);
+    let languages = supported_languages()
+        .iter()
+        .filter(|item| language_filter.is_none_or(|code| item.code == code))
+        .collect::<Vec<_>>();
     let strategies = supported_strategies();
-    let models = supported_models();
+    let models = supported_models()
+        .iter()
+        .filter(|item| {
+            language_filter
+                .is_none_or(|code| item.languages.iter().any(|language| *language == code))
+        })
+        .collect::<Vec<_>>();
+    let template_items = collect_template_items(options.target)?;
+    let profile_items = collect_profile_items(options.target)?;
 
-    if matches!(format, OutputFormat::Json) {
+    if matches!(options.format, OutputFormat::Json) {
         let language_items = languages
             .iter()
             .map(|item| {
@@ -105,12 +117,47 @@ fn run_catalog(format: OutputFormat) {
             })
             .collect::<Vec<_>>()
             .join(",");
+        let template_json_items = template_items
+            .iter()
+            .map(|item| {
+                format!(
+                    "{{\"language\":\"{}\",\"language_display\":\"{}\",\"id\":\"{}\",\"display\":\"{}\",\"slot_count\":{}}}",
+                    json_escape(&item.language_code),
+                    json_escape(&item.language_display),
+                    json_escape(&item.template_id),
+                    json_escape(&item.template_display),
+                    item.slot_count
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(",");
+        let profile_json_items = profile_items
+            .iter()
+            .map(|item| {
+                let inspiration_label = item.inspiration_label.as_ref().map_or_else(
+                    || "null".to_string(),
+                    |value| format!("\"{}\"", json_escape(value)),
+                );
+                format!(
+                    "{{\"language\":\"{}\",\"language_display\":\"{}\",\"id\":\"{}\",\"display\":\"{}\",\"register\":\"{}\",\"strength\":\"{}\",\"inspiration_kind\":\"{}\",\"inspiration_label\":{}}}",
+                    json_escape(&item.language_code),
+                    json_escape(&item.language_display),
+                    json_escape(&item.profile_id),
+                    json_escape(&item.profile_display),
+                    json_escape(register_label(item.register)),
+                    json_escape(strength_label(item.strength)),
+                    json_escape(&item.inspiration_kind),
+                    inspiration_label
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(",");
 
         println!(
-            "{{\"mode\":\"catalog\",\"languages\":[{}],\"strategies\":[{}],\"models\":[{}]}}",
-            language_items, strategy_items, model_items
+            "{{\"mode\":\"catalog\",\"languages\":[{}],\"strategies\":[{}],\"models\":[{}],\"templates\":[{}],\"profiles\":[{}]}}",
+            language_items, strategy_items, model_items, template_json_items, profile_json_items
         );
-        return;
+        return Ok(());
     }
 
     println!("catalog:");
@@ -147,6 +194,32 @@ fn run_catalog(format: OutputFormat) {
             item.provider, item.id, item.display, languages, capabilities
         );
     }
+    println!("templates:");
+    for item in &template_items {
+        println!(
+            "- {}/{} ({}) slots: {}",
+            item.language_code, item.template_id, item.template_display, item.slot_count
+        );
+    }
+    println!("profiles:");
+    for item in &profile_items {
+        let inspiration_label = item
+            .inspiration_label
+            .as_ref()
+            .map_or("<none>", String::as_str);
+        println!(
+            "- {}/{} ({}) register: {} strength: {} inspiration: {} ({})",
+            item.language_code,
+            item.profile_id,
+            item.profile_display,
+            register_label(item.register),
+            strength_label(item.strength),
+            item.inspiration_kind,
+            inspiration_label
+        );
+    }
+
+    Ok(())
 }
 
 struct TemplateCatalogItem {
@@ -158,32 +231,7 @@ struct TemplateCatalogItem {
 }
 
 fn run_templates(options: TemplateQueryOptions) -> Result<(), CliError> {
-    let mut items = Vec::new();
-    let targets = match options.target {
-        Some(target) => vec![target],
-        None => vec![ProtoTarget::Farsi, ProtoTarget::English],
-    };
-
-    for target in targets {
-        let runtime = runtime_for_target(target)?;
-        let language = map_domain(
-            LanguageTag::new(runtime.language_code),
-            "invalid language tag",
-        )?;
-        for template in runtime.pack.templates_for_language(&language) {
-            items.push(TemplateCatalogItem {
-                language_code: runtime.language_code.to_string(),
-                language_display: runtime.language_display.to_string(),
-                template_id: template.id.to_string(),
-                template_display: template.display_name.clone(),
-                slot_count: template.slots.len(),
-            });
-        }
-    }
-
-    items.sort_by(|left, right| {
-        (&left.language_code, &left.template_id).cmp(&(&right.language_code, &right.template_id))
-    });
+    let items = collect_template_items(options.target)?;
 
     if matches!(options.format, OutputFormat::Json) {
         let json_items = items
@@ -226,12 +274,46 @@ struct ProfileCatalogItem {
     inspiration_label: Option<String>,
 }
 
-fn run_profiles(options: ProfileQueryOptions) -> Result<(), CliError> {
-    let mut items = Vec::new();
-    let targets = match options.target {
-        Some(target) => vec![target],
+fn selected_targets(target: Option<ProtoTarget>) -> Vec<ProtoTarget> {
+    match target {
+        Some(value) => vec![value],
         None => vec![ProtoTarget::Farsi, ProtoTarget::English],
-    };
+    }
+}
+
+fn collect_template_items(
+    target: Option<ProtoTarget>,
+) -> Result<Vec<TemplateCatalogItem>, CliError> {
+    let targets = selected_targets(target);
+    let mut items = Vec::new();
+
+    for target in targets {
+        let runtime = runtime_for_target(target)?;
+        let language = map_domain(
+            LanguageTag::new(runtime.language_code),
+            "invalid language tag",
+        )?;
+        for template in runtime.pack.templates_for_language(&language) {
+            items.push(TemplateCatalogItem {
+                language_code: runtime.language_code.to_string(),
+                language_display: runtime.language_display.to_string(),
+                template_id: template.id.to_string(),
+                template_display: template.display_name.clone(),
+                slot_count: template.slots.len(),
+            });
+        }
+    }
+
+    items.sort_by(|left, right| {
+        (&left.language_code, &left.template_id).cmp(&(&right.language_code, &right.template_id))
+    });
+
+    Ok(items)
+}
+
+fn collect_profile_items(target: Option<ProtoTarget>) -> Result<Vec<ProfileCatalogItem>, CliError> {
+    let targets = selected_targets(target);
+    let mut items = Vec::new();
 
     for target in targets {
         let runtime = runtime_for_target(target)?;
@@ -257,6 +339,12 @@ fn run_profiles(options: ProfileQueryOptions) -> Result<(), CliError> {
     items.sort_by(|left, right| {
         (&left.language_code, &left.profile_id).cmp(&(&right.language_code, &right.profile_id))
     });
+
+    Ok(items)
+}
+
+fn run_profiles(options: ProfileQueryOptions) -> Result<(), CliError> {
+    let items = collect_profile_items(options.target)?;
 
     if matches!(options.format, OutputFormat::Json) {
         let json_items = items

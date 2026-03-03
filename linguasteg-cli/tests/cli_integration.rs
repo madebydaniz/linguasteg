@@ -206,10 +206,16 @@ fn catalog_text_contains_all_sections() {
     assert!(stdout.contains("languages:"));
     assert!(stdout.contains("strategies:"));
     assert!(stdout.contains("models:"));
+    assert!(stdout.contains("templates:"));
+    assert!(stdout.contains("profiles:"));
     assert!(stdout.contains("- fa (Farsi, rtl)"));
     assert!(stdout.contains("- symbolic-stub (Symbolic Stub) capabilities: deterministic-seed"));
     assert!(stdout.contains(
         "- stub/stub-local (Stub Local) languages: fa,en capabilities: deterministic-seed"
+    ));
+    assert!(stdout.contains("- fa/fa-basic-sov (Basic SOV) slots: 4"));
+    assert!(stdout.contains(
+        "- en/en-neutral-prototype (Neutral English Prototype) register: neutral strength: light inspiration: register-only (<none>)"
     ));
 }
 
@@ -223,9 +229,28 @@ fn catalog_json_exposes_all_sections() {
     assert!(stdout.contains("\"languages\":["));
     assert!(stdout.contains("\"strategies\":["));
     assert!(stdout.contains("\"models\":["));
+    assert!(stdout.contains("\"templates\":["));
+    assert!(stdout.contains("\"profiles\":["));
     assert!(stdout.contains("\"code\":\"fa\""));
     assert!(stdout.contains("\"id\":\"symbolic-stub\""));
     assert!(stdout.contains("\"provider\":\"stub\""));
+    assert!(stdout.contains("\"id\":\"fa-basic-sov\""));
+    assert!(stdout.contains("\"id\":\"fa-neutral-formal\""));
+}
+
+#[test]
+fn catalog_lang_filter_limits_language_scoped_sections() {
+    let output = run_lsteg(&["catalog", "--lang", "en", "--format", "json"]);
+    assert!(output.status.success());
+
+    let stdout = stdout_string(&output);
+    assert!(stdout.contains("\"mode\":\"catalog\""));
+    assert!(stdout.contains("\"code\":\"en\""));
+    assert!(!stdout.contains("\"code\":\"fa\""));
+    assert!(stdout.contains("\"id\":\"en-basic-svo\""));
+    assert!(!stdout.contains("\"id\":\"fa-basic-sov\""));
+    assert!(stdout.contains("\"id\":\"en-neutral-prototype\""));
+    assert!(!stdout.contains("\"id\":\"fa-neutral-formal\""));
 }
 
 #[test]

@@ -7,7 +7,7 @@ pub(crate) enum Command {
     Languages(OutputFormat),
     Strategies(OutputFormat),
     Models(OutputFormat),
-    Catalog(OutputFormat),
+    Catalog(CatalogQueryOptions),
     Templates(TemplateQueryOptions),
     Profiles(ProfileQueryOptions),
     Demo(DemoTarget),
@@ -48,6 +48,11 @@ pub(crate) struct AnalyzeOptions {
 }
 
 pub(crate) struct TemplateQueryOptions {
+    pub(crate) format: OutputFormat,
+    pub(crate) target: Option<ProtoTarget>,
+}
+
+pub(crate) struct CatalogQueryOptions {
     pub(crate) format: OutputFormat,
     pub(crate) target: Option<ProtoTarget>,
 }
