@@ -144,6 +144,30 @@ impl LanguageRealizer for FarsiPrototypeRealizer {
 #[derive(Debug, Default, Clone, Copy)]
 pub struct FarsiPrototypeSymbolicMapper;
 
+const FA_PROFILE_NEUTRAL_FORMAL: &str = "fa-neutral-formal";
+const FA_PROFILE_LITERARY_CLASSIC: &str = "fa-literary-classic-inspired";
+const FA_PROFILE_SAADI_LIGHT: &str = "fa-saadi-inspired-light";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum FarsiEncodeProfile {
+    NeutralFormal,
+    LiteraryClassicInspired,
+    SaadiInspiredLight,
+}
+
+impl FarsiEncodeProfile {
+    fn from_profile_id(profile_id: Option<&StyleProfileId>) -> CoreResult<Self> {
+        match profile_id.map(StyleProfileId::as_str) {
+            None | Some(FA_PROFILE_NEUTRAL_FORMAL) => Ok(Self::NeutralFormal),
+            Some(FA_PROFILE_LITERARY_CLASSIC) => Ok(Self::LiteraryClassicInspired),
+            Some(FA_PROFILE_SAADI_LIGHT) => Ok(Self::SaadiInspiredLight),
+            Some(value) => Err(CoreError::InvalidTemplate(format!(
+                "unsupported farsi style profile '{value}'"
+            ))),
+        }
+    }
+}
+
 impl FarsiPrototypeSymbolicMapper {
     pub fn frame_schemas(&self) -> Vec<SymbolicFrameSchema> {
         farsi_symbolic_frame_schemas()
@@ -153,17 +177,34 @@ impl FarsiPrototypeSymbolicMapper {
         &self,
         payload_plan: &SymbolicPayloadPlan,
     ) -> CoreResult<Vec<RealizationPlan>> {
+        self.map_payload_to_plans_with_profile(payload_plan, None)
+    }
+
+    pub fn map_payload_to_plans_with_profile(
+        &self,
+        payload_plan: &SymbolicPayloadPlan,
+        profile_id: Option<&StyleProfileId>,
+    ) -> CoreResult<Vec<RealizationPlan>> {
+        let profile = FarsiEncodeProfile::from_profile_id(profile_id)?;
         payload_plan
             .frames
             .iter()
-            .map(|frame| self.map_frame_to_plan(frame))
+            .map(|frame| self.map_frame_to_plan_with_profile(frame, profile))
             .collect()
     }
 
     pub fn map_frame_to_plan(&self, frame: &SymbolicFramePlan) -> CoreResult<RealizationPlan> {
+        self.map_frame_to_plan_with_profile(frame, FarsiEncodeProfile::NeutralFormal)
+    }
+
+    fn map_frame_to_plan_with_profile(
+        &self,
+        frame: &SymbolicFramePlan,
+        profile: FarsiEncodeProfile,
+    ) -> CoreResult<RealizationPlan> {
         match frame.template_id.as_str() {
-            "fa-basic-sov" => map_basic_sov_frame(frame),
-            "fa-time-location-sov" => map_time_location_sov_frame(frame),
+            "fa-basic-sov" => map_basic_sov_frame(frame, profile),
+            "fa-time-location-sov" => map_time_location_sov_frame(frame, profile),
             _ => Err(CoreError::UnsupportedTemplate(
                 frame.template_id.to_string(),
             )),
@@ -202,7 +243,10 @@ impl FarsiPrototypeSymbolicMapper {
     }
 }
 
-fn map_basic_sov_frame(frame: &SymbolicFramePlan) -> CoreResult<RealizationPlan> {
+fn map_basic_sov_frame(
+    frame: &SymbolicFramePlan,
+    profile: FarsiEncodeProfile,
+) -> CoreResult<RealizationPlan> {
     let subject_value = symbolic_value_for_slot(frame, "subject")?;
     let object_value = symbolic_value_for_slot(frame, "object")?;
     let adjective_value = symbolic_value_for_slot(frame, "adjective")?;
@@ -212,31 +256,29 @@ fn map_basic_sov_frame(frame: &SymbolicFramePlan) -> CoreResult<RealizationPlan>
     let object_lexeme = select_noun_lexeme(object_value)?;
     let adjective_lexeme = select_compatible_adjective_lexeme(object_lexeme, adjective_value)?;
     let verb_lexeme = select_compatible_verb_lexeme(object_lexeme, verb_value)?;
+    let object_surface = style_noun_surface(profile, object_lexeme);
+    let adjective_surface = style_adjective_surface(profile, adjective_lexeme);
+    let verb_surface = style_verb_surface(profile, verb_lexeme);
 
     Ok(RealizationPlan {
         template_id: TemplateId::new("fa-basic-sov")?,
         assignments: vec![
             create_assignment("subject", subject_surface, None)?,
-            create_assignment(
-                "object",
-                object_lexeme.canonical.to_string(),
-                Some(object_lexeme.canonical),
-            )?,
+            create_assignment("object", object_surface, Some(object_lexeme.canonical))?,
             create_assignment(
                 "adjective",
-                adjective_lexeme.canonical.to_string(),
+                adjective_surface,
                 Some(adjective_lexeme.canonical),
             )?,
-            create_assignment(
-                "verb",
-                verb_lexeme.canonical.to_string(),
-                Some(verb_lexeme.canonical),
-            )?,
+            create_assignment("verb", verb_surface, Some(verb_lexeme.canonical))?,
         ],
     })
 }
 
-fn map_time_location_sov_frame(frame: &SymbolicFramePlan) -> CoreResult<RealizationPlan> {
+fn map_time_location_sov_frame(
+    frame: &SymbolicFramePlan,
+    profile: FarsiEncodeProfile,
+) -> CoreResult<RealizationPlan> {
     let subject_value = symbolic_value_for_slot(frame, "subject")?;
     let time_value = symbolic_value_for_slot(frame, "time")?;
     let location_value = symbolic_value_for_slot(frame, "location")?;
@@ -248,6 +290,8 @@ fn map_time_location_sov_frame(frame: &SymbolicFramePlan) -> CoreResult<Realizat
     let location_surface = select_surface(location_forms(), location_value)?;
     let object_lexeme = select_noun_lexeme(object_value)?;
     let verb_lexeme = select_compatible_verb_lexeme(object_lexeme, verb_value)?;
+    let object_surface = style_noun_surface(profile, object_lexeme);
+    let verb_surface = style_verb_surface(profile, verb_lexeme);
 
     Ok(RealizationPlan {
         template_id: TemplateId::new("fa-time-location-sov")?,
@@ -255,16 +299,8 @@ fn map_time_location_sov_frame(frame: &SymbolicFramePlan) -> CoreResult<Realizat
             create_assignment("subject", subject_surface, None)?,
             create_assignment("time", time_surface, None)?,
             create_assignment("location", location_surface, None)?,
-            create_assignment(
-                "object",
-                object_lexeme.canonical.to_string(),
-                Some(object_lexeme.canonical),
-            )?,
-            create_assignment(
-                "verb",
-                verb_lexeme.canonical.to_string(),
-                Some(verb_lexeme.canonical),
-            )?,
+            create_assignment("object", object_surface, Some(object_lexeme.canonical))?,
+            create_assignment("verb", verb_surface, Some(verb_lexeme.canonical))?,
         ],
     })
 }
@@ -589,6 +625,65 @@ fn select_compatible_adjective_lexeme(
     Ok(compatible[(encoded_value as usize) % compatible.len()])
 }
 
+fn style_noun_surface(profile: FarsiEncodeProfile, noun: &FarsiNounLexeme) -> String {
+    let surface = match profile {
+        FarsiEncodeProfile::NeutralFormal => noun.canonical,
+        FarsiEncodeProfile::LiteraryClassicInspired => match noun.canonical {
+            "نامه" => "مکتوب",
+            "داستان" => "حکایت",
+            "پیام" => "پیغام",
+            "غذا" => "طعام",
+            _ => noun.canonical,
+        },
+        FarsiEncodeProfile::SaadiInspiredLight => match noun.canonical {
+            "نامه" => "مکتوب",
+            "پیام" => "پیغام",
+            _ => noun.canonical,
+        },
+    };
+    surface.to_string()
+}
+
+fn style_verb_surface(profile: FarsiEncodeProfile, verb: &FarsiVerbLexeme) -> String {
+    let surface = match profile {
+        FarsiEncodeProfile::NeutralFormal => verb.canonical,
+        FarsiEncodeProfile::LiteraryClassicInspired => match verb.canonical {
+            "نوشت" => "نگاشت",
+            "دید" => "نگریست",
+            "خورد" => "چشید",
+            "نوشید" => "سرکشید",
+            _ => verb.canonical,
+        },
+        FarsiEncodeProfile::SaadiInspiredLight => match verb.canonical {
+            "نوشت" => "نگاشت",
+            "دید" => "نگریست",
+            _ => verb.canonical,
+        },
+    };
+    surface.to_string()
+}
+
+fn style_adjective_surface(
+    profile: FarsiEncodeProfile,
+    adjective: &FarsiAdjectiveLexeme,
+) -> String {
+    let surface = match profile {
+        FarsiEncodeProfile::NeutralFormal => adjective.canonical,
+        FarsiEncodeProfile::LiteraryClassicInspired => match adjective.canonical {
+            "زیبا" => "خوش",
+            "قدیمی" => "کهن",
+            "تازه" => "نو",
+            _ => adjective.canonical,
+        },
+        FarsiEncodeProfile::SaadiInspiredLight => match adjective.canonical {
+            "زیبا" => "خوش",
+            "تازه" => "نو",
+            _ => adjective.canonical,
+        },
+    };
+    surface.to_string()
+}
+
 fn is_verb_compatible(noun: &FarsiNounLexeme, verb: &FarsiVerbLexeme) -> bool {
     noun.semantic_tags
         .iter()
@@ -895,7 +990,7 @@ const FARSI_NOUN_LEXEMES: &[FarsiNounLexeme] = &[
     },
     FarsiNounLexeme {
         canonical: "نامه",
-        accepted_forms: &["نامه", "nameh"],
+        accepted_forms: &["نامه", "nameh", "مکتوب"],
         semantic_tags: &["core", "document", "message", "physical-object"],
     },
     FarsiNounLexeme {
@@ -905,7 +1000,7 @@ const FARSI_NOUN_LEXEMES: &[FarsiNounLexeme] = &[
     },
     FarsiNounLexeme {
         canonical: "غذا",
-        accepted_forms: &["غذا", "ghaza", "food"],
+        accepted_forms: &["غذا", "ghaza", "food", "طعام"],
         semantic_tags: &["core", "food"],
     },
     FarsiNounLexeme {
@@ -920,7 +1015,7 @@ const FARSI_NOUN_LEXEMES: &[FarsiNounLexeme] = &[
     },
     FarsiNounLexeme {
         canonical: "داستان",
-        accepted_forms: &["داستان"],
+        accepted_forms: &["داستان", "حکایت"],
         semantic_tags: &["core"],
     },
     FarsiNounLexeme {
@@ -970,7 +1065,7 @@ const FARSI_NOUN_LEXEMES: &[FarsiNounLexeme] = &[
     },
     FarsiNounLexeme {
         canonical: "پیام",
-        accepted_forms: &["پیام"],
+        accepted_forms: &["پیام", "پیغام"],
         semantic_tags: &["core"],
     },
     FarsiNounLexeme {
@@ -1065,12 +1160,12 @@ const FARSI_VERB_LEXEMES: &[FarsiVerbLexeme] = &[
     },
     FarsiVerbLexeme {
         canonical: "نوشت",
-        accepted_forms: &["نوشت", "nevesht", "wrote"],
+        accepted_forms: &["نوشت", "nevesht", "wrote", "نگاشت"],
         accepted_object_tags: &["core", "document", "message"],
     },
     FarsiVerbLexeme {
         canonical: "دید",
-        accepted_forms: &["دید", "did", "saw"],
+        accepted_forms: &["دید", "did", "saw", "نگریست"],
         accepted_object_tags: &[
             "core",
             "document",
@@ -1084,12 +1179,12 @@ const FARSI_VERB_LEXEMES: &[FarsiVerbLexeme] = &[
     },
     FarsiVerbLexeme {
         canonical: "خورد",
-        accepted_forms: &["خورد", "khord", "ate"],
+        accepted_forms: &["خورد", "khord", "ate", "چشید"],
         accepted_object_tags: &["core", "food"],
     },
     FarsiVerbLexeme {
         canonical: "نوشید",
-        accepted_forms: &["نوشید", "noushid", "drank"],
+        accepted_forms: &["نوشید", "noushid", "drank", "سرکشید"],
         accepted_object_tags: &["core", "drink"],
     },
     FarsiVerbLexeme {
@@ -1232,7 +1327,7 @@ const FARSI_VERB_LEXEMES: &[FarsiVerbLexeme] = &[
 const FARSI_ADJECTIVE_LEXEMES: &[FarsiAdjectiveLexeme] = &[
     FarsiAdjectiveLexeme {
         canonical: "زیبا",
-        accepted_forms: &["زیبا", "ziba"],
+        accepted_forms: &["زیبا", "ziba", "خوش"],
         accepted_noun_tags: &[
             "core",
             "document",
@@ -1245,12 +1340,12 @@ const FARSI_ADJECTIVE_LEXEMES: &[FarsiAdjectiveLexeme] = &[
     },
     FarsiAdjectiveLexeme {
         canonical: "قدیمی",
-        accepted_forms: &["قدیمی", "ghadimi"],
+        accepted_forms: &["قدیمی", "ghadimi", "کهن"],
         accepted_noun_tags: &["core", "document", "image", "physical-object"],
     },
     FarsiAdjectiveLexeme {
         canonical: "تازه",
-        accepted_forms: &["تازه", "taze"],
+        accepted_forms: &["تازه", "taze", "نو"],
         accepted_noun_tags: &["core", "food", "drink", "plant"],
     },
     FarsiAdjectiveLexeme {

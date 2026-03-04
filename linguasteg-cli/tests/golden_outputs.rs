@@ -3,12 +3,13 @@ use std::path::PathBuf;
 use std::process::{Command, Output};
 
 const TEST_SECRET: &str = "linguasteg-test-secret";
-const ENV_KEYS: [&str; 7] = [
+const ENV_KEYS: [&str; 8] = [
     "LSTEG_LANG",
     "LSTEG_FORMAT",
     "LSTEG_INPUT",
     "LSTEG_OUTPUT",
     "LSTEG_ENCODE_MESSAGE",
+    "LSTEG_PROFILE",
     "LSTEG_TRACE",
     "LSTEG_SECRET",
 ];

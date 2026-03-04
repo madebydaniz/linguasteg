@@ -3,8 +3,8 @@ use std::io::Read;
 
 use linguasteg_core::{
     DecodeRequest, EncodeRequest, FixedWidthPlanningOptions, LanguageTag, RealizationPlan,
-    SlotAssignment, SlotId, StyleInspiration, StyleProfileRegistry, StyleStrength, TemplateId,
-    TemplateRegistry, WritingRegister, open_payload, seal_payload,
+    SlotAssignment, SlotId, StyleInspiration, StyleProfileId, StyleProfileRegistry, StyleStrength,
+    TemplateId, TemplateRegistry, WritingRegister, open_payload, seal_payload,
 };
 
 use super::analysis::{analyze_trace_summary, render_trace_analysis_output};
@@ -705,6 +705,7 @@ fn run_encode(options: EncodeOptions) -> Result<(), CliError> {
         options.format,
         Some(&secret),
         options.emit_trace,
+        options.profile.as_deref(),
     )?;
     write_output(&output, options.output_path.as_deref())
 }
@@ -934,7 +935,7 @@ fn run_proto_encode(target: ProtoTarget, payload_text: &str, json: bool) -> Resu
     } else {
         OutputFormat::Text
     };
-    let output = render_proto_encode_output(target, payload_text, format, None, true)?;
+    let output = render_proto_encode_output(target, payload_text, format, None, true, None)?;
     println!("{output}");
     Ok(())
 }
@@ -978,6 +979,7 @@ fn render_proto_encode_output(
     format: OutputFormat,
     secret: Option<&[u8]>,
     emit_trace: bool,
+    profile: Option<&str>,
 ) -> Result<String, CliError> {
     let payload = payload_text.as_bytes();
     let symbolic_payload = match secret {
@@ -986,6 +988,7 @@ fn render_proto_encode_output(
         None => payload.to_vec(),
     };
     let runtime = runtime_for_target(target)?;
+    let profile_id = resolve_encode_profile_id(&runtime, profile)?;
     let schemas = runtime.mapper.frame_schemas();
     let orchestration = map_domain(
         runtime.orchestrator().orchestrate_encode(
@@ -1002,7 +1005,9 @@ fn render_proto_encode_output(
     )?;
     let payload_plan = orchestration.symbolic_plan;
     let realization_plans = map_domain(
-        runtime.mapper.map_payload_to_plans(&payload_plan),
+        runtime
+            .mapper
+            .map_payload_to_plans_with_profile(&payload_plan, profile_id.as_ref()),
         "failed to map payload to realization plans",
     )?;
 
@@ -1064,6 +1069,9 @@ fn render_proto_encode_output(
     let mut report_lines = Vec::new();
     report_lines.push(format!("{} prototype encode", runtime.language_display));
     report_lines.push(format!("input text: {payload_text}"));
+    if let Some(profile_id) = &profile_id {
+        report_lines.push(format!("style profile: {profile_id}"));
+    }
     report_lines.push(format!("payload bytes: {}", payload.len()));
     report_lines.push(format!(
         "encoded bytes (with length prefix): {}",
@@ -1255,6 +1263,37 @@ fn operation_auto_requires_trace_or_text_error(operation: &str) -> CliError {
     CliError::input(format!(
         "{operation} requires parseable trace frames or canonical stego text"
     ))
+}
+
+fn resolve_encode_profile_id(
+    runtime: &PrototypeRuntime,
+    profile: Option<&str>,
+) -> Result<Option<StyleProfileId>, CliError> {
+    let Some(raw_profile_id) = profile else {
+        return Ok(None);
+    };
+
+    let profile_id = StyleProfileId::new(raw_profile_id).map_err(|_| {
+        CliError::config(format!(
+            "invalid style profile identifier '{raw_profile_id}'"
+        ))
+    })?;
+
+    let descriptor = runtime.pack.style_profile(&profile_id).ok_or_else(|| {
+        CliError::config(format!(
+            "unsupported profile '{}' for language '{}'",
+            profile_id, runtime.language_code
+        ))
+    })?;
+
+    if descriptor.language.as_str() != runtime.language_code {
+        return Err(CliError::config(format!(
+            "profile '{}' is not available for language '{}'",
+            profile_id, runtime.language_code
+        )));
+    }
+
+    Ok(Some(profile_id))
 }
 
 fn resolve_encode_payload(options: &EncodeOptions) -> Result<String, CliError> {

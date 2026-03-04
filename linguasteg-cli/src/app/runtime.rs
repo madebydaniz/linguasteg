@@ -3,8 +3,8 @@ use linguasteg_core::{
     LanguageRealizer, LanguageRegistry, LanguageTag, ModelCapability, ModelDescriptor, ModelId,
     ModelRegistry, ModelSelection, PipelineOptions, PipelineOrchestrator, ProviderId,
     RealizationPlan, RealizationTemplateDescriptor, StrategyDescriptor, StrategyId,
-    StrategyRegistry, StyleProfileDescriptor, StyleProfileRegistry, SymbolicFramePlan,
-    SymbolicFrameSchema, SymbolicPayloadPlan, TemplateRegistry, TextExtractor,
+    StrategyRegistry, StyleProfileDescriptor, StyleProfileId, StyleProfileRegistry,
+    SymbolicFramePlan, SymbolicFrameSchema, SymbolicPayloadPlan, TemplateRegistry, TextExtractor,
 };
 use linguasteg_models::{
     EnglishPrototypeConstraintChecker, EnglishPrototypeLanguagePack, EnglishPrototypeRealizer,
@@ -130,9 +130,10 @@ impl TemplateRegistry for RuntimeLanguagePackHandle {
 pub(crate) trait RuntimeSymbolicMapper: Send + Sync {
     fn frame_schemas(&self) -> Vec<SymbolicFrameSchema>;
 
-    fn map_payload_to_plans(
+    fn map_payload_to_plans_with_profile(
         &self,
         payload_plan: &SymbolicPayloadPlan,
+        profile_id: Option<&StyleProfileId>,
     ) -> CoreResult<Vec<RealizationPlan>>;
 
     fn map_plans_to_frames(&self, plans: &[RealizationPlan]) -> CoreResult<Vec<SymbolicFramePlan>>;
@@ -143,11 +144,16 @@ impl RuntimeSymbolicMapper for FarsiPrototypeSymbolicMapper {
         FarsiPrototypeSymbolicMapper::frame_schemas(self)
     }
 
-    fn map_payload_to_plans(
+    fn map_payload_to_plans_with_profile(
         &self,
         payload_plan: &SymbolicPayloadPlan,
+        profile_id: Option<&StyleProfileId>,
     ) -> CoreResult<Vec<RealizationPlan>> {
-        FarsiPrototypeSymbolicMapper::map_payload_to_plans(self, payload_plan)
+        FarsiPrototypeSymbolicMapper::map_payload_to_plans_with_profile(
+            self,
+            payload_plan,
+            profile_id,
+        )
     }
 
     fn map_plans_to_frames(&self, plans: &[RealizationPlan]) -> CoreResult<Vec<SymbolicFramePlan>> {
@@ -160,11 +166,16 @@ impl RuntimeSymbolicMapper for EnglishPrototypeSymbolicMapper {
         EnglishPrototypeSymbolicMapper::frame_schemas(self)
     }
 
-    fn map_payload_to_plans(
+    fn map_payload_to_plans_with_profile(
         &self,
         payload_plan: &SymbolicPayloadPlan,
+        profile_id: Option<&StyleProfileId>,
     ) -> CoreResult<Vec<RealizationPlan>> {
-        EnglishPrototypeSymbolicMapper::map_payload_to_plans(self, payload_plan)
+        EnglishPrototypeSymbolicMapper::map_payload_to_plans_with_profile(
+            self,
+            payload_plan,
+            profile_id,
+        )
     }
 
     fn map_plans_to_frames(&self, plans: &[RealizationPlan]) -> CoreResult<Vec<SymbolicFramePlan>> {

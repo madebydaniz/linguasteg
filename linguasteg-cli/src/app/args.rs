@@ -41,6 +41,8 @@ fn parse_encode_command(
     let mut lang = env_proto_target("LSTEG_LANG")?.unwrap_or(ProtoTarget::Farsi);
     let mut format = env_output_format("LSTEG_FORMAT")?.unwrap_or(OutputFormat::Text);
     let mut emit_trace = false;
+    let mut profile = env_optional("LSTEG_PROFILE");
+    let mut seen_profile = false;
     let mut payload = EncodePayloadArgs::from_env();
     let mut secrets = SecretArgs::from_env();
 
@@ -55,6 +57,15 @@ fn parse_encode_command(
             }
             "--emit-trace" => {
                 emit_trace = true;
+            }
+            "--profile" => {
+                if seen_profile {
+                    return Err(CliError::usage(
+                        "--profile cannot be provided multiple times".to_string(),
+                    ));
+                }
+                seen_profile = true;
+                profile = Some(next_arg_value(&mut args, "--profile")?);
             }
             _ => {
                 if payload.handle_flag(arg.as_str(), &mut args)? {
@@ -79,6 +90,7 @@ fn parse_encode_command(
         input_path,
         output_path,
         emit_trace,
+        profile,
         secret,
         secret_file,
         format,
@@ -772,7 +784,7 @@ pub(crate) fn write_usage(mut writer: impl Write) -> std::io::Result<()> {
     )?;
     writeln!(
         writer,
-        "       lsteg encode [--lang fa|en] (--message <text> | --input <file>) [--emit-trace] [--secret <value> | --secret-file <file>] [--format text|json] [--output <file>]"
+        "       lsteg encode [--lang fa|en] (--message <text> | --input <file>) [--emit-trace] [--profile <id>] [--secret <value> | --secret-file <file>] [--format text|json] [--output <file>]"
     )?;
     writeln!(
         writer,
@@ -820,7 +832,7 @@ pub(crate) fn write_usage(mut writer: impl Write) -> std::io::Result<()> {
     )?;
     writeln!(
         writer,
-        "Env defaults: LSTEG_LANG (decode/analyze/validate accepts auto), LSTEG_FORMAT, LSTEG_INPUT, LSTEG_OUTPUT, LSTEG_ENCODE_MESSAGE, LSTEG_TRACE, LSTEG_SECRET"
+        "Env defaults: LSTEG_LANG (decode/analyze/validate accepts auto), LSTEG_FORMAT, LSTEG_INPUT, LSTEG_OUTPUT, LSTEG_ENCODE_MESSAGE, LSTEG_PROFILE, LSTEG_TRACE, LSTEG_SECRET"
     )?;
     Ok(())
 }
@@ -932,6 +944,47 @@ mod tests {
 
         assert!(matches!(options.input_mode, DecodeInputMode::Trace));
         assert!(options.trace.is_some());
+    }
+
+    #[test]
+    fn parse_encode_command_sets_profile_option() {
+        let command = parse_command(vec![
+            "encode".to_string(),
+            "--message".to_string(),
+            "salam".to_string(),
+            "--profile".to_string(),
+            "fa-saadi-inspired-light".to_string(),
+        ])
+        .expect("parse should succeed")
+        .expect("command should exist");
+
+        let Command::Encode(options) = command else {
+            panic!("expected encode command");
+        };
+
+        assert_eq!(options.profile.as_deref(), Some("fa-saadi-inspired-light"));
+    }
+
+    #[test]
+    fn parse_encode_command_rejects_duplicate_profile_flag() {
+        let result = parse_command(vec![
+            "encode".to_string(),
+            "--message".to_string(),
+            "salam".to_string(),
+            "--profile".to_string(),
+            "fa-neutral-formal".to_string(),
+            "--profile".to_string(),
+            "fa-saadi-inspired-light".to_string(),
+        ]);
+        let error = match result {
+            Ok(_) => panic!("duplicate profile should fail"),
+            Err(error) => error,
+        };
+
+        assert_eq!(
+            error.message(),
+            "--profile cannot be provided multiple times"
+        );
     }
 
     #[test]

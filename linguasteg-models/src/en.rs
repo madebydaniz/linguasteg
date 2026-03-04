@@ -105,6 +105,14 @@ impl EnglishPrototypeSymbolicMapper {
         &self,
         payload_plan: &SymbolicPayloadPlan,
     ) -> CoreResult<Vec<RealizationPlan>> {
+        self.map_payload_to_plans_with_profile(payload_plan, None)
+    }
+
+    pub fn map_payload_to_plans_with_profile(
+        &self,
+        payload_plan: &SymbolicPayloadPlan,
+        _profile_id: Option<&StyleProfileId>,
+    ) -> CoreResult<Vec<RealizationPlan>> {
         payload_plan
             .frames
             .iter()

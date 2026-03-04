@@ -23,6 +23,7 @@ pub(crate) struct EncodeOptions {
     pub(crate) input_path: Option<String>,
     pub(crate) output_path: Option<String>,
     pub(crate) emit_trace: bool,
+    pub(crate) profile: Option<String>,
     pub(crate) secret: Option<String>,
     pub(crate) secret_file: Option<String>,
     pub(crate) format: OutputFormat,

@@ -4,12 +4,13 @@ use std::process::{Command, Output, Stdio};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 const TEST_SECRET: &str = "linguasteg-test-secret";
-const ENV_KEYS: [&str; 7] = [
+const ENV_KEYS: [&str; 8] = [
     "LSTEG_LANG",
     "LSTEG_FORMAT",
     "LSTEG_INPUT",
     "LSTEG_OUTPUT",
     "LSTEG_ENCODE_MESSAGE",
+    "LSTEG_PROFILE",
     "LSTEG_TRACE",
     "LSTEG_SECRET",
 ];
@@ -815,6 +816,91 @@ fn cli_flags_override_env_defaults() {
 
     let stdout = stdout_string(&output);
     assert!(stdout.contains("\"input_text\":\"override\""));
+}
+
+#[test]
+fn encode_farsi_profile_changes_output_and_keeps_roundtrip_lossless() {
+    let literary_output = run_lsteg(&[
+        "encode",
+        "--lang",
+        "fa",
+        "--message",
+        "salam",
+        "--emit-trace",
+        "--profile",
+        "fa-literary-classic-inspired",
+    ]);
+    assert!(literary_output.status.success());
+    let literary_text = stdout_string(&literary_output);
+
+    assert!(literary_text.contains("style profile: fa-literary-classic-inspired"));
+
+    let decode_output = run_lsteg_with_stdin(
+        &["decode", "--lang", "fa", "--text-input", "--format", "json"],
+        &literary_text,
+    );
+    assert!(decode_output.status.success());
+    let decoded_json = stdout_string(&decode_output);
+    assert!(decoded_json.contains("\"payload_utf8\":\"salam\""));
+}
+
+#[test]
+fn encode_rejects_unknown_profile_with_config_error() {
+    let output = run_lsteg(&[
+        "encode",
+        "--lang",
+        "fa",
+        "--message",
+        "salam",
+        "--profile",
+        "fa-unknown-style",
+    ]);
+    assert_eq!(output.status.code(), Some(1));
+
+    let stderr = stderr_string(&output);
+    assert!(stderr.contains("LSTEG-CLI-CFG-001"));
+    assert!(stderr.contains("unsupported profile 'fa-unknown-style'"));
+}
+
+#[test]
+fn encode_uses_profile_from_env_when_flag_missing() {
+    let output = run_lsteg_with_env(
+        &[
+            "encode",
+            "--lang",
+            "fa",
+            "--message",
+            "salam",
+            "--emit-trace",
+        ],
+        &[("LSTEG_PROFILE", "fa-literary-classic-inspired")],
+    );
+    assert!(output.status.success());
+
+    let stdout = stdout_string(&output);
+    assert!(stdout.contains("style profile: fa-literary-classic-inspired"));
+}
+
+#[test]
+fn encode_profile_flag_overrides_env_profile() {
+    let output = run_lsteg_with_env(
+        &[
+            "encode",
+            "--lang",
+            "fa",
+            "--message",
+            "salam",
+            "--emit-trace",
+            "--profile",
+            "fa-neutral-formal",
+        ],
+        &[("LSTEG_PROFILE", "fa-literary-classic-inspired")],
+    );
+    assert!(output.status.success());
+
+    let stdout = stdout_string(&output);
+    assert!(stdout.contains("style profile: fa-neutral-formal"));
+    assert!(!stdout.contains("style profile: fa-literary-classic-inspired"));
 }
 
 #[test]
