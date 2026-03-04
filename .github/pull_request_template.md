@@ -8,6 +8,7 @@ Describe what changed and why.
 - [ ] `cargo clippy --workspace --all-targets --all-features --locked -- -A clippy::all -A clippy::pedantic -D clippy::correctness -D clippy::suspicious`
 - [ ] `cargo test -p linguasteg-cli --tests --locked`
 - [ ] `./scripts/ci/smoke_e2e.sh`
+- [ ] `./scripts/ci/release_drill.sh preflight-only`
 
 ## Governance
 

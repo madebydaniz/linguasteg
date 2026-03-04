@@ -26,6 +26,7 @@ Required status checks:
 - `quality`
 - `contract-tests`
 - `e2e-smoke`
+- `release-readiness`
 - `dependency-review`
 - `cargo-audit`
 - `Analyze (Rust)`
@@ -55,6 +56,11 @@ Use release drill to proactively validate release automation without crates.io t
   - Validate `release-please` config and manifest mapping against workspace crates
   - Execute publish preflight checks
   - Execute publish dry-run for all workspace crates
+
+PR-to-`main` gate (`release-readiness` job in `ci-main-gate`) runs:
+
+- `./scripts/ci/release_drill.sh preflight-only`
+- `./scripts/ci/verify_repo_hygiene.sh "${GITHUB_BASE_REF}"`
 
 Local command:
 
