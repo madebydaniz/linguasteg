@@ -6,6 +6,7 @@ use linguasteg_core::{
 use super::formatters::{build_trace_analysis_json, build_trace_analysis_text};
 use super::language::resolve_trace_target;
 use super::runtime::PrototypeRuntime;
+use super::symbol_mix::apply_secret_symbolic_mix;
 use super::trace::{frame_sequence_error, parse_frames_from_trace, schema_for_template};
 use super::types::{CliError, DecodeInputMode, OutputFormat, ProtoTarget, TraceAnalysisSummary};
 
@@ -152,7 +153,33 @@ fn analyze_trace(
         &FixedWidthPlanningOptions::default(),
     ) {
         Ok(raw_payload) => {
-            match inspect_envelope(&raw_payload) {
+            let mut candidate_payload = raw_payload;
+            if let Some(secret_bytes) = secret {
+                let decryptable_candidate = matches!(
+                    inspect_envelope(&candidate_payload),
+                    CryptoEnvelopeInspection::Metadata(_)
+                ) && open_payload(&candidate_payload, secret_bytes).is_ok();
+
+                if !decryptable_candidate {
+                    let mut unmixed_frames = frames.to_vec();
+                    apply_secret_symbolic_mix(&mut unmixed_frames, secret_bytes);
+                    if let Ok(unmixed_payload) = decode_payload_from_symbolic_frames(
+                        &unmixed_frames,
+                        &ordered_schemas,
+                        &FixedWidthPlanningOptions::default(),
+                    ) {
+                        let decryptable_unmixed = matches!(
+                            inspect_envelope(&unmixed_payload),
+                            CryptoEnvelopeInspection::Metadata(_)
+                        ) && open_payload(&unmixed_payload, secret_bytes).is_ok();
+                        if decryptable_unmixed {
+                            candidate_payload = unmixed_payload;
+                        }
+                    }
+                }
+            }
+
+            match inspect_envelope(&candidate_payload) {
                 CryptoEnvelopeInspection::NotEnvelope => {}
                 CryptoEnvelopeInspection::Metadata(metadata) => {
                     envelope_present = true;
@@ -168,7 +195,7 @@ fn analyze_trace(
 
             if let Some(secret) = secret {
                 if envelope_present && envelope_error.is_none() {
-                    match open_payload(&raw_payload, secret) {
+                    match open_payload(&candidate_payload, secret) {
                         Ok(payload) => {
                             payload_bytes = Some(payload.len());
                             payload_hex = Some(

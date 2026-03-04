@@ -4,6 +4,7 @@ mod commands;
 mod formatters;
 mod language;
 mod runtime;
+mod symbol_mix;
 mod trace;
 mod trace_contract;
 mod types;

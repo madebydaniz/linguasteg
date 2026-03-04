@@ -5,7 +5,7 @@ use linguasteg_core::{
     inspect_envelope, open_payload, seal_payload, CryptoEnvelopeInspection, DecodeRequest,
     EncodeRequest, FixedWidthPlanningOptions, LanguageTag, RealizationPlan, SlotAssignment, SlotId,
     StyleInspiration, StyleProfileId, StyleProfileRegistry, StyleStrength, SymbolicFramePlan,
-    TemplateId, TemplateRegistry, WritingRegister,
+    SymbolicFrameSchema, TemplateId, TemplateRegistry, WritingRegister,
 };
 
 use super::analysis::{analyze_trace_summary, render_trace_analysis_output};
@@ -14,6 +14,7 @@ use super::language::resolve_trace_target;
 use super::runtime::{
     supported_languages, supported_models, supported_strategies, PrototypeRuntime,
 };
+use super::symbol_mix::apply_secret_symbolic_mix;
 use super::trace::{frame_sequence_error, parse_frames_from_trace, schema_for_template};
 use super::types::{
     AnalyzeOptions, CatalogQueryOptions, CliError, Command, DecodeInputMode, DecodeOptions,
@@ -1005,7 +1006,10 @@ fn render_proto_encode_output(
         ),
         "encode orchestration failed",
     )?;
-    let payload_plan = orchestration.symbolic_plan;
+    let mut payload_plan = orchestration.symbolic_plan;
+    if let Some(secret) = secret {
+        apply_secret_symbolic_mix(&mut payload_plan.frames, secret);
+    }
     let mut realization_plans = map_domain(
         runtime
             .mapper
@@ -1232,43 +1236,51 @@ fn render_proto_decode_output(
         .collect::<Result<Vec<_>, String>>()
         .map_err(|error| CliError::trace(format!("failed to resolve trace schemas: {error}")))?;
 
-    let orchestration = map_domain(
-        runtime
-            .orchestrator()
-            .with_symbolic_options(FixedWidthPlanningOptions::default())
-            .orchestrate_decode(
-                DecodeRequest {
-                    stego_text: trace_text.to_string(),
-                    options: runtime.pipeline_options().map_err(|error| {
-                        CliError::config(format!("invalid pipeline options: {error}"))
-                    })?,
-                },
-                &frames,
-                &ordered_schemas,
-            ),
-        "decode orchestration failed",
-    )?;
-    let raw_payload = orchestration.payload;
-    let payload = match secret {
-        Some(secret) => match inspect_envelope(&raw_payload) {
-            CryptoEnvelopeInspection::Metadata(_) => open_payload(&raw_payload, secret).map_err(
-                |_| {
-                    if used_extractor_frames {
-                        CliError::security(
-                            "failed to decrypt payload from extracted text; use proto-encode trace input for lossless decode",
-                        )
-                    } else {
-                        CliError::security("failed to decrypt payload; verify provided secret")
+    let (raw_payload, mut gateway_response) =
+        match decode_raw_payload_from_frames(&runtime, trace_text, &frames, &ordered_schemas) {
+            Ok(result) => result,
+            Err(primary_error) => {
+                if let Some(secret) = secret {
+                    let mut unmixed_frames = frames.clone();
+                    apply_secret_symbolic_mix(&mut unmixed_frames, secret);
+                    match decode_raw_payload_from_frames(
+                        &runtime,
+                        trace_text,
+                        &unmixed_frames,
+                        &ordered_schemas,
+                    ) {
+                        Ok(result) => result,
+                        Err(_) => return Err(primary_error),
                     }
-                },
-            )?,
-            CryptoEnvelopeInspection::NotEnvelope => Err(CliError::security(
-                "failed to decrypt payload; payload is not a valid secure envelope",
-            ))?,
-            CryptoEnvelopeInspection::Invalid(message) => Err(CliError::security(format!(
-                "failed to decrypt payload; invalid secure envelope metadata: {message}"
-            )))?,
-        },
+                } else {
+                    return Err(primary_error);
+                }
+            }
+        };
+    let payload = match secret {
+        Some(secret) => {
+            match decrypt_payload_with_secret(&raw_payload, secret, used_extractor_frames) {
+                Ok(payload) => payload,
+                Err(primary_error) => {
+                    let mut unmixed_frames = frames.clone();
+                    apply_secret_symbolic_mix(&mut unmixed_frames, secret);
+                    let (unmixed_payload, unmixed_gateway_response) = decode_raw_payload_from_frames(
+                        &runtime,
+                        trace_text,
+                        &unmixed_frames,
+                        &ordered_schemas,
+                    )?;
+                    match decrypt_payload_with_secret(&unmixed_payload, secret, used_extractor_frames)
+                    {
+                        Ok(payload) => {
+                            gateway_response = unmixed_gateway_response;
+                            payload
+                        }
+                        Err(_) => return Err(primary_error),
+                    }
+                }
+            }
+        }
         None => raw_payload,
     };
     let hex_payload = payload
@@ -1278,8 +1290,6 @@ fn render_proto_decode_output(
         .join("");
 
     let utf8_text = String::from_utf8(payload.clone()).ok();
-    let gateway_response = orchestration.gateway_response.map(|item| item.content);
-
     if matches!(format, OutputFormat::Json) {
         return Ok(build_proto_decode_json(
             runtime.language_code,
@@ -1303,6 +1313,59 @@ fn render_proto_decode_output(
     }
 
     Ok(report_lines.join("\n"))
+}
+
+fn decode_raw_payload_from_frames(
+    runtime: &PrototypeRuntime,
+    trace_text: &str,
+    frames: &[SymbolicFramePlan],
+    ordered_schemas: &[SymbolicFrameSchema],
+) -> Result<(Vec<u8>, Option<String>), CliError> {
+    let options = runtime
+        .pipeline_options()
+        .map_err(|error| CliError::config(format!("invalid pipeline options: {error}")))?;
+    let orchestration = map_domain(
+        runtime
+            .orchestrator()
+            .with_symbolic_options(FixedWidthPlanningOptions::default())
+            .orchestrate_decode(
+                DecodeRequest {
+                    stego_text: trace_text.to_string(),
+                    options,
+                },
+                frames,
+                ordered_schemas,
+            ),
+        "decode orchestration failed",
+    )?;
+    Ok((
+        orchestration.payload,
+        orchestration.gateway_response.map(|item| item.content),
+    ))
+}
+
+fn decrypt_payload_with_secret(
+    raw_payload: &[u8],
+    secret: &[u8],
+    used_extractor_frames: bool,
+) -> Result<Vec<u8>, CliError> {
+    match inspect_envelope(raw_payload) {
+        CryptoEnvelopeInspection::Metadata(_) => open_payload(raw_payload, secret).map_err(|_| {
+            if used_extractor_frames {
+                CliError::security(
+                    "failed to decrypt payload from extracted text; use proto-encode trace input for lossless decode",
+                )
+            } else {
+                CliError::security("failed to decrypt payload; verify provided secret")
+            }
+        }),
+        CryptoEnvelopeInspection::NotEnvelope => Err(CliError::security(
+            "failed to decrypt payload; payload is not a valid secure envelope",
+        )),
+        CryptoEnvelopeInspection::Invalid(message) => Err(CliError::security(format!(
+            "failed to decrypt payload; invalid secure envelope metadata: {message}"
+        ))),
+    }
 }
 
 fn text_decode_not_lossless_error(language_display: &str, operation: &str) -> CliError {

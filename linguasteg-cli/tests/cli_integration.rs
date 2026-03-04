@@ -181,6 +181,44 @@ fn encode_json_supports_english_target() {
 }
 
 #[test]
+fn encode_english_varies_output_across_secrets() {
+    let output_a = run_lsteg_with_env(
+        &[
+            "encode",
+            "--lang",
+            "en",
+            "--message",
+            "hello world",
+            "--format",
+            "json",
+        ],
+        &[("LSTEG_SECRET", "1234")],
+    );
+    assert!(output_a.status.success());
+    let json_a: Value =
+        serde_json::from_str(&stdout_string(&output_a)).expect("json output should parse");
+
+    let output_b = run_lsteg_with_env(
+        &[
+            "encode",
+            "--lang",
+            "en",
+            "--message",
+            "hello world",
+            "--format",
+            "json",
+        ],
+        &[("LSTEG_SECRET", "12345")],
+    );
+    assert!(output_b.status.success());
+    let json_b: Value =
+        serde_json::from_str(&stdout_string(&output_b)).expect("json output should parse");
+
+    assert_ne!(json_a["frames"], json_b["frames"]);
+    assert_ne!(json_a["final_text"], json_b["final_text"]);
+}
+
+#[test]
 fn languages_text_lists_supported_languages() {
     let output = run_lsteg(&["languages"]);
     assert!(output.status.success());
