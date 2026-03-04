@@ -3,6 +3,8 @@ use std::path::PathBuf;
 use std::process::{Command, Output, Stdio};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use serde_json::Value;
+
 const TEST_SECRET: &str = "linguasteg-test-secret";
 const ENV_KEYS: [&str; 8] = [
     "LSTEG_LANG",
@@ -64,6 +66,30 @@ fn stdout_string(output: &Output) -> String {
 
 fn stderr_string(output: &Output) -> String {
     String::from_utf8(output.stderr.clone()).expect("stderr must be valid utf8")
+}
+
+fn as_legacy_proto_encode_json(trace_json: &str) -> String {
+    let mut value: Value =
+        serde_json::from_str(trace_json).expect("proto-encode json should be valid");
+    let object = value
+        .as_object_mut()
+        .expect("proto-encode json root should be object");
+    object.remove("style_profile");
+    object.remove("frame_count");
+    serde_json::to_string(&value).expect("legacy proto-encode json should serialize")
+}
+
+fn as_extended_proto_encode_json(trace_json: &str) -> String {
+    let mut value: Value =
+        serde_json::from_str(trace_json).expect("proto-encode json should be valid");
+    let object = value
+        .as_object_mut()
+        .expect("proto-encode json root should be object");
+    object.insert(
+        "contract_version".to_string(),
+        Value::String("compat-vnext".to_string()),
+    );
+    serde_json::to_string(&value).expect("extended proto-encode json should serialize")
 }
 
 struct TempSecretFile {
@@ -445,6 +471,41 @@ fn decode_roundtrip_from_encode_trace_works() {
     let decoded_json = stdout_string(&decode_output);
     assert!(decoded_json.contains("\"mode\":\"proto-decode\""));
     assert!(decoded_json.contains("\"payload_utf8\":\"salam\""));
+}
+
+#[test]
+fn decode_accepts_proto_encode_json_contract_matrix() {
+    let encode_output = run_lsteg(&["encode", "--message", "salam", "--format", "json"]);
+    assert!(encode_output.status.success());
+    let current_json = stdout_string(&encode_output);
+    let legacy_json = as_legacy_proto_encode_json(&current_json);
+    let extended_json = as_extended_proto_encode_json(&current_json);
+
+    for candidate in [current_json, legacy_json, extended_json] {
+        let decode_output = run_lsteg_with_stdin(&["decode", "--format", "json"], &candidate);
+        assert!(decode_output.status.success());
+        let decoded_json = stdout_string(&decode_output);
+        assert!(decoded_json.contains("\"mode\":\"proto-decode\""));
+        assert!(decoded_json.contains("\"payload_utf8\":\"salam\""));
+    }
+}
+
+#[test]
+fn analyze_accepts_proto_encode_json_contract_matrix() {
+    let encode_output = run_lsteg(&["encode", "--message", "salam donya", "--format", "json"]);
+    assert!(encode_output.status.success());
+    let current_json = stdout_string(&encode_output);
+    let legacy_json = as_legacy_proto_encode_json(&current_json);
+    let extended_json = as_extended_proto_encode_json(&current_json);
+
+    for candidate in [current_json, legacy_json, extended_json] {
+        let analyze_output = run_lsteg_with_stdin(&["analyze", "--format", "json"], &candidate);
+        assert!(analyze_output.status.success());
+        let analysis_json = stdout_string(&analyze_output);
+        assert!(analysis_json.contains("\"mode\":\"analyze\""));
+        assert!(analysis_json.contains("\"integrity_ok\":true"));
+        assert!(analysis_json.contains("\"payload_utf8\":\"salam donya\""));
+    }
 }
 
 #[test]

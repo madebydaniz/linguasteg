@@ -77,8 +77,9 @@ fn parse_frames_from_proto_encode_json(
         return Ok(None);
     };
 
-    let mut frames = Vec::with_capacity(trace.frames.len());
-    for frame in trace.frames {
+    let frame_count = trace.frames.len();
+    let mut frames = Vec::with_capacity(frame_count);
+    for (frame_index, frame) in trace.frames.into_iter().enumerate() {
         let template_id = TemplateId::new(&frame.template_id)?;
 
         let schema = schema_for_template(schemas, &template_id)?;
@@ -98,9 +99,21 @@ fn parse_frames_from_proto_encode_json(
         }
 
         let consumed_bits = frame.end_bit - frame.start_bit;
-        if consumed_bits != schema.total_bits() {
+        if consumed_bits == 0 || consumed_bits > schema.total_bits() {
             return Err(format!(
-                "invalid bit range for template '{}': expected {} bits, got {} ({}..{})",
+                "invalid bit range for template '{}': expected 1..={} bits, got {} ({}..{})",
+                template_id,
+                schema.total_bits(),
+                consumed_bits,
+                frame.start_bit,
+                frame.end_bit
+            )
+            .into());
+        }
+        let is_last_frame = frame_index + 1 == frame_count;
+        if !is_last_frame && consumed_bits != schema.total_bits() {
+            return Err(format!(
+                "non-terminal frame for template '{}' must consume full schema width {} bits, got {} ({}..{})",
                 template_id,
                 schema.total_bits(),
                 consumed_bits,
@@ -323,10 +336,18 @@ mod tests {
 
     #[test]
     fn parse_proto_encode_json_fails_on_schema_width_mismatch() {
-        let trace = r#"{"mode":"proto-encode","language":"fa","frames":[{"index":1,"template_id":"fa-basic-sov","start_bit":0,"end_bit":17,"values":{"subject":0,"object":0,"adjective":0,"verb":21},"sentence":"x"}]}"#;
+        let trace = r#"{"mode":"proto-encode","language":"fa","frames":[{"index":1,"template_id":"fa-basic-sov","start_bit":0,"end_bit":19,"values":{"subject":0,"object":0,"adjective":0,"verb":21},"sentence":"x"}]}"#;
         let error = parse_frames_from_trace(trace, &farsi_schemas()).expect_err("json should fail");
 
-        assert!(error.to_string().contains("expected 18 bits, got 17"));
+        assert!(error.to_string().contains("expected 1..=18 bits, got 19"));
+    }
+
+    #[test]
+    fn parse_proto_encode_json_fails_on_non_terminal_partial_frame() {
+        let trace = r#"{"mode":"proto-encode","language":"fa","frames":[{"index":1,"template_id":"fa-basic-sov","start_bit":0,"end_bit":17,"values":{"subject":0,"object":0,"adjective":0,"verb":21},"sentence":"x"},{"index":2,"template_id":"fa-time-location-sov","start_bit":17,"end_bit":38,"values":{"subject":25,"time":5,"location":4,"object":5,"verb":22},"sentence":"y"}]}"#;
+        let error = parse_frames_from_trace(trace, &farsi_schemas()).expect_err("json should fail");
+
+        assert!(error.to_string().contains("non-terminal frame"));
     }
 
     #[test]
