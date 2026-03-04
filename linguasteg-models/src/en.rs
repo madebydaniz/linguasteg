@@ -173,13 +173,13 @@ pub fn parse_english_prototype_text(stego_text: &str) -> CoreResult<Vec<Realizat
 }
 
 fn map_basic_svo_frame(frame: &SymbolicFramePlan) -> CoreResult<RealizationPlan> {
+    let object_value = symbolic_value_for_slot(frame, "object")?;
+    let adjective_value = symbolic_value_for_slot(frame, "adjective")?;
+    let verb_value = symbolic_value_for_slot(frame, "verb")?;
     let subject = select_form(subject_forms(), symbolic_value_for_slot(frame, "subject")?);
-    let object = select_object_form(symbolic_value_for_slot(frame, "object")?);
-    let adjective = select_form(
-        adjective_forms(),
-        symbolic_value_for_slot(frame, "adjective")?,
-    );
-    let verb = select_form(verb_forms(), symbolic_value_for_slot(frame, "verb")?);
+    let object = select_object_surface(object_value, verb_value);
+    let adjective = select_adjective_surface(adjective_value, &object);
+    let verb = select_form(verb_forms(), verb_value);
 
     Ok(RealizationPlan {
         template_id: TemplateId::new("en-basic-svo")?,
@@ -193,14 +193,16 @@ fn map_basic_svo_frame(frame: &SymbolicFramePlan) -> CoreResult<RealizationPlan>
 }
 
 fn map_time_location_svo_frame(frame: &SymbolicFramePlan) -> CoreResult<RealizationPlan> {
+    let object_value = symbolic_value_for_slot(frame, "object")?;
+    let verb_value = symbolic_value_for_slot(frame, "verb")?;
     let subject = select_form(subject_forms(), symbolic_value_for_slot(frame, "subject")?);
     let time = select_form(time_forms(), symbolic_value_for_slot(frame, "time")?);
     let location = select_form(
         location_forms(),
         symbolic_value_for_slot(frame, "location")?,
     );
-    let verb = select_form(verb_forms(), symbolic_value_for_slot(frame, "verb")?);
-    let object = select_object_form(symbolic_value_for_slot(frame, "object")?);
+    let verb = select_form(verb_forms(), verb_value);
+    let object = select_object_surface(object_value, verb_value);
 
     Ok(RealizationPlan {
         template_id: TemplateId::new("en-time-location-svo")?,
@@ -290,7 +292,7 @@ fn symbolic_value_for_basic_plan_slot(plan: &RealizationPlan, slot: &str) -> Cor
         }
         "adjective" => {
             let assignment = assignment_by_slot(plan, "adjective")?;
-            surface_index(adjective_forms(), &assignment.surface)
+            adjective_surface_index(&assignment.surface)
         }
         "verb" => {
             let assignment = assignment_by_slot(plan, "verb")?;
@@ -402,7 +404,7 @@ fn parse_basic_svo_sentence(sentence: &str) -> CoreResult<RealizationPlan> {
     let (verb, rest) =
         consume_form_prefix(rest, verb_forms()).ok_or_else(|| unsupported_shape(sentence))?;
     let (adjective, rest) =
-        consume_form_prefix(rest, adjective_forms()).ok_or_else(|| unsupported_shape(sentence))?;
+        consume_adjective_prefix(rest).ok_or_else(|| unsupported_shape(sentence))?;
     let (object, rest) = consume_object_prefix(rest).ok_or_else(|| unsupported_shape(sentence))?;
 
     if !rest.trim().is_empty() {
@@ -490,6 +492,34 @@ fn consume_object_prefix<'a>(input: &'a str) -> Option<(&'static str, &'a str)> 
     let mut best_match: Option<(&'static str, &'a str, usize)> = None;
 
     for lexeme in object_lexemes() {
+        for &form in lexeme.accepted_forms {
+            let Some(rest) = trimmed.strip_prefix(form) else {
+                continue;
+            };
+
+            if !rest.is_empty() && !rest.starts_with(' ') {
+                continue;
+            }
+
+            let candidate = (lexeme.canonical, rest.trim_start(), form.len());
+            let should_replace = match best_match {
+                Some((_, _, best_len)) => form.len() > best_len,
+                None => true,
+            };
+            if should_replace {
+                best_match = Some(candidate);
+            }
+        }
+    }
+
+    best_match.map(|(canonical, rest, _)| (canonical, rest))
+}
+
+fn consume_adjective_prefix<'a>(input: &'a str) -> Option<(&'static str, &'a str)> {
+    let trimmed = input.trim_start();
+    let mut best_match: Option<(&'static str, &'a str, usize)> = None;
+
+    for lexeme in adjective_lexemes() {
         for &form in lexeme.accepted_forms {
             let Some(rest) = trimmed.strip_prefix(form) else {
                 continue;
@@ -686,6 +716,15 @@ struct EnglishObjectLexeme {
     accepted_forms: &'static [&'static str],
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum EnglishObjectClass {
+    Document,
+    Artifact,
+    Package,
+    Device,
+    Data,
+}
+
 fn object_lexemes() -> &'static [EnglishObjectLexeme] {
     const OBJECT_LEXEMES: [EnglishObjectLexeme; 32] = [
         EnglishObjectLexeme {
@@ -694,7 +733,7 @@ fn object_lexemes() -> &'static [EnglishObjectLexeme] {
         },
         EnglishObjectLexeme {
             canonical: "letter",
-            accepted_forms: &["letter"],
+            accepted_forms: &["letter", "missive"],
         },
         EnglishObjectLexeme {
             canonical: "photo",
@@ -742,7 +781,7 @@ fn object_lexemes() -> &'static [EnglishObjectLexeme] {
         },
         EnglishObjectLexeme {
             canonical: "record",
-            accepted_forms: &["record"],
+            accepted_forms: &["record", "entry"],
         },
         EnglishObjectLexeme {
             canonical: "invoice",
@@ -794,11 +833,11 @@ fn object_lexemes() -> &'static [EnglishObjectLexeme] {
         },
         EnglishObjectLexeme {
             canonical: "draft",
-            accepted_forms: &["draft"],
+            accepted_forms: &["draft", "outline"],
         },
         EnglishObjectLexeme {
             canonical: "review",
-            accepted_forms: &["review"],
+            accepted_forms: &["review", "assessment"],
         },
         EnglishObjectLexeme {
             canonical: "proposal",
@@ -821,9 +860,31 @@ fn object_lexemes() -> &'static [EnglishObjectLexeme] {
     &OBJECT_LEXEMES
 }
 
-fn select_object_form(value: u32) -> String {
+fn object_lexeme_for_value(value: u32) -> &'static EnglishObjectLexeme {
     let index = (value as usize) % object_lexemes().len();
-    object_lexemes()[index].canonical.to_string()
+    &object_lexemes()[index]
+}
+
+fn select_object_surface(value: u32, verb_value: u32) -> String {
+    let lexeme = object_lexeme_for_value(value);
+    let verb_index = (verb_value as usize) % verb_forms().len();
+    let surface = match (lexeme.canonical, verb_index) {
+        ("record", 16) => "entry",
+        ("draft", 10) => "outline",
+        ("review", 11) => "assessment",
+        _ => lexeme.canonical,
+    };
+    surface.to_string()
+}
+
+fn object_class(canonical: &str) -> EnglishObjectClass {
+    match canonical {
+        "photo" | "canvas" | "sample" => EnglishObjectClass::Artifact,
+        "parcel" => EnglishObjectClass::Package,
+        "device" => EnglishObjectClass::Device,
+        "record" | "archive" | "dataset" => EnglishObjectClass::Data,
+        _ => EnglishObjectClass::Document,
+    }
 }
 
 fn object_surface_index(surface: &str) -> CoreResult<u32> {
@@ -849,10 +910,94 @@ fn object_surface_index(surface: &str) -> CoreResult<u32> {
     })
 }
 
+#[derive(Debug, Clone, Copy)]
+struct EnglishAdjectiveLexeme {
+    canonical: &'static str,
+    accepted_forms: &'static [&'static str],
+}
+
+fn adjective_lexemes() -> &'static [EnglishAdjectiveLexeme] {
+    const ADJECTIVE_LEXEMES: [EnglishAdjectiveLexeme; 8] = [
+        EnglishAdjectiveLexeme {
+            canonical: "old",
+            accepted_forms: &["old"],
+        },
+        EnglishAdjectiveLexeme {
+            canonical: "new",
+            accepted_forms: &["new"],
+        },
+        EnglishAdjectiveLexeme {
+            canonical: "quiet",
+            accepted_forms: &["quiet", "concise"],
+        },
+        EnglishAdjectiveLexeme {
+            canonical: "bright",
+            accepted_forms: &["bright"],
+        },
+        EnglishAdjectiveLexeme {
+            canonical: "warm",
+            accepted_forms: &["warm", "recent"],
+        },
+        EnglishAdjectiveLexeme {
+            canonical: "fresh",
+            accepted_forms: &["fresh", "current"],
+        },
+        EnglishAdjectiveLexeme {
+            canonical: "small",
+            accepted_forms: &["small"],
+        },
+        EnglishAdjectiveLexeme {
+            canonical: "clear",
+            accepted_forms: &["clear"],
+        },
+    ];
+
+    &ADJECTIVE_LEXEMES
+}
+
+fn adjective_lexeme_for_value(value: u32) -> &'static EnglishAdjectiveLexeme {
+    let index = (value as usize) % adjective_lexemes().len();
+    &adjective_lexemes()[index]
+}
+
+fn select_adjective_surface(value: u32, object_surface: &str) -> String {
+    let lexeme = adjective_lexeme_for_value(value);
+    let class = object_class(object_surface);
+    let surface = match (lexeme.canonical, class) {
+        ("quiet", EnglishObjectClass::Document | EnglishObjectClass::Data) => "concise",
+        ("warm", EnglishObjectClass::Document | EnglishObjectClass::Data) => "recent",
+        ("fresh", EnglishObjectClass::Document | EnglishObjectClass::Data) => "current",
+        _ => lexeme.canonical,
+    };
+    surface.to_string()
+}
+
+fn adjective_surface_index(surface: &str) -> CoreResult<u32> {
+    let normalized = surface.trim();
+    let idx = adjective_lexemes()
+        .iter()
+        .position(|lexeme| {
+            lexeme
+                .accepted_forms
+                .iter()
+                .any(|form| form.eq_ignore_ascii_case(normalized))
+        })
+        .ok_or_else(|| {
+            CoreError::InvalidSymbolicPlan(format!(
+                "unknown surface value '{normalized}' in symbolic inventory"
+            ))
+        })?;
+
+    u32::try_from(idx).map_err(|_| {
+        CoreError::InvalidSymbolicPlan(format!(
+            "surface index {idx} is too large for symbolic value conversion"
+        ))
+    })
+}
+
+#[cfg(test)]
 fn adjective_forms() -> &'static [&'static str] {
-    &[
-        "old", "new", "quiet", "bright", "warm", "fresh", "small", "clear",
-    ]
+    &["old", "new", "quiet", "bright", "warm", "fresh", "small", "clear"]
 }
 
 fn verb_forms() -> &'static [&'static str] {

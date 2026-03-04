@@ -1006,12 +1006,13 @@ fn render_proto_encode_output(
         "encode orchestration failed",
     )?;
     let payload_plan = orchestration.symbolic_plan;
-    let realization_plans = map_domain(
+    let mut realization_plans = map_domain(
         runtime
             .mapper
             .map_payload_to_plans_with_profile(&payload_plan, profile_id.as_ref()),
         "failed to map payload to realization plans",
     )?;
+    apply_secret_surface_variants(runtime.language_code, &mut realization_plans, secret);
 
     let mut sentences = Vec::with_capacity(realization_plans.len());
     let mut frame_lines = Vec::with_capacity(realization_plans.len());
@@ -1095,6 +1096,72 @@ fn render_proto_encode_output(
     }
 
     Ok(report_lines.join("\n"))
+}
+
+fn apply_secret_surface_variants(
+    language_code: &str,
+    plans: &mut [RealizationPlan],
+    secret: Option<&[u8]>,
+) {
+    let Some(secret_bytes) = secret else {
+        return;
+    };
+    if secret_bytes.is_empty() {
+        return;
+    }
+
+    let seed = fnv1a64(secret_bytes);
+    for (frame_index, plan) in plans.iter_mut().enumerate() {
+        for assignment in &mut plan.assignments {
+            let slot = assignment.slot.as_str();
+            if !should_use_secret_variant(seed, frame_index, slot, &assignment.surface) {
+                continue;
+            }
+            if let Some(variant) =
+                secret_surface_variant(language_code, slot, assignment.surface.as_str())
+            {
+                assignment.surface = variant.to_string();
+            }
+        }
+    }
+}
+
+fn secret_surface_variant(language_code: &str, slot: &str, surface: &str) -> Option<&'static str> {
+    match (language_code, slot, surface) {
+        ("en", "object", "letter") => Some("missive"),
+        ("en", "object", "record") => Some("entry"),
+        ("en", "object", "draft") => Some("outline"),
+        ("en", "object", "review") => Some("assessment"),
+        ("en", "adjective", "quiet") => Some("concise"),
+        ("en", "adjective", "warm") => Some("recent"),
+        ("en", "adjective", "fresh") => Some("current"),
+        ("fa", "object", "نامه") => Some("مکتوب"),
+        ("fa", "object", "پیام") => Some("پیغام"),
+        ("fa", "object", "داستان") => Some("حکایت"),
+        ("fa", "object", "غذا") => Some("طعام"),
+        ("fa", "adjective", "زیبا") => Some("خوش"),
+        ("fa", "adjective", "قدیمی") => Some("کهن"),
+        ("fa", "adjective", "تازه") => Some("نو"),
+        _ => None,
+    }
+}
+
+fn should_use_secret_variant(seed: u64, frame_index: usize, slot: &str, surface: &str) -> bool {
+    let frame_mix = (frame_index as u64)
+        .wrapping_add(1)
+        .wrapping_mul(0x9E37_79B9_7F4A_7C15);
+    let slot_mix = fnv1a64(slot.as_bytes()).rotate_left(17);
+    let surface_mix = fnv1a64(surface.as_bytes()).rotate_left(33);
+    ((seed ^ frame_mix ^ slot_mix ^ surface_mix) & 1) == 1
+}
+
+fn fnv1a64(bytes: &[u8]) -> u64 {
+    let mut hash = 0xcbf2_9ce4_8422_2325u64;
+    for &byte in bytes {
+        hash ^= u64::from(byte);
+        hash = hash.wrapping_mul(0x0000_0001_0000_01b3);
+    }
+    hash
 }
 
 fn render_proto_decode_output(
