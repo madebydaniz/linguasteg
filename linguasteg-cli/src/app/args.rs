@@ -113,6 +113,7 @@ fn parse_analyze_command(args: impl Iterator<Item = String>) -> Result<Option<Co
     Ok(Some(Command::Analyze(AnalyzeOptions {
         target: parsed.lang,
         auto_detect_target: parsed.auto_detect_target,
+        input_mode: parsed.decode_input_mode,
         trace: parsed.trace,
         input_path: parsed.input_path,
         output_path: parsed.output_path,
@@ -131,6 +132,7 @@ fn parse_validate_command(args: impl Iterator<Item = String>) -> Result<Option<C
     Ok(Some(Command::Validate(ValidateOptions {
         target: parsed.lang,
         auto_detect_target: parsed.auto_detect_target,
+        input_mode: parsed.decode_input_mode,
         trace: parsed.trace,
         input_path: parsed.input_path,
         output_path: parsed.output_path,
@@ -156,6 +158,7 @@ fn parse_trace_like_command_args(
     mut args: impl Iterator<Item = String>,
     command: &str,
 ) -> Result<Option<ParsedTraceLikeCommand>, CliError> {
+    let supports_input_mode = matches!(command, "decode" | "analyze" | "validate");
     let (mut lang, mut auto_detect_target) =
         env_trace_proto_target("LSTEG_LANG")?.unwrap_or((ProtoTarget::Farsi, true));
     let mut format = env_output_format("LSTEG_FORMAT")?.unwrap_or(OutputFormat::Text);
@@ -207,30 +210,30 @@ fn parse_trace_like_command_args(
                 seen_output = true;
                 output_path = Some(next_arg_value(&mut args, "--output")?);
             }
-            "--trace-input" if command == "decode" => {
+            "--trace-input" if supports_input_mode => {
                 if seen_trace_input {
                     return Err(CliError::usage(
                         "--trace-input cannot be provided multiple times".to_string(),
                     ));
                 }
                 if seen_text_input {
-                    return Err(CliError::usage(
-                        "decode accepts either --trace-input or --text-input, not both".to_string(),
-                    ));
+                    return Err(CliError::usage(format!(
+                        "{command} accepts either --trace-input or --text-input, not both"
+                    )));
                 }
                 seen_trace_input = true;
                 decode_input_mode = DecodeInputMode::Trace;
             }
-            "--text-input" if command == "decode" => {
+            "--text-input" if supports_input_mode => {
                 if seen_text_input {
                     return Err(CliError::usage(
                         "--text-input cannot be provided multiple times".to_string(),
                     ));
                 }
                 if seen_trace_input {
-                    return Err(CliError::usage(
-                        "decode accepts either --trace-input or --text-input, not both".to_string(),
-                    ));
+                    return Err(CliError::usage(format!(
+                        "{command} accepts either --trace-input or --text-input, not both"
+                    )));
                 }
                 seen_text_input = true;
                 decode_input_mode = DecodeInputMode::Text;
@@ -777,11 +780,11 @@ pub(crate) fn write_usage(mut writer: impl Write) -> std::io::Result<()> {
     )?;
     writeln!(
         writer,
-        "       lsteg analyze [--lang auto|fa|en] [--trace <text> | --input <file>] [--secret <value> | --secret-file <file>] [--format text|json] [--output <file>]"
+        "       lsteg analyze [--lang auto|fa|en] [--trace-input|--text-input] [--trace <text> | --input <file>] [--secret <value> | --secret-file <file>] [--format text|json] [--output <file>]"
     )?;
     writeln!(
         writer,
-        "       lsteg validate [--lang auto|fa|en] [--trace <text> | --input <file>] [--secret <value> | --secret-file <file>] [--format text|json] [--output <file>]"
+        "       lsteg validate [--lang auto|fa|en] [--trace-input|--text-input] [--trace <text> | --input <file>] [--secret <value> | --secret-file <file>] [--format text|json] [--output <file>]"
     )?;
     writeln!(writer, "       lsteg languages [--format text|json]")?;
     writeln!(writer, "       lsteg strategies [--format text|json]")?;
@@ -968,5 +971,42 @@ mod tests {
             error.message(),
             "decode accepts either --trace-input or --text-input, not both"
         );
+    }
+
+    #[test]
+    fn parse_analyze_command_sets_text_input_mode() {
+        let command = parse_command(vec![
+            "analyze".to_string(),
+            "--text-input".to_string(),
+            "--trace".to_string(),
+            "مرد کتاب زیبا را خرید.".to_string(),
+        ])
+        .expect("parse should succeed")
+        .expect("command should exist");
+
+        let Command::Analyze(options) = command else {
+            panic!("expected analyze command");
+        };
+
+        assert!(matches!(options.input_mode, DecodeInputMode::Text));
+    }
+
+    #[test]
+    fn parse_validate_command_sets_trace_input_mode() {
+        let command = parse_command(vec![
+            "validate".to_string(),
+            "--trace-input".to_string(),
+            "--trace".to_string(),
+            "frame 01 [fa-basic-sov] bits=0..18 values=subject:0,object:0,adjective:0,verb:21 => x"
+                .to_string(),
+        ])
+        .expect("parse should succeed")
+        .expect("command should exist");
+
+        let Command::Validate(options) = command else {
+            panic!("expected validate command");
+        };
+
+        assert!(matches!(options.input_mode, DecodeInputMode::Trace));
     }
 }

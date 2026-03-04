@@ -444,6 +444,37 @@ fn decode_auto_roundtrip_from_farsi_plain_text_works() {
 }
 
 #[test]
+fn analyze_from_farsi_plain_text_reports_integrity_ok() {
+    let encode_output = run_lsteg(&["encode", "--message", "salam donya"]);
+    assert!(encode_output.status.success());
+    let stego_text = stdout_string(&encode_output);
+
+    let analyze_output = run_lsteg_with_stdin(&["analyze", "--format", "json"], &stego_text);
+    assert!(analyze_output.status.success());
+
+    let analysis_json = stdout_string(&analyze_output);
+    assert!(analysis_json.contains("\"mode\":\"analyze\""));
+    assert!(analysis_json.contains("\"language\":\"fa\""));
+    assert!(analysis_json.contains("\"integrity_ok\":true"));
+    assert!(analysis_json.contains("\"payload_utf8\":\"salam donya\""));
+}
+
+#[test]
+fn validate_from_farsi_plain_text_reports_integrity_ok() {
+    let encode_output = run_lsteg(&["encode", "--message", "salam"]);
+    assert!(encode_output.status.success());
+    let stego_text = stdout_string(&encode_output);
+
+    let validate_output = run_lsteg_with_stdin(&["validate", "--format", "json"], &stego_text);
+    assert!(validate_output.status.success());
+
+    let validation_json = stdout_string(&validate_output);
+    assert!(validation_json.contains("\"mode\":\"validate\""));
+    assert!(validation_json.contains("\"language\":\"fa\""));
+    assert!(validation_json.contains("\"integrity_ok\":true"));
+}
+
+#[test]
 fn decode_text_input_roundtrip_from_farsi_plain_text_works() {
     let encode_output = run_lsteg(&["encode", "--message", "salam"]);
     assert!(encode_output.status.success());
@@ -488,6 +519,43 @@ fn decode_auto_roundtrip_from_english_plain_text_works() {
     let decoded_json = stdout_string(&decode_output);
     assert!(decoded_json.contains("\"language\":\"en\""));
     assert!(decoded_json.contains("\"payload_utf8\":\"hello world\""));
+}
+
+#[test]
+fn analyze_from_english_plain_text_reports_integrity_ok() {
+    let encode_output = run_lsteg(&["encode", "--lang", "en", "--message", "hello world"]);
+    assert!(encode_output.status.success());
+    let stego_text = stdout_string(&encode_output);
+
+    let analyze_output = run_lsteg_with_stdin(
+        &["analyze", "--lang", "en", "--format", "json"],
+        &stego_text,
+    );
+    assert!(analyze_output.status.success());
+
+    let analysis_json = stdout_string(&analyze_output);
+    assert!(analysis_json.contains("\"mode\":\"analyze\""));
+    assert!(analysis_json.contains("\"language\":\"en\""));
+    assert!(analysis_json.contains("\"integrity_ok\":true"));
+    assert!(analysis_json.contains("\"payload_utf8\":\"hello world\""));
+}
+
+#[test]
+fn validate_from_english_plain_text_reports_integrity_ok() {
+    let encode_output = run_lsteg(&["encode", "--lang", "en", "--message", "hello"]);
+    assert!(encode_output.status.success());
+    let stego_text = stdout_string(&encode_output);
+
+    let validate_output = run_lsteg_with_stdin(
+        &["validate", "--lang", "en", "--format", "json"],
+        &stego_text,
+    );
+    assert!(validate_output.status.success());
+
+    let validation_json = stdout_string(&validate_output);
+    assert!(validation_json.contains("\"mode\":\"validate\""));
+    assert!(validation_json.contains("\"language\":\"en\""));
+    assert!(validation_json.contains("\"integrity_ok\":true"));
 }
 
 #[test]

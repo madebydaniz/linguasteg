@@ -734,6 +734,7 @@ fn run_analyze(options: AnalyzeOptions) -> Result<(), CliError> {
     let output = render_trace_analysis_output(
         options.target,
         options.auto_detect_target,
+        options.input_mode,
         &trace_text,
         options.format,
         secret.as_deref(),
@@ -746,8 +747,10 @@ fn run_validate(options: ValidateOptions) -> Result<(), CliError> {
     let secret =
         resolve_optional_secret_bytes(options.secret.as_deref(), options.secret_file.as_deref())?;
     let summary = analyze_trace_summary(
+        "validate",
         options.target,
         options.auto_detect_target,
+        options.input_mode,
         &trace_text,
         secret.as_deref(),
     )?;

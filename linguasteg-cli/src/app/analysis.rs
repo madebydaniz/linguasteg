@@ -7,16 +7,24 @@ use super::formatters::{build_trace_analysis_json, build_trace_analysis_text};
 use super::language::resolve_trace_target;
 use super::runtime::PrototypeRuntime;
 use super::trace::{frame_sequence_error, parse_frames_from_trace, schema_for_template};
-use super::types::{CliError, OutputFormat, ProtoTarget, TraceAnalysisSummary};
+use super::types::{CliError, DecodeInputMode, OutputFormat, ProtoTarget, TraceAnalysisSummary};
 
 pub(crate) fn render_trace_analysis_output(
     target: ProtoTarget,
     auto_detect_target: bool,
+    input_mode: DecodeInputMode,
     trace_text: &str,
     format: OutputFormat,
     secret: Option<&[u8]>,
 ) -> Result<String, CliError> {
-    let summary = analyze_trace_summary(target, auto_detect_target, trace_text, secret)?;
+    let summary = analyze_trace_summary(
+        "analyze",
+        target,
+        auto_detect_target,
+        input_mode,
+        trace_text,
+        secret,
+    )?;
     if matches!(format, OutputFormat::Json) {
         return Ok(build_trace_analysis_json(&summary));
     }
@@ -25,15 +33,17 @@ pub(crate) fn render_trace_analysis_output(
 }
 
 pub(crate) fn analyze_trace_summary(
+    operation: &str,
     target: ProtoTarget,
     auto_detect_target: bool,
+    input_mode: DecodeInputMode,
     trace_text: &str,
     secret: Option<&[u8]>,
 ) -> Result<TraceAnalysisSummary, CliError> {
     if trace_text.trim().is_empty() {
-        return Err(CliError::input(
-            "analyze requires trace input from proto-encode output",
-        ));
+        return Err(CliError::input(format!(
+            "{operation} requires input from proto-encode trace output or canonical stego text"
+        )));
     }
 
     let target = resolve_trace_target(target, auto_detect_target, trace_text)?;
@@ -44,8 +54,59 @@ pub(crate) fn analyze_trace_summary(
         ))
     })?;
     let schemas = runtime.mapper.frame_schemas();
-    let frames = parse_frames_from_trace(trace_text, &schemas)
+    let parsed_trace_frames = parse_frames_from_trace(trace_text, &schemas)
         .map_err(|error| CliError::trace(format!("failed to parse trace frames: {error}")))?;
+    let frames = match input_mode {
+        DecodeInputMode::Trace => {
+            if parsed_trace_frames.is_empty() {
+                return Err(CliError::input(format!(
+                    "{operation} trace mode requires proto-encode trace input (rerun encode with --emit-trace)"
+                )));
+            }
+            parsed_trace_frames
+        }
+        DecodeInputMode::Text => {
+            if !runtime.text_decode_lossless {
+                return Err(CliError::input(format!(
+                    "{} text decode is not lossless yet; rerun encode with --emit-trace and use --trace-input",
+                    runtime.language_display
+                )));
+            }
+            runtime
+                .extract_plans(trace_text)
+                .ok()
+                .filter(|plans| !plans.is_empty())
+                .and_then(|plans| runtime.mapper.map_plans_to_frames(&plans).ok())
+                .ok_or_else(|| {
+                    CliError::input(format!(
+                        "{operation} text mode requires canonical stego text compatible with active language extractor"
+                    ))
+                })?
+        }
+        DecodeInputMode::Auto => {
+            if parsed_trace_frames.is_empty() {
+                if !runtime.text_decode_lossless {
+                    return Err(CliError::input(format!(
+                        "{} text decode is not lossless yet; rerun encode with --emit-trace and use --trace-input",
+                        runtime.language_display
+                    )));
+                }
+                runtime
+                    .extract_plans(trace_text)
+                    .ok()
+                    .filter(|plans| !plans.is_empty())
+                    .and_then(|plans| runtime.mapper.map_plans_to_frames(&plans).ok())
+                    .ok_or_else(|| {
+                        CliError::input(format!(
+                            "{operation} requires parseable trace frames or canonical stego text"
+                        ))
+                    })?
+            } else {
+                parsed_trace_frames
+            }
+        }
+    };
+
     if frames.is_empty() {
         return Err(CliError::trace("no frame lines were found in trace input"));
     }
