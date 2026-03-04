@@ -374,7 +374,7 @@ fn schemas_lang_filter_limits_output() {
 
 #[test]
 fn validate_json_reports_integrity_ok() {
-    let encode_output = run_lsteg(&["encode", "--message", "salam"]);
+    let encode_output = run_lsteg(&["encode", "--message", "salam", "--emit-trace"]);
     assert!(encode_output.status.success());
     let trace_text = stdout_string(&encode_output);
 
@@ -388,7 +388,7 @@ fn validate_json_reports_integrity_ok() {
 
 #[test]
 fn validate_fails_for_non_contiguous_trace() {
-    let encode_output = run_lsteg(&["encode", "--message", "salam"]);
+    let encode_output = run_lsteg(&["encode", "--message", "salam", "--emit-trace"]);
     assert!(encode_output.status.success());
     let trace_text = stdout_string(&encode_output);
     let broken_trace = trace_text.replacen("bits=18..39", "bits=19..40", 1);
@@ -406,7 +406,7 @@ fn validate_fails_for_non_contiguous_trace() {
 
 #[test]
 fn decode_roundtrip_from_encode_trace_works() {
-    let encode_output = run_lsteg(&["encode", "--message", "salam"]);
+    let encode_output = run_lsteg(&["encode", "--message", "salam", "--emit-trace"]);
     assert!(encode_output.status.success());
     let trace_text = stdout_string(&encode_output);
 
@@ -419,8 +419,55 @@ fn decode_roundtrip_from_encode_trace_works() {
 }
 
 #[test]
+fn encode_text_output_defaults_to_final_stego_text() {
+    let output = run_lsteg(&["encode", "--message", "salam"]);
+    assert!(output.status.success());
+
+    let stdout = stdout_string(&output);
+    assert!(stdout.contains(" را "));
+    assert!(!stdout.contains("prototype encode"));
+    assert!(!stdout.contains("frame 01"));
+}
+
+#[test]
+fn decode_auto_rejects_plain_text_input_when_lossless_text_decode_is_unavailable() {
+    let encode_output = run_lsteg(&["encode", "--message", "salam"]);
+    assert!(encode_output.status.success());
+    let stego_text = stdout_string(&encode_output);
+
+    let decode_output = run_lsteg_with_stdin(&["decode", "--format", "json"], &stego_text);
+    assert_eq!(decode_output.status.code(), Some(1));
+
+    let stderr = stderr_string(&decode_output);
+    assert!(stderr.contains("LSTEG-CLI-INP-001"));
+    assert!(stderr.contains("text decode is not lossless yet"));
+}
+
+#[test]
+fn decode_text_input_rejects_plain_text_when_lossless_text_decode_is_unavailable() {
+    let encode_output = run_lsteg(&["encode", "--message", "salam"]);
+    assert!(encode_output.status.success());
+    let stego_text = stdout_string(&encode_output);
+
+    let decode_output =
+        run_lsteg_with_stdin(&["decode", "--text-input", "--format", "json"], &stego_text);
+    assert_eq!(decode_output.status.code(), Some(1));
+
+    let stderr = stderr_string(&decode_output);
+    assert!(stderr.contains("LSTEG-CLI-INP-001"));
+    assert!(stderr.contains("text decode is not lossless yet"));
+}
+
+#[test]
 fn decode_roundtrip_from_english_trace_works() {
-    let encode_output = run_lsteg(&["encode", "--lang", "en", "--message", "hello"]);
+    let encode_output = run_lsteg(&[
+        "encode",
+        "--lang",
+        "en",
+        "--message",
+        "hello",
+        "--emit-trace",
+    ]);
     assert!(encode_output.status.success());
     let trace_text = stdout_string(&encode_output);
 
@@ -434,7 +481,14 @@ fn decode_roundtrip_from_english_trace_works() {
 
 #[test]
 fn decode_rejects_explicit_language_mismatch() {
-    let encode_output = run_lsteg(&["encode", "--lang", "en", "--message", "hello"]);
+    let encode_output = run_lsteg(&[
+        "encode",
+        "--lang",
+        "en",
+        "--message",
+        "hello",
+        "--emit-trace",
+    ]);
     assert!(encode_output.status.success());
     let trace_text = stdout_string(&encode_output);
 
@@ -449,7 +503,14 @@ fn decode_rejects_explicit_language_mismatch() {
 
 #[test]
 fn decode_rejects_mixed_language_trace() {
-    let encode_output = run_lsteg(&["encode", "--lang", "en", "--message", "hello"]);
+    let encode_output = run_lsteg(&[
+        "encode",
+        "--lang",
+        "en",
+        "--message",
+        "hello",
+        "--emit-trace",
+    ]);
     assert!(encode_output.status.success());
     let trace_text = stdout_string(&encode_output);
     let mixed_trace = trace_text.replacen("[en-", "[fa-", 1);
@@ -464,7 +525,7 @@ fn decode_rejects_mixed_language_trace() {
 
 #[test]
 fn analyze_from_trace_reports_integrity_ok() {
-    let encode_output = run_lsteg(&["encode", "--message", "salam donya"]);
+    let encode_output = run_lsteg(&["encode", "--message", "salam donya", "--emit-trace"]);
     assert!(encode_output.status.success());
     let trace_text = stdout_string(&encode_output);
 
@@ -479,7 +540,14 @@ fn analyze_from_trace_reports_integrity_ok() {
 
 #[test]
 fn analyze_auto_detects_english_trace_language() {
-    let encode_output = run_lsteg(&["encode", "--lang", "en", "--message", "hello world"]);
+    let encode_output = run_lsteg(&[
+        "encode",
+        "--lang",
+        "en",
+        "--message",
+        "hello world",
+        "--emit-trace",
+    ]);
     assert!(encode_output.status.success());
     let trace_text = stdout_string(&encode_output);
 
@@ -495,7 +563,14 @@ fn analyze_auto_detects_english_trace_language() {
 
 #[test]
 fn analyze_rejects_explicit_language_mismatch() {
-    let encode_output = run_lsteg(&["encode", "--lang", "en", "--message", "hello world"]);
+    let encode_output = run_lsteg(&[
+        "encode",
+        "--lang",
+        "en",
+        "--message",
+        "hello world",
+        "--emit-trace",
+    ]);
     assert!(encode_output.status.success());
     let trace_text = stdout_string(&encode_output);
 
@@ -512,7 +587,14 @@ fn analyze_rejects_explicit_language_mismatch() {
 
 #[test]
 fn analyze_rejects_mixed_language_trace() {
-    let encode_output = run_lsteg(&["encode", "--lang", "en", "--message", "hello world"]);
+    let encode_output = run_lsteg(&[
+        "encode",
+        "--lang",
+        "en",
+        "--message",
+        "hello world",
+        "--emit-trace",
+    ]);
     assert!(encode_output.status.success());
     let trace_text = stdout_string(&encode_output);
     let mixed_trace = trace_text.replacen("[en-", "[fa-", 1);
@@ -539,7 +621,7 @@ fn runtime_errors_return_exit_code_one() {
 
 #[test]
 fn decode_rejects_non_contiguous_trace_ranges() {
-    let encode_output = run_lsteg(&["encode", "--message", "salam"]);
+    let encode_output = run_lsteg(&["encode", "--message", "salam", "--emit-trace"]);
     assert!(encode_output.status.success());
     let trace_text = stdout_string(&encode_output);
     let broken_trace = trace_text.replacen("bits=18..39", "bits=19..40", 1);
@@ -553,7 +635,7 @@ fn decode_rejects_non_contiguous_trace_ranges() {
 
 #[test]
 fn analyze_reports_integrity_failure_for_non_contiguous_trace() {
-    let encode_output = run_lsteg(&["encode", "--message", "salam"]);
+    let encode_output = run_lsteg(&["encode", "--message", "salam", "--emit-trace"]);
     assert!(encode_output.status.success());
     let trace_text = stdout_string(&encode_output);
     let broken_trace = trace_text.replacen("bits=18..39", "bits=19..40", 1);
@@ -608,7 +690,7 @@ fn invalid_env_format_returns_config_error() {
 
 #[test]
 fn decode_uses_env_trace_when_stdin_missing() {
-    let encode_output = run_lsteg(&["encode", "--message", "salam"]);
+    let encode_output = run_lsteg(&["encode", "--message", "salam", "--emit-trace"]);
     assert!(encode_output.status.success());
     let trace_text = stdout_string(&encode_output);
 
@@ -623,8 +705,18 @@ fn decode_uses_env_trace_when_stdin_missing() {
 
 #[test]
 fn cli_trace_overrides_env_trace() {
-    let good_trace = stdout_string(&run_lsteg(&["encode", "--message", "salam"]));
-    let bad_trace = stdout_string(&run_lsteg(&["encode", "--message", "kharab"]));
+    let good_trace = stdout_string(&run_lsteg(&[
+        "encode",
+        "--message",
+        "salam",
+        "--emit-trace",
+    ]));
+    let bad_trace = stdout_string(&run_lsteg(&[
+        "encode",
+        "--message",
+        "kharab",
+        "--emit-trace",
+    ]));
 
     let decode_output = run_lsteg_with_env(
         &["decode", "--trace", &good_trace, "--format", "json"],
@@ -645,7 +737,7 @@ fn encode_fails_without_secret() {
 
 #[test]
 fn decode_fails_with_wrong_secret() {
-    let encode_output = run_lsteg(&["encode", "--message", "salam"]);
+    let encode_output = run_lsteg(&["encode", "--message", "salam", "--emit-trace"]);
     assert!(encode_output.status.success());
     let trace_text = stdout_string(&encode_output);
 
@@ -664,7 +756,7 @@ fn decode_fails_with_wrong_secret() {
 
 #[test]
 fn analyze_without_secret_reports_structural_only() {
-    let encode_output = run_lsteg(&["encode", "--message", "salam"]);
+    let encode_output = run_lsteg(&["encode", "--message", "salam", "--emit-trace"]);
     assert!(encode_output.status.success());
     let trace_text = stdout_string(&encode_output);
 
@@ -689,6 +781,7 @@ fn secret_file_is_used_for_encode_and_decode() {
         "encode",
         "--message",
         "salam",
+        "--emit-trace",
         "--secret-file",
         secret_file.as_str(),
     ]);
@@ -720,7 +813,14 @@ fn secret_file_is_used_for_encode_and_decode() {
 
 #[test]
 fn cli_secret_overrides_env_secret() {
-    let encode_output = run_lsteg(&["encode", "--message", "salam", "--secret", "cli-secret"]);
+    let encode_output = run_lsteg(&[
+        "encode",
+        "--message",
+        "salam",
+        "--emit-trace",
+        "--secret",
+        "cli-secret",
+    ]);
     assert!(encode_output.status.success());
     let trace_text = stdout_string(&encode_output);
 
@@ -743,7 +843,14 @@ fn cli_secret_overrides_env_secret() {
 
 #[test]
 fn analyze_with_wrong_secret_reports_decrypt_integrity_error() {
-    let encode_output = run_lsteg(&["encode", "--message", "salam", "--secret", "right-secret"]);
+    let encode_output = run_lsteg(&[
+        "encode",
+        "--message",
+        "salam",
+        "--emit-trace",
+        "--secret",
+        "right-secret",
+    ]);
     assert!(encode_output.status.success());
     let trace_text = stdout_string(&encode_output);
 

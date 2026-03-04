@@ -1112,6 +1112,9 @@ fn render_proto_decode_output(
             (parsed_trace_frames, false)
         }
         DecodeInputMode::Text => {
+            if !runtime.text_decode_lossless {
+                return Err(text_decode_not_lossless_error(runtime.language_display));
+            }
             let frames = runtime
                 .extract_plans(trace_text)
                 .ok()
@@ -1126,6 +1129,9 @@ fn render_proto_decode_output(
         }
         DecodeInputMode::Auto => {
             if parsed_trace_frames.is_empty() {
+                if !runtime.text_decode_lossless {
+                    return Err(text_decode_not_lossless_error(runtime.language_display));
+                }
                 if let Some(frames) = runtime
                     .extract_plans(trace_text)
                     .ok()
@@ -1218,6 +1224,12 @@ fn render_proto_decode_output(
     }
 
     Ok(report_lines.join("\n"))
+}
+
+fn text_decode_not_lossless_error(language_display: &str) -> CliError {
+    CliError::input(format!(
+        "{language_display} text decode is not lossless yet; rerun encode with --emit-trace and decode with --trace-input"
+    ))
 }
 
 fn resolve_encode_payload(options: &EncodeOptions) -> Result<String, CliError> {

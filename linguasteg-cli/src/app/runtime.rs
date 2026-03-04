@@ -180,6 +180,7 @@ impl RuntimeSymbolicMapper for EnglishPrototypeSymbolicMapper {
 struct RuntimeComponents {
     language_code: &'static str,
     language_display: &'static str,
+    text_decode_lossless: bool,
     pack: Box<dyn RuntimeLanguagePack>,
     checker: Box<dyn GrammarConstraintChecker>,
     realizer: Box<dyn LanguageRealizer>,
@@ -190,6 +191,7 @@ struct RuntimeComponents {
 pub(crate) struct PrototypeRuntime {
     pub(crate) language_code: &'static str,
     pub(crate) language_display: &'static str,
+    pub(crate) text_decode_lossless: bool,
     pub(crate) pack: RuntimeLanguagePackHandle,
     pub(crate) checker: Box<dyn GrammarConstraintChecker>,
     pub(crate) realizer: Box<dyn LanguageRealizer>,
@@ -214,6 +216,7 @@ impl PrototypeRuntime {
         Ok(Self {
             language_code: components.language_code,
             language_display: components.language_display,
+            text_decode_lossless: components.text_decode_lossless,
             pack: RuntimeLanguagePackHandle::new(components.pack),
             checker: components.checker,
             realizer: components.realizer,
@@ -272,6 +275,7 @@ fn runtime_components(target: ProtoTarget) -> RuntimeComponents {
         ProtoTarget::Farsi => RuntimeComponents {
             language_code: "fa",
             language_display: "Farsi",
+            text_decode_lossless: false,
             pack: Box::new(FarsiPrototypeLanguagePack::default()),
             checker: Box::new(FarsiPrototypeConstraintChecker),
             realizer: Box::new(FarsiPrototypeRealizer),
@@ -281,6 +285,7 @@ fn runtime_components(target: ProtoTarget) -> RuntimeComponents {
         ProtoTarget::English => RuntimeComponents {
             language_code: "en",
             language_display: "English",
+            text_decode_lossless: false,
             pack: Box::new(EnglishPrototypeLanguagePack::default()),
             checker: Box::new(EnglishPrototypeConstraintChecker),
             realizer: Box::new(EnglishPrototypeRealizer),

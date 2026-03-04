@@ -910,4 +910,63 @@ mod tests {
             "encode accepts either --secret or --secret-file, not both"
         );
     }
+
+    #[test]
+    fn parse_decode_command_sets_trace_input_mode() {
+        let command = parse_command(vec![
+            "decode".to_string(),
+            "--trace-input".to_string(),
+            "--trace".to_string(),
+            "frame 01 [fa-basic-sov] bits=0..18 values=subject:0,object:0,adjective:0,verb:21 => x"
+                .to_string(),
+        ])
+        .expect("parse should succeed")
+        .expect("command should exist");
+
+        let Command::Decode(options) = command else {
+            panic!("expected decode command");
+        };
+
+        assert!(matches!(options.input_mode, DecodeInputMode::Trace));
+        assert!(options.trace.is_some());
+    }
+
+    #[test]
+    fn parse_decode_command_sets_text_input_mode() {
+        let command = parse_command(vec![
+            "decode".to_string(),
+            "--text-input".to_string(),
+            "--trace".to_string(),
+            "مرد کتاب زیبا را خرید.".to_string(),
+        ])
+        .expect("parse should succeed")
+        .expect("command should exist");
+
+        let Command::Decode(options) = command else {
+            panic!("expected decode command");
+        };
+
+        assert!(matches!(options.input_mode, DecodeInputMode::Text));
+        assert!(options.trace.is_some());
+    }
+
+    #[test]
+    fn parse_decode_command_rejects_mixed_trace_and_text_input_modes() {
+        let result = parse_command(vec![
+            "decode".to_string(),
+            "--trace-input".to_string(),
+            "--text-input".to_string(),
+            "--trace".to_string(),
+            "x".to_string(),
+        ]);
+        let error = match result {
+            Ok(_) => panic!("mixed input modes should fail"),
+            Err(error) => error,
+        };
+
+        assert_eq!(
+            error.message(),
+            "decode accepts either --trace-input or --text-input, not both"
+        );
+    }
 }

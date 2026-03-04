@@ -50,7 +50,7 @@ fn stderr_string(output: &Output) -> String {
 
 #[test]
 fn encode_text_contains_expected_sections() {
-    let output = run_lsteg(&["encode", "--message", "salam"]);
+    let output = run_lsteg(&["encode", "--message", "salam", "--emit-trace"]);
     assert!(output.status.success());
     let stdout = stdout_string(&output);
     assert!(stdout.contains("Farsi prototype encode"));
