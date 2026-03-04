@@ -633,6 +633,9 @@ fn style_noun_surface(profile: FarsiEncodeProfile, noun: &FarsiNounLexeme) -> St
             "داستان" => "حکایت",
             "پیام" => "پیغام",
             "غذا" => "طعام",
+            "گزارش" => "کارنامه",
+            "طرح" => "نگاره",
+            "برنامه" => "تدبیر",
             _ => noun.canonical,
         },
         FarsiEncodeProfile::SaadiInspiredLight => match noun.canonical {
@@ -652,11 +655,18 @@ fn style_verb_surface(profile: FarsiEncodeProfile, verb: &FarsiVerbLexeme) -> St
             "دید" => "نگریست",
             "خورد" => "چشید",
             "نوشید" => "سرکشید",
+            "یافت" => "بجست",
+            "گرفت" => "برگرفت",
+            "گفت" => "فرمود",
+            "چید" => "آراست",
+            "فرستاد" => "گسیلید",
+            "افزود" => "فزود",
             _ => verb.canonical,
         },
         FarsiEncodeProfile::SaadiInspiredLight => match verb.canonical {
             "نوشت" => "نگاشت",
             "دید" => "نگریست",
+            "گفت" => "فرمود",
             _ => verb.canonical,
         },
     };
@@ -670,9 +680,13 @@ fn style_adjective_surface(
     let surface = match profile {
         FarsiEncodeProfile::NeutralFormal => adjective.canonical,
         FarsiEncodeProfile::LiteraryClassicInspired => match adjective.canonical {
-            "زیبا" => "خوش",
+            "زیبا" => "دلنشین",
             "قدیمی" => "کهن",
             "تازه" => "نو",
+            "گرم" => "گدازان",
+            "روشن" => "تابان",
+            "نرم" => "لطیف",
+            "دقیق" => "موشکاف",
             _ => adjective.canonical,
         },
         FarsiEncodeProfile::SaadiInspiredLight => match adjective.canonical {
@@ -1040,17 +1054,17 @@ const FARSI_NOUN_LEXEMES: &[FarsiNounLexeme] = &[
     },
     FarsiNounLexeme {
         canonical: "گزارش",
-        accepted_forms: &["گزارش"],
+        accepted_forms: &["گزارش", "کارنامه"],
         semantic_tags: &["core"],
     },
     FarsiNounLexeme {
         canonical: "طرح",
-        accepted_forms: &["طرح"],
+        accepted_forms: &["طرح", "نگاره"],
         semantic_tags: &["core"],
     },
     FarsiNounLexeme {
         canonical: "برنامه",
-        accepted_forms: &["برنامه"],
+        accepted_forms: &["برنامه", "تدبیر"],
         semantic_tags: &["core"],
     },
     FarsiNounLexeme {
@@ -1209,12 +1223,12 @@ const FARSI_VERB_LEXEMES: &[FarsiVerbLexeme] = &[
     },
     FarsiVerbLexeme {
         canonical: "یافت",
-        accepted_forms: &["یافت"],
+        accepted_forms: &["یافت", "بجست"],
         accepted_object_tags: &["core"],
     },
     FarsiVerbLexeme {
         canonical: "گرفت",
-        accepted_forms: &["گرفت"],
+        accepted_forms: &["گرفت", "برگرفت"],
         accepted_object_tags: &["core"],
     },
     FarsiVerbLexeme {
@@ -1224,7 +1238,7 @@ const FARSI_VERB_LEXEMES: &[FarsiVerbLexeme] = &[
     },
     FarsiVerbLexeme {
         canonical: "گفت",
-        accepted_forms: &["گفت"],
+        accepted_forms: &["گفت", "فرمود"],
         accepted_object_tags: &["core"],
     },
     FarsiVerbLexeme {
@@ -1244,7 +1258,7 @@ const FARSI_VERB_LEXEMES: &[FarsiVerbLexeme] = &[
     },
     FarsiVerbLexeme {
         canonical: "چید",
-        accepted_forms: &["چید"],
+        accepted_forms: &["چید", "آراست"],
         accepted_object_tags: &["core"],
     },
     FarsiVerbLexeme {
@@ -1264,7 +1278,7 @@ const FARSI_VERB_LEXEMES: &[FarsiVerbLexeme] = &[
     },
     FarsiVerbLexeme {
         canonical: "فرستاد",
-        accepted_forms: &["فرستاد"],
+        accepted_forms: &["فرستاد", "گسیلید"],
         accepted_object_tags: &["core"],
     },
     FarsiVerbLexeme {
@@ -1304,7 +1318,7 @@ const FARSI_VERB_LEXEMES: &[FarsiVerbLexeme] = &[
     },
     FarsiVerbLexeme {
         canonical: "افزود",
-        accepted_forms: &["افزود"],
+        accepted_forms: &["افزود", "فزود"],
         accepted_object_tags: &["core"],
     },
     FarsiVerbLexeme {
@@ -1327,7 +1341,7 @@ const FARSI_VERB_LEXEMES: &[FarsiVerbLexeme] = &[
 const FARSI_ADJECTIVE_LEXEMES: &[FarsiAdjectiveLexeme] = &[
     FarsiAdjectiveLexeme {
         canonical: "زیبا",
-        accepted_forms: &["زیبا", "ziba", "خوش"],
+        accepted_forms: &["زیبا", "ziba", "خوش", "دلنشین"],
         accepted_noun_tags: &[
             "core",
             "document",
@@ -1350,17 +1364,17 @@ const FARSI_ADJECTIVE_LEXEMES: &[FarsiAdjectiveLexeme] = &[
     },
     FarsiAdjectiveLexeme {
         canonical: "گرم",
-        accepted_forms: &["گرم", "garm"],
+        accepted_forms: &["گرم", "garm", "گدازان"],
         accepted_noun_tags: &["core", "food", "drink"],
     },
     FarsiAdjectiveLexeme {
         canonical: "روشن",
-        accepted_forms: &["روشن"],
+        accepted_forms: &["روشن", "تابان"],
         accepted_noun_tags: &["core"],
     },
     FarsiAdjectiveLexeme {
         canonical: "نرم",
-        accepted_forms: &["نرم"],
+        accepted_forms: &["نرم", "لطیف"],
         accepted_noun_tags: &["core"],
     },
     FarsiAdjectiveLexeme {
@@ -1370,7 +1384,7 @@ const FARSI_ADJECTIVE_LEXEMES: &[FarsiAdjectiveLexeme] = &[
     },
     FarsiAdjectiveLexeme {
         canonical: "دقیق",
-        accepted_forms: &["دقیق"],
+        accepted_forms: &["دقیق", "موشکاف"],
         accepted_noun_tags: &["core"],
     },
 ];
@@ -1433,7 +1447,8 @@ fn location_forms() -> &'static [&'static str] {
 mod tests {
     use linguasteg_core::{
         BitRange, FixedWidthBitPlanner, FixedWidthPlanningOptions, LanguageRealizer,
-        LanguageRegistry, RealizationPlan, SlotAssignment, SlotId, StyleProfileRegistry,
+        LanguageRegistry, RealizationPlan, SlotAssignment, SlotId, StyleProfileId,
+        StyleProfileRegistry,
         SymbolicFramePlan, SymbolicPayloadPlan, SymbolicPayloadPlanner, SymbolicSlotValue,
         TemplateId, TemplateRegistry, decode_payload_from_symbolic_frames,
     };
@@ -1669,6 +1684,58 @@ mod tests {
                 .expect("render should work");
             assert!(!rendered.trim().is_empty());
         }
+    }
+
+    #[test]
+    fn literary_profile_maps_to_richer_surfaces_and_roundtrips() {
+        let mapper = FarsiPrototypeSymbolicMapper;
+        let profile_id =
+            StyleProfileId::new("fa-literary-classic-inspired").expect("valid style profile id");
+        let payload_plan = SymbolicPayloadPlan {
+            original_len_bytes: 0,
+            encoded_len_bytes: 0,
+            length_prefix_bytes: 0,
+            padding_bits: 0,
+            frames: vec![symbolic_frame(
+                "fa-basic-sov",
+                &[
+                    ("subject", 5, 0),
+                    ("object", 5, 1),
+                    ("adjective", 3, 0),
+                    ("verb", 5, 1),
+                ],
+            )],
+        };
+
+        let plans = mapper
+            .map_payload_to_plans_with_profile(&payload_plan, Some(&profile_id))
+            .expect("mapping should succeed");
+        assert_eq!(plans.len(), 1);
+
+        let object = plans[0]
+            .assignments
+            .iter()
+            .find(|assignment| assignment.slot.as_str() == "object")
+            .expect("object assignment should exist");
+        let adjective = plans[0]
+            .assignments
+            .iter()
+            .find(|assignment| assignment.slot.as_str() == "adjective")
+            .expect("adjective assignment should exist");
+        let verb = plans[0]
+            .assignments
+            .iter()
+            .find(|assignment| assignment.slot.as_str() == "verb")
+            .expect("verb assignment should exist");
+
+        assert_eq!(object.surface, "مکتوب");
+        assert_eq!(adjective.surface, "دلنشین");
+        assert_eq!(verb.surface, "نگاشت");
+
+        let recovered_frames = mapper
+            .map_plans_to_frames(&plans)
+            .expect("reverse mapping should succeed");
+        assert_eq!(recovered_frames, payload_plan.frames);
     }
 
     #[test]
