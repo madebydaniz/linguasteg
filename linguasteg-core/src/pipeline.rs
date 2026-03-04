@@ -1,5 +1,5 @@
-use crate::{CoreResult, LanguageTag, ModelId, ProviderId, StrategyId};
 use crate::RealizationPlan;
+use crate::{CoreResult, LanguageTag, ModelId, ProviderId, StrategyId};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EncodeRequest {

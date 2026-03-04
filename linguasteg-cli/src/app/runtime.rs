@@ -1,10 +1,10 @@
 use linguasteg_core::{
-    CoreResult, FixedWidthBitPlanner, GrammarConstraintChecker, LanguageDescriptor,
+    CoreError, CoreResult, FixedWidthBitPlanner, GrammarConstraintChecker, LanguageDescriptor,
     LanguageRealizer, LanguageRegistry, LanguageTag, ModelCapability, ModelDescriptor, ModelId,
     ModelRegistry, ModelSelection, PipelineOptions, PipelineOrchestrator, ProviderId,
     RealizationPlan, RealizationTemplateDescriptor, StrategyDescriptor, StrategyId,
-    StrategyRegistry, StyleProfileDescriptor, StyleProfileRegistry, SymbolicFrameSchema,
-    SymbolicPayloadPlan, TemplateRegistry, TextExtractor,
+    StrategyRegistry, StyleProfileDescriptor, StyleProfileRegistry, SymbolicFramePlan,
+    SymbolicFrameSchema, SymbolicPayloadPlan, TemplateRegistry, TextExtractor,
 };
 use linguasteg_models::{
     EnglishPrototypeConstraintChecker, EnglishPrototypeLanguagePack, EnglishPrototypeRealizer,
@@ -134,6 +134,8 @@ pub(crate) trait RuntimeSymbolicMapper: Send + Sync {
         &self,
         payload_plan: &SymbolicPayloadPlan,
     ) -> CoreResult<Vec<RealizationPlan>>;
+
+    fn map_plans_to_frames(&self, plans: &[RealizationPlan]) -> CoreResult<Vec<SymbolicFramePlan>>;
 }
 
 impl RuntimeSymbolicMapper for FarsiPrototypeSymbolicMapper {
@@ -147,6 +149,10 @@ impl RuntimeSymbolicMapper for FarsiPrototypeSymbolicMapper {
     ) -> CoreResult<Vec<RealizationPlan>> {
         FarsiPrototypeSymbolicMapper::map_payload_to_plans(self, payload_plan)
     }
+
+    fn map_plans_to_frames(&self, plans: &[RealizationPlan]) -> CoreResult<Vec<SymbolicFramePlan>> {
+        FarsiPrototypeSymbolicMapper::map_plans_to_frames(self, plans)
+    }
 }
 
 impl RuntimeSymbolicMapper for EnglishPrototypeSymbolicMapper {
@@ -159,6 +165,15 @@ impl RuntimeSymbolicMapper for EnglishPrototypeSymbolicMapper {
         payload_plan: &SymbolicPayloadPlan,
     ) -> CoreResult<Vec<RealizationPlan>> {
         EnglishPrototypeSymbolicMapper::map_payload_to_plans(self, payload_plan)
+    }
+
+    fn map_plans_to_frames(
+        &self,
+        _plans: &[RealizationPlan],
+    ) -> CoreResult<Vec<SymbolicFramePlan>> {
+        Err(CoreError::NotImplemented(
+            "english symbolic reverse mapping is not wired yet",
+        ))
     }
 }
 

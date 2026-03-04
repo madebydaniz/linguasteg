@@ -1081,8 +1081,22 @@ fn render_proto_decode_output(
     let target = resolve_trace_target(target, auto_detect_target, trace_text)?;
     let runtime = runtime_for_target(target)?;
     let schemas = runtime.mapper.frame_schemas();
-    let frames = parse_frames_from_trace(trace_text, &schemas)
+    let parsed_trace_frames = parse_frames_from_trace(trace_text, &schemas)
         .map_err(|error| CliError::trace(format!("failed to parse trace frames: {error}")))?;
+    let (frames, used_extractor_frames) = if parsed_trace_frames.is_empty() {
+        if let Some(frames) = runtime
+            .extract_plans(trace_text)
+            .ok()
+            .filter(|plans| !plans.is_empty())
+            .and_then(|plans| runtime.mapper.map_plans_to_frames(&plans).ok())
+        {
+            (frames, true)
+        } else {
+            (parsed_trace_frames, false)
+        }
+    } else {
+        (parsed_trace_frames, false)
+    };
 
     if frames.is_empty() {
         return Err(CliError::trace("no frame lines were found in trace input"));
@@ -1117,8 +1131,15 @@ fn render_proto_decode_output(
     )?;
     let raw_payload = orchestration.payload;
     let payload = match secret {
-        Some(secret) => open_payload(&raw_payload, secret)
-            .map_err(|_| CliError::security("failed to decrypt payload; verify provided secret"))?,
+        Some(secret) => open_payload(&raw_payload, secret).map_err(|_| {
+            if used_extractor_frames {
+                CliError::security(
+                    "failed to decrypt payload from extracted text; use proto-encode trace input for lossless decode",
+                )
+            } else {
+                CliError::security("failed to decrypt payload; verify provided secret")
+            }
+        })?,
         None => raw_payload,
     };
     let hex_payload = payload
