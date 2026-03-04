@@ -107,6 +107,34 @@ fn encode_json_outputs_proto_encode_mode() {
 }
 
 #[test]
+fn encode_json_reports_null_style_profile_when_not_set() {
+    let output = run_lsteg(&["encode", "--message", "salam", "--format", "json"]);
+    assert!(output.status.success());
+
+    let stdout = stdout_string(&output);
+    assert!(stdout.contains("\"style_profile\":null"));
+}
+
+#[test]
+fn encode_json_reports_style_profile_when_set() {
+    let output = run_lsteg(&[
+        "encode",
+        "--lang",
+        "fa",
+        "--message",
+        "salam",
+        "--profile",
+        "fa-saadi-inspired-light",
+        "--format",
+        "json",
+    ]);
+    assert!(output.status.success());
+
+    let stdout = stdout_string(&output);
+    assert!(stdout.contains("\"style_profile\":\"fa-saadi-inspired-light\""));
+}
+
+#[test]
 fn encode_json_supports_english_target() {
     let output = run_lsteg(&[
         "encode",

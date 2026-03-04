@@ -67,6 +67,7 @@ fn encode_json_contains_expected_contract() {
     let stdout = stdout_string(&output);
     assert!(stdout.contains("\"mode\":\"proto-encode\""));
     assert!(stdout.contains("\"language\":\"fa\""));
+    assert!(stdout.contains("\"style_profile\":null"));
     assert!(stdout.contains("\"input_text\":\"salam\""));
     assert!(stdout.contains("\"payload_bytes\":5"));
 }

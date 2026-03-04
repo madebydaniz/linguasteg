@@ -123,6 +123,7 @@ pub(crate) fn build_trace_analysis_json(summary: &TraceAnalysisSummary) -> Strin
 pub(crate) fn build_proto_encode_json(
     language: &str,
     input_text: &str,
+    style_profile: Option<&str>,
     payload_bytes: usize,
     encoded_bytes: usize,
     padding_bits: u8,
@@ -162,11 +163,16 @@ pub(crate) fn build_proto_encode_json(
         Some(content) => format!("\"{}\"", json_escape(content)),
         None => "null".to_string(),
     };
+    let style_profile_json = match style_profile {
+        Some(value) => format!("\"{}\"", json_escape(value)),
+        None => "null".to_string(),
+    };
 
     format!(
-        "{{\"mode\":\"proto-encode\",\"language\":\"{}\",\"input_text\":\"{}\",\"payload_bytes\":{},\"encoded_bytes\":{},\"frame_count\":{},\"padding_bits\":{},\"frames\":[{}],\"final_text\":\"{}\",\"gateway_response\":{}}}",
+        "{{\"mode\":\"proto-encode\",\"language\":\"{}\",\"input_text\":\"{}\",\"style_profile\":{},\"payload_bytes\":{},\"encoded_bytes\":{},\"frame_count\":{},\"padding_bits\":{},\"frames\":[{}],\"final_text\":\"{}\",\"gateway_response\":{}}}",
         json_escape(language),
         json_escape(input_text),
+        style_profile_json,
         payload_bytes,
         encoded_bytes,
         frames.len(),

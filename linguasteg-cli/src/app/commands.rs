@@ -1053,6 +1053,7 @@ fn render_proto_encode_output(
         return Ok(build_proto_encode_json(
             runtime.language_code,
             payload_text,
+            profile_id.as_ref().map(StyleProfileId::as_str),
             payload.len(),
             payload_plan.encoded_len_bytes,
             payload_plan.padding_bits,
