@@ -37,8 +37,43 @@ jobs:
       - name: Clippy (bug-risk lints)
         run: cargo clippy --workspace --all-targets --all-features --locked -- -A clippy::all -A clippy::pedantic -D clippy::correctness -D clippy::suspicious
 
-      - name: Cargo test
-        run: cargo test --workspace --all-features --locked
+  contract-tests:
+    runs-on: ubuntu-latest
+    needs:
+      - quality
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.85.0
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Contract-focused test suite
+        run: cargo test -p linguasteg-cli --tests --locked
+
+  e2e-smoke:
+    runs-on: ubuntu-latest
+    needs:
+      - quality
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.85.0
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: End-to-end smoke
+        run: ./scripts/ci/smoke_e2e.sh
 
   dependency-review:
     if: github.event_name == 'pull_request'
