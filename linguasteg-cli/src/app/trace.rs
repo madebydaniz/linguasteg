@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use linguasteg_core::{
     BitRange, SymbolicFramePlan, SymbolicFrameSchema, SymbolicSlotValue, TemplateId,
@@ -82,6 +82,34 @@ fn parse_frames_from_proto_encode_json(
         let template_id = TemplateId::new(&frame.template_id)?;
 
         let schema = schema_for_template(schemas, &template_id)?;
+        let known_slots = schema
+            .fields
+            .iter()
+            .map(|field| field.slot.as_str().to_string())
+            .collect::<HashSet<_>>();
+        for slot in frame.values.keys() {
+            if !known_slots.contains(slot) {
+                return Err(format!(
+                    "unknown symbolic slot '{}' in template '{}'",
+                    slot, template_id
+                )
+                .into());
+            }
+        }
+
+        let consumed_bits = frame.end_bit - frame.start_bit;
+        if consumed_bits != schema.total_bits() {
+            return Err(format!(
+                "invalid bit range for template '{}': expected {} bits, got {} ({}..{})",
+                template_id,
+                schema.total_bits(),
+                consumed_bits,
+                frame.start_bit,
+                frame.end_bit
+            )
+            .into());
+        }
+
         let values = schema
             .fields
             .iter()
@@ -92,6 +120,12 @@ fn parse_frames_from_proto_encode_json(
                         field.slot, template_id
                     )
                 })?;
+                if !value_fits_bit_width(*value, field.bit_width) {
+                    return Err(format!(
+                        "symbolic value {} exceeds bit width {} for slot '{}' in template '{}'",
+                        value, field.bit_width, field.slot, template_id
+                    ));
+                }
 
                 Ok(SymbolicSlotValue {
                     slot: field.slot.clone(),
@@ -105,7 +139,7 @@ fn parse_frames_from_proto_encode_json(
             template_id,
             source: BitRange {
                 start_bit: frame.start_bit,
-                consumed_bits: frame.end_bit.saturating_sub(frame.start_bit),
+                consumed_bits,
             },
             values,
         });
@@ -221,6 +255,13 @@ fn parse_value_map(values_section: &str) -> Result<HashMap<String, u32>, DynErro
     Ok(parsed)
 }
 
+fn value_fits_bit_width(value: u32, bit_width: u8) -> bool {
+    if bit_width >= 32 {
+        return true;
+    }
+    value < (1_u32 << bit_width)
+}
+
 #[cfg(test)]
 mod tests {
     use linguasteg_models::FarsiPrototypeSymbolicMapper;
@@ -254,6 +295,62 @@ mod tests {
         assert_eq!(frames.len(), 2);
         assert_eq!(frames[0].template_id.as_str(), "fa-basic-sov");
         assert_eq!(frames[1].template_id.as_str(), "fa-time-location-sov");
+    }
+
+    #[test]
+    fn parse_proto_encode_json_fails_on_non_sequential_frame_index() {
+        let trace = r#"{"mode":"proto-encode","language":"fa","frames":[{"index":2,"template_id":"fa-basic-sov","start_bit":0,"end_bit":18,"values":{"subject":0,"object":0,"adjective":0,"verb":21},"sentence":"x"}]}"#;
+        let error = parse_frames_from_trace(trace, &farsi_schemas()).expect_err("json should fail");
+
+        assert!(error.to_string().contains("inconsistent 'index'"));
+    }
+
+    #[test]
+    fn parse_proto_encode_json_fails_on_frame_count_mismatch() {
+        let trace = r#"{"mode":"proto-encode","language":"fa","frame_count":2,"frames":[{"index":1,"template_id":"fa-basic-sov","start_bit":0,"end_bit":18,"values":{"subject":0,"object":0,"adjective":0,"verb":21},"sentence":"x"}]}"#;
+        let error = parse_frames_from_trace(trace, &farsi_schemas()).expect_err("json should fail");
+
+        assert!(error.to_string().contains("field 'frame_count' mismatch"));
+    }
+
+    #[test]
+    fn parse_proto_encode_json_fails_on_invalid_frame_range() {
+        let trace = r#"{"mode":"proto-encode","language":"fa","frames":[{"index":1,"template_id":"fa-basic-sov","start_bit":18,"end_bit":18,"values":{"subject":0,"object":0,"adjective":0,"verb":21},"sentence":"x"}]}"#;
+        let error = parse_frames_from_trace(trace, &farsi_schemas()).expect_err("json should fail");
+
+        assert!(error.to_string().contains("invalid bit range"));
+    }
+
+    #[test]
+    fn parse_proto_encode_json_fails_on_schema_width_mismatch() {
+        let trace = r#"{"mode":"proto-encode","language":"fa","frames":[{"index":1,"template_id":"fa-basic-sov","start_bit":0,"end_bit":17,"values":{"subject":0,"object":0,"adjective":0,"verb":21},"sentence":"x"}]}"#;
+        let error = parse_frames_from_trace(trace, &farsi_schemas()).expect_err("json should fail");
+
+        assert!(error.to_string().contains("expected 18 bits, got 17"));
+    }
+
+    #[test]
+    fn parse_proto_encode_json_fails_on_unknown_symbolic_slot() {
+        let trace = r#"{"mode":"proto-encode","language":"fa","frames":[{"index":1,"template_id":"fa-basic-sov","start_bit":0,"end_bit":18,"values":{"subject":0,"object":0,"adjective":0,"verb":21,"unexpected":1},"sentence":"x"}]}"#;
+        let error = parse_frames_from_trace(trace, &farsi_schemas()).expect_err("json should fail");
+
+        assert!(
+            error
+                .to_string()
+                .contains("unknown symbolic slot 'unexpected'")
+        );
+    }
+
+    #[test]
+    fn parse_proto_encode_json_fails_on_out_of_range_slot_value() {
+        let trace = r#"{"mode":"proto-encode","language":"fa","frames":[{"index":1,"template_id":"fa-basic-sov","start_bit":0,"end_bit":18,"values":{"subject":0,"object":0,"adjective":8,"verb":21},"sentence":"x"}]}"#;
+        let error = parse_frames_from_trace(trace, &farsi_schemas()).expect_err("json should fail");
+
+        assert!(
+            error
+                .to_string()
+                .contains("symbolic value 8 exceeds bit width 3")
+        );
     }
 
     #[test]

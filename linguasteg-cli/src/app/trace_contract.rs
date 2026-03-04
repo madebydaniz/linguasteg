@@ -42,6 +42,20 @@ pub(crate) fn parse_proto_encode_trace_json(
     let frames_array = frames_value
         .as_array()
         .ok_or_else(|| "proto-encode json field 'frames' must be an array".to_string())?;
+    if let Some(frame_count_raw) = value.get("frame_count") {
+        let frame_count = frame_count_raw.as_u64().ok_or_else(|| {
+            "proto-encode json field 'frame_count' must be an integer".to_string()
+        })?;
+        let frame_count = usize::try_from(frame_count)
+            .map_err(|_| "proto-encode json field 'frame_count' is out of range".to_string())?;
+        if frame_count != frames_array.len() {
+            return Err(format!(
+                "proto-encode json field 'frame_count' mismatch (expected {}, got {})",
+                frames_array.len(),
+                frame_count
+            ));
+        }
+    }
 
     let mut frames = Vec::with_capacity(frames_array.len());
     for (index, frame) in frames_array.iter().enumerate() {
@@ -51,6 +65,17 @@ pub(crate) fn parse_proto_encode_trace_json(
                 index + 1
             )
         })?;
+
+        let frame_index = parse_usize_field(frame_object, "index", index + 1)?;
+        let expected_index = index + 1;
+        if frame_index != expected_index {
+            return Err(format!(
+                "proto-encode frame at index {} has inconsistent 'index' (expected {}, got {})",
+                index + 1,
+                expected_index,
+                frame_index
+            ));
+        }
 
         let template_id = frame_object
             .get("template_id")
@@ -65,6 +90,14 @@ pub(crate) fn parse_proto_encode_trace_json(
 
         let start_bit = parse_usize_field(frame_object, "start_bit", index + 1)?;
         let end_bit = parse_usize_field(frame_object, "end_bit", index + 1)?;
+        if end_bit <= start_bit {
+            return Err(format!(
+                "proto-encode frame at index {} has invalid bit range (start_bit={}, end_bit={})",
+                index + 1,
+                start_bit,
+                end_bit
+            ));
+        }
 
         let values_object = frame_object
             .get("values")
