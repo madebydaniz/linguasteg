@@ -43,6 +43,24 @@ Required status checks:
 
 If `preflight` or `dry-run` fails, publishing is blocked.
 
+## Release Drill
+
+Use release drill to proactively validate release automation without crates.io token publishing.
+
+- Workflow: `release-drill`
+- Triggers:
+  - Manual (`workflow_dispatch`) with optional `ref` input
+  - Weekly schedule (Monday 04:30 UTC)
+- Drill steps:
+  - Validate `release-please` config and manifest mapping against workspace crates
+  - Execute publish preflight checks
+  - Execute publish dry-run for all workspace crates
+
+Local command:
+
+- `./scripts/ci/release_drill.sh full`
+- `./scripts/ci/release_drill.sh preflight-only`
+
 ## Maintainer Checklist
 
 Before merging to `main`:
