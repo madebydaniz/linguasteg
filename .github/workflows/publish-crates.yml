@@ -13,8 +13,51 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.85.0
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Publish preflight
+        run: ./scripts/ci/publish_release.sh preflight "${{ github.event.release.tag_name }}"
+
+  dry-run:
+    runs-on: ubuntu-latest
+    needs:
+      - preflight
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.85.0
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Publish dry-run
+        run: ./scripts/ci/publish_release.sh dry-run
+
   publish:
     runs-on: ubuntu-latest
+    needs:
+      - preflight
+      - dry-run
     env:
       CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
     steps:
@@ -28,73 +71,8 @@ jobs:
         with:
           toolchain: 1.85.0
 
-      - name: Verify crates.io token is configured
-        run: |
-          if [ -z "${CARGO_REGISTRY_TOKEN}" ]; then
-            echo "CRATES_IO_TOKEN is not configured."
-            exit 1
-          fi
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
 
       - name: Publish workspace crates
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          metadata="$(cargo metadata --format-version 1 --no-deps)"
-
-          crate_version() {
-            local crate_name="$1"
-            echo "${metadata}" | jq -r --arg name "${crate_name}" '.packages[] | select(.name == $name) | .version'
-          }
-
-          crate_exists() {
-            local crate_name="$1"
-            local crate_version="$2"
-            local status
-            status="$(curl -s -o /dev/null -w "%{http_code}" "https://crates.io/api/v1/crates/${crate_name}/${crate_version}")"
-            [ "${status}" = "200" ]
-          }
-
-          publish_with_retry() {
-            local crate_name="$1"
-            local attempts=5
-            local delay=15
-
-            for try in $(seq 1 "${attempts}"); do
-              if cargo publish -p "${crate_name}" --locked; then
-                return 0
-              fi
-
-              if [ "${try}" -eq "${attempts}" ]; then
-                echo "failed to publish ${crate_name} after ${attempts} attempts"
-                return 1
-              fi
-
-              sleep "$((delay * try))"
-            done
-          }
-
-          crates=(
-            "linguasteg-core"
-            "linguasteg-models"
-            "linguasteg-eval"
-            "linguasteg"
-            "linguasteg-cli"
-          )
-
-          for crate in "${crates[@]}"; do
-            version="$(crate_version "${crate}")"
-
-            if [ -z "${version}" ] || [ "${version}" = "null" ]; then
-              echo "could not detect version for ${crate}"
-              exit 1
-            fi
-
-            if crate_exists "${crate}" "${version}"; then
-              echo "${crate}@${version} already published, skipping"
-              continue
-            fi
-
-            echo "publishing ${crate}@${version}"
-            publish_with_retry "${crate}"
-          done
+        run: ./scripts/ci/publish_release.sh publish
