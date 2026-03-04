@@ -717,6 +717,46 @@ fn parse_errors_return_exit_code_two() {
 fn runtime_errors_return_exit_code_one() {
     let output = run_lsteg_with_stdin(&["decode"], "");
     assert_eq!(output.status.code(), Some(1));
+    let stderr = stderr_string(&output);
+    assert!(stderr.contains("LSTEG-CLI-INP-001"));
+    assert!(
+        stderr.contains(
+            "decode requires input from proto-encode trace output or canonical stego text"
+        )
+    );
+}
+
+#[test]
+fn decode_rejects_non_canonical_plain_text_with_input_error() {
+    let decode_output =
+        run_lsteg_with_stdin(&["decode", "--format", "json"], "this is not stego text");
+    assert_eq!(decode_output.status.code(), Some(1));
+
+    let stderr = stderr_string(&decode_output);
+    assert!(stderr.contains("LSTEG-CLI-INP-001"));
+    assert!(stderr.contains("decode requires parseable trace frames or canonical stego text"));
+}
+
+#[test]
+fn analyze_rejects_non_canonical_plain_text_with_input_error() {
+    let analyze_output =
+        run_lsteg_with_stdin(&["analyze", "--format", "json"], "this is not stego text");
+    assert_eq!(analyze_output.status.code(), Some(1));
+
+    let stderr = stderr_string(&analyze_output);
+    assert!(stderr.contains("LSTEG-CLI-INP-001"));
+    assert!(stderr.contains("analyze requires parseable trace frames or canonical stego text"));
+}
+
+#[test]
+fn validate_rejects_non_canonical_plain_text_with_input_error() {
+    let validate_output =
+        run_lsteg_with_stdin(&["validate", "--format", "json"], "this is not stego text");
+    assert_eq!(validate_output.status.code(), Some(1));
+
+    let stderr = stderr_string(&validate_output);
+    assert!(stderr.contains("LSTEG-CLI-INP-001"));
+    assert!(stderr.contains("validate requires parseable trace frames or canonical stego text"));
 }
 
 #[test]

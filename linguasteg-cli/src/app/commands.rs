@@ -1095,9 +1095,7 @@ fn render_proto_decode_output(
     secret: Option<&[u8]>,
 ) -> Result<String, CliError> {
     if trace_text.trim().is_empty() {
-        return Err(CliError::input(
-            "proto-decode requires trace input from proto-encode output",
-        ));
+        return Err(operation_requires_trace_or_text_input_error("decode"));
     }
 
     let target = resolve_trace_target(target, auto_detect_target, trace_text)?;
@@ -1108,32 +1106,32 @@ fn render_proto_decode_output(
     let (frames, used_extractor_frames) = match input_mode {
         DecodeInputMode::Trace => {
             if parsed_trace_frames.is_empty() {
-                return Err(CliError::input(
-                    "decode trace mode requires proto-encode trace input (rerun encode with --emit-trace)",
-                ));
+                return Err(operation_trace_mode_requires_trace_input_error("decode"));
             }
             (parsed_trace_frames, false)
         }
         DecodeInputMode::Text => {
             if !runtime.text_decode_lossless {
-                return Err(text_decode_not_lossless_error(runtime.language_display));
+                return Err(text_decode_not_lossless_error(
+                    runtime.language_display,
+                    "decode",
+                ));
             }
             let frames = runtime
                 .extract_plans(trace_text)
                 .ok()
                 .filter(|plans| !plans.is_empty())
                 .and_then(|plans| runtime.mapper.map_plans_to_frames(&plans).ok())
-                .ok_or_else(|| {
-                    CliError::input(
-                        "decode text mode requires canonical stego text compatible with active language extractor",
-                    )
-                })?;
+                .ok_or_else(|| operation_text_mode_requires_canonical_text_error("decode"))?;
             (frames, true)
         }
         DecodeInputMode::Auto => {
             if parsed_trace_frames.is_empty() {
                 if !runtime.text_decode_lossless {
-                    return Err(text_decode_not_lossless_error(runtime.language_display));
+                    return Err(text_decode_not_lossless_error(
+                        runtime.language_display,
+                        "decode",
+                    ));
                 }
                 if let Some(frames) = runtime
                     .extract_plans(trace_text)
@@ -1143,7 +1141,7 @@ fn render_proto_decode_output(
                 {
                     (frames, true)
                 } else {
-                    (parsed_trace_frames, false)
+                    return Err(operation_auto_requires_trace_or_text_error("decode"));
                 }
             } else {
                 (parsed_trace_frames, false)
@@ -1229,9 +1227,33 @@ fn render_proto_decode_output(
     Ok(report_lines.join("\n"))
 }
 
-fn text_decode_not_lossless_error(language_display: &str) -> CliError {
+fn text_decode_not_lossless_error(language_display: &str, operation: &str) -> CliError {
     CliError::input(format!(
-        "{language_display} text decode is not lossless yet; rerun encode with --emit-trace and decode with --trace-input"
+        "{language_display} text decode is not lossless yet; rerun encode with --emit-trace and use {operation} --trace-input"
+    ))
+}
+
+fn operation_requires_trace_or_text_input_error(operation: &str) -> CliError {
+    CliError::input(format!(
+        "{operation} requires input from proto-encode trace output or canonical stego text"
+    ))
+}
+
+fn operation_trace_mode_requires_trace_input_error(operation: &str) -> CliError {
+    CliError::input(format!(
+        "{operation} trace mode requires proto-encode trace input (rerun encode with --emit-trace)"
+    ))
+}
+
+fn operation_text_mode_requires_canonical_text_error(operation: &str) -> CliError {
+    CliError::input(format!(
+        "{operation} text mode requires canonical stego text compatible with active language extractor"
+    ))
+}
+
+fn operation_auto_requires_trace_or_text_error(operation: &str) -> CliError {
+    CliError::input(format!(
+        "{operation} requires parseable trace frames or canonical stego text"
     ))
 }
 
