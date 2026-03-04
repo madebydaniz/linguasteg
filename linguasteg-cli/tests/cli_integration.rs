@@ -430,32 +430,32 @@ fn encode_text_output_defaults_to_final_stego_text() {
 }
 
 #[test]
-fn decode_auto_rejects_plain_text_input_when_lossless_text_decode_is_unavailable() {
+fn decode_auto_roundtrip_from_farsi_plain_text_works() {
     let encode_output = run_lsteg(&["encode", "--message", "salam"]);
     assert!(encode_output.status.success());
     let stego_text = stdout_string(&encode_output);
 
     let decode_output = run_lsteg_with_stdin(&["decode", "--format", "json"], &stego_text);
-    assert_eq!(decode_output.status.code(), Some(1));
+    assert!(decode_output.status.success());
 
-    let stderr = stderr_string(&decode_output);
-    assert!(stderr.contains("LSTEG-CLI-INP-001"));
-    assert!(stderr.contains("text decode is not lossless yet"));
+    let decoded_json = stdout_string(&decode_output);
+    assert!(decoded_json.contains("\"language\":\"fa\""));
+    assert!(decoded_json.contains("\"payload_utf8\":\"salam\""));
 }
 
 #[test]
-fn decode_text_input_rejects_plain_text_when_lossless_text_decode_is_unavailable() {
+fn decode_text_input_roundtrip_from_farsi_plain_text_works() {
     let encode_output = run_lsteg(&["encode", "--message", "salam"]);
     assert!(encode_output.status.success());
     let stego_text = stdout_string(&encode_output);
 
     let decode_output =
         run_lsteg_with_stdin(&["decode", "--text-input", "--format", "json"], &stego_text);
-    assert_eq!(decode_output.status.code(), Some(1));
+    assert!(decode_output.status.success());
 
-    let stderr = stderr_string(&decode_output);
-    assert!(stderr.contains("LSTEG-CLI-INP-001"));
-    assert!(stderr.contains("text decode is not lossless yet"));
+    let decoded_json = stdout_string(&decode_output);
+    assert!(decoded_json.contains("\"language\":\"fa\""));
+    assert!(decoded_json.contains("\"payload_utf8\":\"salam\""));
 }
 
 #[test]

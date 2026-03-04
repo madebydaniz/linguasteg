@@ -270,7 +270,7 @@ fn runtime_components(target: ProtoTarget) -> RuntimeComponents {
         ProtoTarget::Farsi => RuntimeComponents {
             language_code: "fa",
             language_display: "Farsi",
-            text_decode_lossless: false,
+            text_decode_lossless: true,
             pack: Box::new(FarsiPrototypeLanguagePack::default()),
             checker: Box::new(FarsiPrototypeConstraintChecker),
             realizer: Box::new(FarsiPrototypeRealizer),

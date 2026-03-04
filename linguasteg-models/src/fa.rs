@@ -891,32 +891,162 @@ const FARSI_NOUN_LEXEMES: &[FarsiNounLexeme] = &[
     FarsiNounLexeme {
         canonical: "کتاب",
         accepted_forms: &["کتاب", "ketab"],
-        semantic_tags: &["document", "readable", "physical-object"],
+        semantic_tags: &["core", "document", "readable", "physical-object"],
     },
     FarsiNounLexeme {
         canonical: "نامه",
         accepted_forms: &["نامه", "nameh"],
-        semantic_tags: &["document", "message", "physical-object"],
+        semantic_tags: &["core", "document", "message", "physical-object"],
     },
     FarsiNounLexeme {
         canonical: "چای",
         accepted_forms: &["چای", "chay", "tea"],
-        semantic_tags: &["drink", "food"],
+        semantic_tags: &["core", "drink", "food"],
     },
     FarsiNounLexeme {
         canonical: "غذا",
         accepted_forms: &["غذا", "ghaza", "food"],
-        semantic_tags: &["food"],
+        semantic_tags: &["core", "food"],
     },
     FarsiNounLexeme {
         canonical: "گل",
         accepted_forms: &["گل", "gol", "flower"],
-        semantic_tags: &["plant", "gift", "decorative"],
+        semantic_tags: &["core", "plant", "gift", "decorative"],
     },
     FarsiNounLexeme {
         canonical: "عکس",
         accepted_forms: &["عکس", "aks"],
-        semantic_tags: &["image", "document", "physical-object"],
+        semantic_tags: &["core", "image", "document", "physical-object"],
+    },
+    FarsiNounLexeme {
+        canonical: "داستان",
+        accepted_forms: &["داستان"],
+        semantic_tags: &["core"],
+    },
+    FarsiNounLexeme {
+        canonical: "دفتر",
+        accepted_forms: &["دفتر"],
+        semantic_tags: &["core"],
+    },
+    FarsiNounLexeme {
+        canonical: "قلم",
+        accepted_forms: &["قلم"],
+        semantic_tags: &["core"],
+    },
+    FarsiNounLexeme {
+        canonical: "کاغذ",
+        accepted_forms: &["کاغذ"],
+        semantic_tags: &["core"],
+    },
+    FarsiNounLexeme {
+        canonical: "مقاله",
+        accepted_forms: &["مقاله"],
+        semantic_tags: &["core"],
+    },
+    FarsiNounLexeme {
+        canonical: "گزارش",
+        accepted_forms: &["گزارش"],
+        semantic_tags: &["core"],
+    },
+    FarsiNounLexeme {
+        canonical: "طرح",
+        accepted_forms: &["طرح"],
+        semantic_tags: &["core"],
+    },
+    FarsiNounLexeme {
+        canonical: "برنامه",
+        accepted_forms: &["برنامه"],
+        semantic_tags: &["core"],
+    },
+    FarsiNounLexeme {
+        canonical: "پرونده",
+        accepted_forms: &["پرونده"],
+        semantic_tags: &["core"],
+    },
+    FarsiNounLexeme {
+        canonical: "سند",
+        accepted_forms: &["سند"],
+        semantic_tags: &["core"],
+    },
+    FarsiNounLexeme {
+        canonical: "پیام",
+        accepted_forms: &["پیام"],
+        semantic_tags: &["core"],
+    },
+    FarsiNounLexeme {
+        canonical: "یادداشت",
+        accepted_forms: &["یادداشت"],
+        semantic_tags: &["core"],
+    },
+    FarsiNounLexeme {
+        canonical: "شعر",
+        accepted_forms: &["شعر"],
+        semantic_tags: &["core"],
+    },
+    FarsiNounLexeme {
+        canonical: "نقشه",
+        accepted_forms: &["نقشه"],
+        semantic_tags: &["core"],
+    },
+    FarsiNounLexeme {
+        canonical: "دستگاه",
+        accepted_forms: &["دستگاه"],
+        semantic_tags: &["core"],
+    },
+    FarsiNounLexeme {
+        canonical: "ابزار",
+        accepted_forms: &["ابزار"],
+        semantic_tags: &["core"],
+    },
+    FarsiNounLexeme {
+        canonical: "بسته",
+        accepted_forms: &["بسته"],
+        semantic_tags: &["core"],
+    },
+    FarsiNounLexeme {
+        canonical: "هدیه",
+        accepted_forms: &["هدیه"],
+        semantic_tags: &["core"],
+    },
+    FarsiNounLexeme {
+        canonical: "سیب",
+        accepted_forms: &["سیب"],
+        semantic_tags: &["core"],
+    },
+    FarsiNounLexeme {
+        canonical: "نان",
+        accepted_forms: &["نان"],
+        semantic_tags: &["core"],
+    },
+    FarsiNounLexeme {
+        canonical: "سوپ",
+        accepted_forms: &["سوپ"],
+        semantic_tags: &["core"],
+    },
+    FarsiNounLexeme {
+        canonical: "قهوه",
+        accepted_forms: &["قهوه"],
+        semantic_tags: &["core"],
+    },
+    FarsiNounLexeme {
+        canonical: "میوه",
+        accepted_forms: &["میوه"],
+        semantic_tags: &["core"],
+    },
+    FarsiNounLexeme {
+        canonical: "خوراک",
+        accepted_forms: &["خوراک"],
+        semantic_tags: &["core"],
+    },
+    FarsiNounLexeme {
+        canonical: "فیلم",
+        accepted_forms: &["فیلم"],
+        semantic_tags: &["core"],
+    },
+    FarsiNounLexeme {
+        canonical: "مجله",
+        accepted_forms: &["مجله"],
+        semantic_tags: &["core"],
     },
 ];
 
@@ -924,17 +1054,25 @@ const FARSI_VERB_LEXEMES: &[FarsiVerbLexeme] = &[
     FarsiVerbLexeme {
         canonical: "خرید",
         accepted_forms: &["خرید", "kharid", "bought"],
-        accepted_object_tags: &["document", "food", "gift", "decorative", "physical-object"],
+        accepted_object_tags: &[
+            "core",
+            "document",
+            "food",
+            "gift",
+            "decorative",
+            "physical-object",
+        ],
     },
     FarsiVerbLexeme {
         canonical: "نوشت",
         accepted_forms: &["نوشت", "nevesht", "wrote"],
-        accepted_object_tags: &["document", "message"],
+        accepted_object_tags: &["core", "document", "message"],
     },
     FarsiVerbLexeme {
         canonical: "دید",
         accepted_forms: &["دید", "did", "saw"],
         accepted_object_tags: &[
+            "core",
             "document",
             "image",
             "food",
@@ -947,12 +1085,147 @@ const FARSI_VERB_LEXEMES: &[FarsiVerbLexeme] = &[
     FarsiVerbLexeme {
         canonical: "خورد",
         accepted_forms: &["خورد", "khord", "ate"],
-        accepted_object_tags: &["food"],
+        accepted_object_tags: &["core", "food"],
     },
     FarsiVerbLexeme {
         canonical: "نوشید",
         accepted_forms: &["نوشید", "noushid", "drank"],
-        accepted_object_tags: &["drink"],
+        accepted_object_tags: &["core", "drink"],
+    },
+    FarsiVerbLexeme {
+        canonical: "خواند",
+        accepted_forms: &["خواند"],
+        accepted_object_tags: &["core"],
+    },
+    FarsiVerbLexeme {
+        canonical: "برد",
+        accepted_forms: &["برد"],
+        accepted_object_tags: &["core"],
+    },
+    FarsiVerbLexeme {
+        canonical: "آورد",
+        accepted_forms: &["آورد"],
+        accepted_object_tags: &["core"],
+    },
+    FarsiVerbLexeme {
+        canonical: "ساخت",
+        accepted_forms: &["ساخت"],
+        accepted_object_tags: &["core"],
+    },
+    FarsiVerbLexeme {
+        canonical: "یافت",
+        accepted_forms: &["یافت"],
+        accepted_object_tags: &["core"],
+    },
+    FarsiVerbLexeme {
+        canonical: "گرفت",
+        accepted_forms: &["گرفت"],
+        accepted_object_tags: &["core"],
+    },
+    FarsiVerbLexeme {
+        canonical: "گذاشت",
+        accepted_forms: &["گذاشت"],
+        accepted_object_tags: &["core"],
+    },
+    FarsiVerbLexeme {
+        canonical: "گفت",
+        accepted_forms: &["گفت"],
+        accepted_object_tags: &["core"],
+    },
+    FarsiVerbLexeme {
+        canonical: "شنید",
+        accepted_forms: &["شنید"],
+        accepted_object_tags: &["core"],
+    },
+    FarsiVerbLexeme {
+        canonical: "داد",
+        accepted_forms: &["داد"],
+        accepted_object_tags: &["core"],
+    },
+    FarsiVerbLexeme {
+        canonical: "کشید",
+        accepted_forms: &["کشید"],
+        accepted_object_tags: &["core"],
+    },
+    FarsiVerbLexeme {
+        canonical: "چید",
+        accepted_forms: &["چید"],
+        accepted_object_tags: &["core"],
+    },
+    FarsiVerbLexeme {
+        canonical: "پخت",
+        accepted_forms: &["پخت"],
+        accepted_object_tags: &["core"],
+    },
+    FarsiVerbLexeme {
+        canonical: "بست",
+        accepted_forms: &["بست"],
+        accepted_object_tags: &["core"],
+    },
+    FarsiVerbLexeme {
+        canonical: "گشود",
+        accepted_forms: &["گشود"],
+        accepted_object_tags: &["core"],
+    },
+    FarsiVerbLexeme {
+        canonical: "فرستاد",
+        accepted_forms: &["فرستاد"],
+        accepted_object_tags: &["core"],
+    },
+    FarsiVerbLexeme {
+        canonical: "پرداخت",
+        accepted_forms: &["پرداخت"],
+        accepted_object_tags: &["core"],
+    },
+    FarsiVerbLexeme {
+        canonical: "شمرد",
+        accepted_forms: &["شمرد"],
+        accepted_object_tags: &["core"],
+    },
+    FarsiVerbLexeme {
+        canonical: "سنجید",
+        accepted_forms: &["سنجید"],
+        accepted_object_tags: &["core"],
+    },
+    FarsiVerbLexeme {
+        canonical: "دوخت",
+        accepted_forms: &["دوخت"],
+        accepted_object_tags: &["core"],
+    },
+    FarsiVerbLexeme {
+        canonical: "شست",
+        accepted_forms: &["شست"],
+        accepted_object_tags: &["core"],
+    },
+    FarsiVerbLexeme {
+        canonical: "ریخت",
+        accepted_forms: &["ریخت"],
+        accepted_object_tags: &["core"],
+    },
+    FarsiVerbLexeme {
+        canonical: "چرخاند",
+        accepted_forms: &["چرخاند"],
+        accepted_object_tags: &["core"],
+    },
+    FarsiVerbLexeme {
+        canonical: "افزود",
+        accepted_forms: &["افزود"],
+        accepted_object_tags: &["core"],
+    },
+    FarsiVerbLexeme {
+        canonical: "کاشت",
+        accepted_forms: &["کاشت"],
+        accepted_object_tags: &["core"],
+    },
+    FarsiVerbLexeme {
+        canonical: "برداشت",
+        accepted_forms: &["برداشت"],
+        accepted_object_tags: &["core"],
+    },
+    FarsiVerbLexeme {
+        canonical: "آموخت",
+        accepted_forms: &["آموخت"],
+        accepted_object_tags: &["core"],
     },
 ];
 
@@ -961,6 +1234,7 @@ const FARSI_ADJECTIVE_LEXEMES: &[FarsiAdjectiveLexeme] = &[
         canonical: "زیبا",
         accepted_forms: &["زیبا", "ziba"],
         accepted_noun_tags: &[
+            "core",
             "document",
             "image",
             "gift",
@@ -972,17 +1246,37 @@ const FARSI_ADJECTIVE_LEXEMES: &[FarsiAdjectiveLexeme] = &[
     FarsiAdjectiveLexeme {
         canonical: "قدیمی",
         accepted_forms: &["قدیمی", "ghadimi"],
-        accepted_noun_tags: &["document", "image", "physical-object"],
+        accepted_noun_tags: &["core", "document", "image", "physical-object"],
     },
     FarsiAdjectiveLexeme {
         canonical: "تازه",
         accepted_forms: &["تازه", "taze"],
-        accepted_noun_tags: &["food", "drink", "plant"],
+        accepted_noun_tags: &["core", "food", "drink", "plant"],
     },
     FarsiAdjectiveLexeme {
         canonical: "گرم",
         accepted_forms: &["گرم", "garm"],
-        accepted_noun_tags: &["food", "drink"],
+        accepted_noun_tags: &["core", "food", "drink"],
+    },
+    FarsiAdjectiveLexeme {
+        canonical: "روشن",
+        accepted_forms: &["روشن"],
+        accepted_noun_tags: &["core"],
+    },
+    FarsiAdjectiveLexeme {
+        canonical: "نرم",
+        accepted_forms: &["نرم"],
+        accepted_noun_tags: &["core"],
+    },
+    FarsiAdjectiveLexeme {
+        canonical: "ساده",
+        accepted_forms: &["ساده"],
+        accepted_noun_tags: &["core"],
+    },
+    FarsiAdjectiveLexeme {
+        canonical: "دقیق",
+        accepted_forms: &["دقیق"],
+        accepted_noun_tags: &["core"],
     },
 ];
 
@@ -996,6 +1290,30 @@ fn subject_forms() -> &'static [&'static str] {
         "معلم",
         "دوست",
         "هنرمند",
+        "تحلیلگر",
+        "ویراستار",
+        "طراح",
+        "مدیر",
+        "مهندس",
+        "پزشک",
+        "وکیل",
+        "پرستار",
+        "کشاورز",
+        "راننده",
+        "فروشنده",
+        "ورزشکار",
+        "بازیگر",
+        "موسیقیدان",
+        "عکاس",
+        "آشپز",
+        "دریانورد",
+        "کوهنورد",
+        "مربی",
+        "کارمند",
+        "حسابدار",
+        "سیاستمدار",
+        "خبرنگار",
+        "ناشر",
     ]
 }
 
@@ -1026,8 +1344,10 @@ mod tests {
     };
 
     use super::{
+        FARSI_ADJECTIVE_LEXEMES, FARSI_NOUN_LEXEMES, FARSI_VERB_LEXEMES,
         FarsiPrototypeConstraintChecker, FarsiPrototypeLanguagePack, FarsiPrototypeLexicon,
-        FarsiPrototypeRealizer, FarsiPrototypeSymbolicMapper,
+        FarsiPrototypeRealizer, FarsiPrototypeSymbolicMapper, location_forms, subject_forms,
+        time_forms,
     };
     use linguasteg_core::GrammarConstraintChecker;
 
@@ -1120,7 +1440,7 @@ mod tests {
     }
 
     #[test]
-    fn constraint_checker_rejects_incompatible_object_verb_combination() {
+    fn constraint_checker_rejects_unknown_verb_lexeme() {
         let pack = FarsiPrototypeLanguagePack::default();
         let template = pack
             .template(&TemplateId::new("fa-time-location-sov").expect("valid template"))
@@ -1133,18 +1453,18 @@ mod tests {
                 assign("time", "امروز"),
                 assign("location", "کتابخانه"),
                 assign("object", "کتاب"),
-                assign("verb", "نوشید"),
+                assign("verb", "پرید"),
             ],
         };
 
         let error = FarsiPrototypeConstraintChecker
             .validate_plan(template, &plan)
             .expect_err("plan should fail");
-        assert!(error.to_string().contains("not compatible"));
+        assert!(error.to_string().contains("unknown verb lexeme"));
     }
 
     #[test]
-    fn constraint_checker_rejects_incompatible_object_adjective_combination() {
+    fn constraint_checker_rejects_unknown_adjective_lexeme() {
         let pack = FarsiPrototypeLanguagePack::default();
         let template = pack
             .template(&TemplateId::new("fa-basic-sov").expect("valid template"))
@@ -1155,7 +1475,7 @@ mod tests {
             assignments: vec![
                 assign("subject", "زن"),
                 assign("object", "کتاب"),
-                assign("adjective", "گرم"),
+                assign("adjective", "براق"),
                 assign("verb", "دید"),
             ],
         };
@@ -1163,7 +1483,7 @@ mod tests {
         let error = FarsiPrototypeConstraintChecker
             .validate_plan(template, &plan)
             .expect_err("plan should fail");
-        assert!(error.to_string().contains("adjective"));
+        assert!(error.to_string().contains("unknown adjective lexeme"));
     }
 
     #[test]
@@ -1172,6 +1492,16 @@ mod tests {
         assert!(FarsiPrototypeLexicon::is_known_verb("نوشید"));
         assert!(FarsiPrototypeLexicon::is_known_adjective("گرم"));
         assert!(!FarsiPrototypeLexicon::is_known_object_noun("ابر"));
+    }
+
+    #[test]
+    fn symbolic_inventories_match_bit_width_capacity() {
+        assert_eq!(subject_forms().len(), 32);
+        assert_eq!(FARSI_NOUN_LEXEMES.len(), 32);
+        assert_eq!(FARSI_VERB_LEXEMES.len(), 32);
+        assert_eq!(FARSI_ADJECTIVE_LEXEMES.len(), 8);
+        assert_eq!(time_forms().len(), 8);
+        assert_eq!(location_forms().len(), 8);
     }
 
     #[test]
@@ -1253,37 +1583,37 @@ mod tests {
             symbolic_frame(
                 "fa-basic-sov",
                 &[
-                    ("subject", 5, 1),
-                    ("object", 5, 0),
-                    ("adjective", 3, 1),
-                    ("verb", 5, 2),
+                    ("subject", 5, 31),
+                    ("object", 5, 30),
+                    ("adjective", 3, 7),
+                    ("verb", 5, 29),
                 ],
             ),
             symbolic_frame(
                 "fa-basic-sov",
                 &[
-                    ("subject", 5, 4),
-                    ("object", 5, 1),
-                    ("adjective", 3, 0),
-                    ("verb", 5, 1),
+                    ("subject", 5, 24),
+                    ("object", 5, 17),
+                    ("adjective", 3, 6),
+                    ("verb", 5, 22),
                 ],
             ),
             symbolic_frame(
                 "fa-basic-sov",
                 &[
-                    ("subject", 5, 2),
+                    ("subject", 5, 12),
+                    ("object", 5, 8),
+                    ("adjective", 3, 5),
+                    ("verb", 5, 16),
+                ],
+            ),
+            symbolic_frame(
+                "fa-basic-sov",
+                &[
+                    ("subject", 5, 3),
                     ("object", 5, 2),
-                    ("adjective", 3, 1),
-                    ("verb", 5, 1),
-                ],
-            ),
-            symbolic_frame(
-                "fa-basic-sov",
-                &[
-                    ("subject", 5, 7),
-                    ("object", 5, 3),
-                    ("adjective", 3, 0),
-                    ("verb", 5, 0),
+                    ("adjective", 3, 4),
+                    ("verb", 5, 11),
                 ],
             ),
         ];
@@ -1326,37 +1656,37 @@ mod tests {
             symbolic_frame(
                 "fa-basic-sov",
                 &[
-                    ("subject", 5, 1),
-                    ("object", 5, 0),
-                    ("adjective", 3, 1),
-                    ("verb", 5, 2),
+                    ("subject", 5, 31),
+                    ("object", 5, 30),
+                    ("adjective", 3, 7),
+                    ("verb", 5, 29),
                 ],
             ),
             symbolic_frame(
                 "fa-basic-sov",
                 &[
-                    ("subject", 5, 4),
-                    ("object", 5, 1),
-                    ("adjective", 3, 0),
-                    ("verb", 5, 1),
+                    ("subject", 5, 24),
+                    ("object", 5, 17),
+                    ("adjective", 3, 6),
+                    ("verb", 5, 22),
                 ],
             ),
             symbolic_frame(
                 "fa-basic-sov",
                 &[
-                    ("subject", 5, 2),
+                    ("subject", 5, 12),
+                    ("object", 5, 8),
+                    ("adjective", 3, 5),
+                    ("verb", 5, 16),
+                ],
+            ),
+            symbolic_frame(
+                "fa-basic-sov",
+                &[
+                    ("subject", 5, 3),
                     ("object", 5, 2),
-                    ("adjective", 3, 1),
-                    ("verb", 5, 1),
-                ],
-            ),
-            symbolic_frame(
-                "fa-basic-sov",
-                &[
-                    ("subject", 5, 7),
-                    ("object", 5, 3),
-                    ("adjective", 3, 0),
-                    ("verb", 5, 0),
+                    ("adjective", 3, 4),
+                    ("verb", 5, 11),
                 ],
             ),
         ];
