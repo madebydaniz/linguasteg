@@ -1070,6 +1070,19 @@ fn decode_fails_with_wrong_secret() {
 }
 
 #[test]
+fn decode_rejects_non_envelope_proto_trace_with_security_hint() {
+    let proto_output = run_lsteg(&["proto-encode", "fa", "salam", "--json"]);
+    assert!(proto_output.status.success());
+    let proto_trace = stdout_string(&proto_output);
+
+    let decode_output = run_lsteg_with_stdin(&["decode", "--format", "json"], &proto_trace);
+    assert_eq!(decode_output.status.code(), Some(1));
+    let stderr = stderr_string(&decode_output);
+    assert!(stderr.contains("LSTEG-CLI-SEC-001"));
+    assert!(stderr.contains("payload is not a valid secure envelope"));
+}
+
+#[test]
 fn analyze_without_secret_reports_structural_only() {
     let encode_output = run_lsteg(&["encode", "--message", "salam", "--emit-trace"]);
     assert!(encode_output.status.success());

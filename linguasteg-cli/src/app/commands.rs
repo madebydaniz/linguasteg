@@ -2,9 +2,10 @@ use std::fmt::Display;
 use std::io::Read;
 
 use linguasteg_core::{
-    open_payload, seal_payload, DecodeRequest, EncodeRequest, FixedWidthPlanningOptions,
-    LanguageTag, RealizationPlan, SlotAssignment, SlotId, StyleInspiration, StyleProfileId,
-    StyleProfileRegistry, StyleStrength, TemplateId, TemplateRegistry, WritingRegister,
+    inspect_envelope, open_payload, seal_payload, CryptoEnvelopeInspection, DecodeRequest,
+    EncodeRequest, FixedWidthPlanningOptions, LanguageTag, RealizationPlan, SlotAssignment, SlotId,
+    StyleInspiration, StyleProfileId, StyleProfileRegistry, StyleStrength, TemplateId,
+    TemplateRegistry, WritingRegister,
 };
 
 use super::analysis::{analyze_trace_summary, render_trace_analysis_output};
@@ -1192,15 +1193,25 @@ fn render_proto_decode_output(
     )?;
     let raw_payload = orchestration.payload;
     let payload = match secret {
-        Some(secret) => open_payload(&raw_payload, secret).map_err(|_| {
-            if used_extractor_frames {
-                CliError::security(
-                    "failed to decrypt payload from extracted text; use proto-encode trace input for lossless decode",
-                )
-            } else {
-                CliError::security("failed to decrypt payload; verify provided secret")
-            }
-        })?,
+        Some(secret) => match inspect_envelope(&raw_payload) {
+            CryptoEnvelopeInspection::Metadata(_) => open_payload(&raw_payload, secret).map_err(
+                |_| {
+                    if used_extractor_frames {
+                        CliError::security(
+                            "failed to decrypt payload from extracted text; use proto-encode trace input for lossless decode",
+                        )
+                    } else {
+                        CliError::security("failed to decrypt payload; verify provided secret")
+                    }
+                },
+            )?,
+            CryptoEnvelopeInspection::NotEnvelope => Err(CliError::security(
+                "failed to decrypt payload; payload is not a valid secure envelope",
+            ))?,
+            CryptoEnvelopeInspection::Invalid(message) => Err(CliError::security(format!(
+                "failed to decrypt payload; invalid secure envelope metadata: {message}"
+            )))?,
+        },
         None => raw_payload,
     };
     let hex_payload = payload
