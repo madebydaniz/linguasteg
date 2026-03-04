@@ -801,6 +801,8 @@ fn analyze_rejects_mixed_language_trace() {
 fn parse_errors_return_exit_code_two() {
     let output = run_lsteg(&["analyze", "--unknown"]);
     assert_eq!(output.status.code(), Some(2));
+    let stderr = stderr_string(&output);
+    assert!(stderr.contains("error [LSTEG-CLI-ARG-001]:"));
 }
 
 #[test]

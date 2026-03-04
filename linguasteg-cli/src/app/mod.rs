@@ -23,7 +23,7 @@ pub(crate) fn run() -> ExitCode {
             return ExitCode::SUCCESS;
         }
         Err(error) if error.kind() == CliErrorKind::Usage => {
-            eprintln!("{error}");
+            print_error(&error);
             let _ = write_usage(std::io::stderr());
             return ExitCode::from(error.exit_code());
         }
@@ -37,6 +37,10 @@ pub(crate) fn run() -> ExitCode {
 }
 
 fn print_error_exit(error: CliError) -> ExitCode {
-    eprintln!("error [{}]: {}", error.code(), error.message());
+    print_error(&error);
     ExitCode::from(error.exit_code())
+}
+
+fn print_error(error: &CliError) {
+    eprintln!("error [{}]: {}", error.code(), error.message());
 }
