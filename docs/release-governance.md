@@ -67,6 +67,12 @@ Local command:
 - `./scripts/ci/release_drill.sh full`
 - `./scripts/ci/release_drill.sh preflight-only`
 
+## Pre-Release Checklist
+
+- Local fast gate: `./scripts/ci/pre_release_checklist.sh fast`
+- Local full gate: `./scripts/ci/pre_release_checklist.sh full`
+- Detailed checklist: `docs/pre-release-checklist.md`
+
 ## Maintainer Checklist
 
 Before merging to `main`:

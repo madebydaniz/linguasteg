@@ -9,6 +9,7 @@ Describe what changed and why.
 - [ ] `cargo test -p linguasteg-cli --tests --locked`
 - [ ] `./scripts/ci/smoke_e2e.sh`
 - [ ] `./scripts/ci/release_drill.sh preflight-only`
+- [ ] `./scripts/ci/pre_release_checklist.sh fast`
 
 ## Governance
 
