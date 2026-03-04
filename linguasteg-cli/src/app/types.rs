@@ -22,6 +22,7 @@ pub(crate) struct EncodeOptions {
     pub(crate) message: Option<String>,
     pub(crate) input_path: Option<String>,
     pub(crate) output_path: Option<String>,
+    pub(crate) emit_trace: bool,
     pub(crate) secret: Option<String>,
     pub(crate) secret_file: Option<String>,
     pub(crate) format: OutputFormat,
@@ -30,6 +31,7 @@ pub(crate) struct EncodeOptions {
 pub(crate) struct DecodeOptions {
     pub(crate) target: ProtoTarget,
     pub(crate) auto_detect_target: bool,
+    pub(crate) input_mode: DecodeInputMode,
     pub(crate) trace: Option<String>,
     pub(crate) input_path: Option<String>,
     pub(crate) output_path: Option<String>,
@@ -116,6 +118,13 @@ pub(crate) enum DemoTarget {
 pub(crate) enum ProtoTarget {
     Farsi,
     English,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum DecodeInputMode {
+    Auto,
+    Trace,
+    Text,
 }
 
 impl ProtoTarget {

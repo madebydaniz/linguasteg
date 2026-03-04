@@ -1,8 +1,8 @@
 use std::io::Write;
 
 use super::types::{
-    AnalyzeOptions, CatalogQueryOptions, CliError, Command, DecodeOptions, DemoTarget,
-    EncodeOptions, OutputFormat, ProfileQueryOptions, ProtoTarget, SchemaQueryOptions,
+    AnalyzeOptions, CatalogQueryOptions, CliError, Command, DecodeInputMode, DecodeOptions,
+    DemoTarget, EncodeOptions, OutputFormat, ProfileQueryOptions, ProtoTarget, SchemaQueryOptions,
     TemplateQueryOptions, ValidateOptions,
 };
 
@@ -40,6 +40,7 @@ fn parse_encode_command(
 ) -> Result<Option<Command>, CliError> {
     let mut lang = env_proto_target("LSTEG_LANG")?.unwrap_or(ProtoTarget::Farsi);
     let mut format = env_output_format("LSTEG_FORMAT")?.unwrap_or(OutputFormat::Text);
+    let mut emit_trace = false;
     let mut payload = EncodePayloadArgs::from_env();
     let mut secrets = SecretArgs::from_env();
 
@@ -51,6 +52,9 @@ fn parse_encode_command(
             }
             "--format" => {
                 parse_output_format_arg(&mut args, &mut format)?;
+            }
+            "--emit-trace" => {
+                emit_trace = true;
             }
             _ => {
                 if payload.handle_flag(arg.as_str(), &mut args)? {
@@ -74,6 +78,7 @@ fn parse_encode_command(
         message,
         input_path,
         output_path,
+        emit_trace,
         secret,
         secret_file,
         format,
@@ -89,6 +94,7 @@ fn parse_decode_command(args: impl Iterator<Item = String>) -> Result<Option<Com
     Ok(Some(Command::Decode(DecodeOptions {
         target: parsed.lang,
         auto_detect_target: parsed.auto_detect_target,
+        input_mode: parsed.decode_input_mode,
         trace: parsed.trace,
         input_path: parsed.input_path,
         output_path: parsed.output_path,
@@ -137,6 +143,7 @@ fn parse_validate_command(args: impl Iterator<Item = String>) -> Result<Option<C
 struct ParsedTraceLikeCommand {
     lang: ProtoTarget,
     auto_detect_target: bool,
+    decode_input_mode: DecodeInputMode,
     trace: Option<String>,
     input_path: Option<String>,
     output_path: Option<String>,
@@ -155,11 +162,14 @@ fn parse_trace_like_command_args(
     let mut trace = env_optional("LSTEG_TRACE");
     let mut input_path = env_optional("LSTEG_INPUT");
     let mut output_path = env_optional("LSTEG_OUTPUT");
+    let mut decode_input_mode = DecodeInputMode::Auto;
     let mut secrets = SecretArgs::from_env();
 
     let mut seen_trace = false;
     let mut seen_input = false;
     let mut seen_output = false;
+    let mut seen_trace_input = false;
+    let mut seen_text_input = false;
 
     while let Some(arg) = args.next() {
         match arg.as_str() {
@@ -197,6 +207,34 @@ fn parse_trace_like_command_args(
                 seen_output = true;
                 output_path = Some(next_arg_value(&mut args, "--output")?);
             }
+            "--trace-input" if command == "decode" => {
+                if seen_trace_input {
+                    return Err(CliError::usage(
+                        "--trace-input cannot be provided multiple times".to_string(),
+                    ));
+                }
+                if seen_text_input {
+                    return Err(CliError::usage(
+                        "decode accepts either --trace-input or --text-input, not both".to_string(),
+                    ));
+                }
+                seen_trace_input = true;
+                decode_input_mode = DecodeInputMode::Trace;
+            }
+            "--text-input" if command == "decode" => {
+                if seen_text_input {
+                    return Err(CliError::usage(
+                        "--text-input cannot be provided multiple times".to_string(),
+                    ));
+                }
+                if seen_trace_input {
+                    return Err(CliError::usage(
+                        "decode accepts either --trace-input or --text-input, not both".to_string(),
+                    ));
+                }
+                seen_text_input = true;
+                decode_input_mode = DecodeInputMode::Text;
+            }
             _ => {
                 if secrets.handle_flag(arg.as_str(), &mut args, command)? {
                     continue;
@@ -219,6 +257,7 @@ fn parse_trace_like_command_args(
     Ok(Some(ParsedTraceLikeCommand {
         lang,
         auto_detect_target,
+        decode_input_mode,
         trace,
         input_path,
         output_path,
@@ -730,11 +769,11 @@ pub(crate) fn write_usage(mut writer: impl Write) -> std::io::Result<()> {
     )?;
     writeln!(
         writer,
-        "       lsteg encode [--lang fa|en] (--message <text> | --input <file>) [--secret <value> | --secret-file <file>] [--format text|json] [--output <file>]"
+        "       lsteg encode [--lang fa|en] (--message <text> | --input <file>) [--emit-trace] [--secret <value> | --secret-file <file>] [--format text|json] [--output <file>]"
     )?;
     writeln!(
         writer,
-        "       lsteg decode [--lang auto|fa|en] [--trace <text> | --input <file>] [--secret <value> | --secret-file <file>] [--format text|json] [--output <file>]"
+        "       lsteg decode [--lang auto|fa|en] [--trace-input|--text-input] [--trace <text> | --input <file>] [--secret <value> | --secret-file <file>] [--format text|json] [--output <file>]"
     )?;
     writeln!(
         writer,

@@ -15,8 +15,8 @@ use super::runtime::{
 };
 use super::trace::{frame_sequence_error, parse_frames_from_trace, schema_for_template};
 use super::types::{
-    AnalyzeOptions, CatalogQueryOptions, CliError, Command, DecodeOptions, DemoTarget,
-    EncodeOptions, OutputFormat, ProfileQueryOptions, ProtoTarget, SchemaQueryOptions,
+    AnalyzeOptions, CatalogQueryOptions, CliError, Command, DecodeInputMode, DecodeOptions,
+    DemoTarget, EncodeOptions, OutputFormat, ProfileQueryOptions, ProtoTarget, SchemaQueryOptions,
     TemplateQueryOptions, ValidateOptions,
 };
 
@@ -699,8 +699,13 @@ fn run_encode(options: EncodeOptions) -> Result<(), CliError> {
         options.secret_file.as_deref(),
         "encode",
     )?;
-    let output =
-        render_proto_encode_output(options.target, &payload_text, options.format, Some(&secret))?;
+    let output = render_proto_encode_output(
+        options.target,
+        &payload_text,
+        options.format,
+        Some(&secret),
+        options.emit_trace,
+    )?;
     write_output(&output, options.output_path.as_deref())
 }
 
@@ -714,6 +719,7 @@ fn run_decode(options: DecodeOptions) -> Result<(), CliError> {
     let output = render_proto_decode_output(
         options.target,
         options.auto_detect_target,
+        options.input_mode,
         &trace_text,
         options.format,
         Some(&secret),
@@ -925,7 +931,7 @@ fn run_proto_encode(target: ProtoTarget, payload_text: &str, json: bool) -> Resu
     } else {
         OutputFormat::Text
     };
-    let output = render_proto_encode_output(target, payload_text, format, None)?;
+    let output = render_proto_encode_output(target, payload_text, format, None, true)?;
     println!("{output}");
     Ok(())
 }
@@ -951,7 +957,14 @@ fn run_proto_decode(
     } else {
         OutputFormat::Text
     };
-    let output = render_proto_decode_output(target, false, &trace_text, format, None)?;
+    let output = render_proto_decode_output(
+        target,
+        false,
+        DecodeInputMode::Trace,
+        &trace_text,
+        format,
+        None,
+    )?;
     println!("{output}");
     Ok(())
 }
@@ -961,6 +974,7 @@ fn render_proto_encode_output(
     payload_text: &str,
     format: OutputFormat,
     secret: Option<&[u8]>,
+    emit_trace: bool,
 ) -> Result<String, CliError> {
     let payload = payload_text.as_bytes();
     let symbolic_payload = match secret {
@@ -1040,6 +1054,10 @@ fn render_proto_encode_output(
         ));
     }
 
+    if !emit_trace {
+        return Ok(final_text);
+    }
+
     let mut report_lines = Vec::new();
     report_lines.push(format!("{} prototype encode", runtime.language_display));
     report_lines.push(format!("input text: {payload_text}"));
@@ -1068,6 +1086,7 @@ fn render_proto_encode_output(
 fn render_proto_decode_output(
     target: ProtoTarget,
     auto_detect_target: bool,
+    input_mode: DecodeInputMode,
     trace_text: &str,
     format: OutputFormat,
     secret: Option<&[u8]>,
@@ -1083,19 +1102,44 @@ fn render_proto_decode_output(
     let schemas = runtime.mapper.frame_schemas();
     let parsed_trace_frames = parse_frames_from_trace(trace_text, &schemas)
         .map_err(|error| CliError::trace(format!("failed to parse trace frames: {error}")))?;
-    let (frames, used_extractor_frames) = if parsed_trace_frames.is_empty() {
-        if let Some(frames) = runtime
-            .extract_plans(trace_text)
-            .ok()
-            .filter(|plans| !plans.is_empty())
-            .and_then(|plans| runtime.mapper.map_plans_to_frames(&plans).ok())
-        {
-            (frames, true)
-        } else {
+    let (frames, used_extractor_frames) = match input_mode {
+        DecodeInputMode::Trace => {
+            if parsed_trace_frames.is_empty() {
+                return Err(CliError::input(
+                    "decode trace mode requires proto-encode trace input (rerun encode with --emit-trace)",
+                ));
+            }
             (parsed_trace_frames, false)
         }
-    } else {
-        (parsed_trace_frames, false)
+        DecodeInputMode::Text => {
+            let frames = runtime
+                .extract_plans(trace_text)
+                .ok()
+                .filter(|plans| !plans.is_empty())
+                .and_then(|plans| runtime.mapper.map_plans_to_frames(&plans).ok())
+                .ok_or_else(|| {
+                    CliError::input(
+                        "decode text mode requires canonical stego text compatible with active language extractor",
+                    )
+                })?;
+            (frames, true)
+        }
+        DecodeInputMode::Auto => {
+            if parsed_trace_frames.is_empty() {
+                if let Some(frames) = runtime
+                    .extract_plans(trace_text)
+                    .ok()
+                    .filter(|plans| !plans.is_empty())
+                    .and_then(|plans| runtime.mapper.map_plans_to_frames(&plans).ok())
+                {
+                    (frames, true)
+                } else {
+                    (parsed_trace_frames, false)
+                }
+            } else {
+                (parsed_trace_frames, false)
+            }
+        }
     };
 
     if frames.is_empty() {
