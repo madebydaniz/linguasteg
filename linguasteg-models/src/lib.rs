@@ -2,6 +2,7 @@ pub mod en;
 pub mod fa;
 pub mod gateway;
 
+use en::parse_english_prototype_text;
 use linguasteg_core::{
     CoreError, CoreResult, ModelAdapter, ModelCapability, RealizationPlan, SlotAssignment, SlotId,
     TemplateId, TextExtractor,
@@ -60,10 +61,8 @@ impl TextExtractor for FarsiPrototypeTextExtractor {
 pub struct EnglishPrototypeTextExtractor;
 
 impl TextExtractor for EnglishPrototypeTextExtractor {
-    fn extract_plans(&self, _stego_text: &str) -> CoreResult<Vec<RealizationPlan>> {
-        Err(CoreError::NotImplemented(
-            "english text extraction pipeline is not wired yet",
-        ))
+    fn extract_plans(&self, stego_text: &str) -> CoreResult<Vec<RealizationPlan>> {
+        parse_english_prototype_text(stego_text)
     }
 }
 
@@ -136,7 +135,7 @@ fn assignment(slot: &str, surface: &str) -> CoreResult<SlotAssignment> {
 
 #[cfg(test)]
 mod tests {
-    use super::FarsiPrototypeTextExtractor;
+    use super::{EnglishPrototypeTextExtractor, FarsiPrototypeTextExtractor};
     use linguasteg_core::TextExtractor;
 
     #[test]
@@ -157,6 +156,32 @@ mod tests {
     fn farsi_extractor_reads_final_text_section_from_report() {
         let extractor = FarsiPrototypeTextExtractor;
         let report = "Farsi prototype encode\nframes: 2\n\nfinal prototype text:\nمرد کتاب زیبا را نوشت. دانشجو امروز در خانه نامه را خرید.\ngateway response: stub:encode";
+
+        let plans = extractor
+            .extract_plans(report)
+            .expect("extractor should parse report final text section");
+
+        assert_eq!(plans.len(), 2);
+    }
+
+    #[test]
+    fn english_extractor_parses_canonical_sentences() {
+        let extractor = EnglishPrototypeTextExtractor;
+        let text = "the manager labels clear report. the architect in winter at the office, records manual.";
+
+        let plans = extractor
+            .extract_plans(text)
+            .expect("extractor should parse canonical sentences");
+
+        assert_eq!(plans.len(), 2);
+        assert_eq!(plans[0].template_id.as_str(), "en-basic-svo");
+        assert_eq!(plans[1].template_id.as_str(), "en-time-location-svo");
+    }
+
+    #[test]
+    fn english_extractor_reads_final_text_section_from_report() {
+        let extractor = EnglishPrototypeTextExtractor;
+        let report = "English prototype encode\nframes: 2\n\nfinal prototype text:\nthe manager labels clear report. the architect in winter at the office, records manual.\ngateway response: stub:encode";
 
         let plans = extractor
             .extract_plans(report)

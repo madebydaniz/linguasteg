@@ -1,5 +1,5 @@
 use linguasteg_core::{
-    CoreError, CoreResult, FixedWidthBitPlanner, GrammarConstraintChecker, LanguageDescriptor,
+    CoreResult, FixedWidthBitPlanner, GrammarConstraintChecker, LanguageDescriptor,
     LanguageRealizer, LanguageRegistry, LanguageTag, ModelCapability, ModelDescriptor, ModelId,
     ModelRegistry, ModelSelection, PipelineOptions, PipelineOrchestrator, ProviderId,
     RealizationPlan, RealizationTemplateDescriptor, StrategyDescriptor, StrategyId,
@@ -167,13 +167,8 @@ impl RuntimeSymbolicMapper for EnglishPrototypeSymbolicMapper {
         EnglishPrototypeSymbolicMapper::map_payload_to_plans(self, payload_plan)
     }
 
-    fn map_plans_to_frames(
-        &self,
-        _plans: &[RealizationPlan],
-    ) -> CoreResult<Vec<SymbolicFramePlan>> {
-        Err(CoreError::NotImplemented(
-            "english symbolic reverse mapping is not wired yet",
-        ))
+    fn map_plans_to_frames(&self, plans: &[RealizationPlan]) -> CoreResult<Vec<SymbolicFramePlan>> {
+        EnglishPrototypeSymbolicMapper::map_plans_to_frames(self, plans)
     }
 }
 
@@ -285,7 +280,7 @@ fn runtime_components(target: ProtoTarget) -> RuntimeComponents {
         ProtoTarget::English => RuntimeComponents {
             language_code: "en",
             language_display: "English",
-            text_decode_lossless: false,
+            text_decode_lossless: true,
             pack: Box::new(EnglishPrototypeLanguagePack::default()),
             checker: Box::new(EnglishPrototypeConstraintChecker),
             realizer: Box::new(EnglishPrototypeRealizer),

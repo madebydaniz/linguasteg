@@ -459,6 +459,38 @@ fn decode_text_input_rejects_plain_text_when_lossless_text_decode_is_unavailable
 }
 
 #[test]
+fn decode_text_input_roundtrip_from_english_plain_text_works() {
+    let encode_output = run_lsteg(&["encode", "--lang", "en", "--message", "hello world"]);
+    assert!(encode_output.status.success());
+    let stego_text = stdout_string(&encode_output);
+
+    let decode_output = run_lsteg_with_stdin(
+        &["decode", "--lang", "en", "--text-input", "--format", "json"],
+        &stego_text,
+    );
+    assert!(decode_output.status.success());
+
+    let decoded_json = stdout_string(&decode_output);
+    assert!(decoded_json.contains("\"language\":\"en\""));
+    assert!(decoded_json.contains("\"payload_utf8\":\"hello world\""));
+}
+
+#[test]
+fn decode_auto_roundtrip_from_english_plain_text_works() {
+    let encode_output = run_lsteg(&["encode", "--lang", "en", "--message", "hello world"]);
+    assert!(encode_output.status.success());
+    let stego_text = stdout_string(&encode_output);
+
+    let decode_output =
+        run_lsteg_with_stdin(&["decode", "--lang", "en", "--format", "json"], &stego_text);
+    assert!(decode_output.status.success());
+
+    let decoded_json = stdout_string(&decode_output);
+    assert!(decoded_json.contains("\"language\":\"en\""));
+    assert!(decoded_json.contains("\"payload_utf8\":\"hello world\""));
+}
+
+#[test]
 fn decode_roundtrip_from_english_trace_works() {
     let encode_output = run_lsteg(&[
         "encode",

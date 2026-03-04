@@ -1,10 +1,11 @@
 use linguasteg_core::{
-    CoreError, CoreResult, GrammarConstraintChecker, LanguageDescriptor, LanguageRealizer,
-    LanguageRegistry, LanguageTag, RealizationPlan, RealizationTemplateDescriptor, SlotId,
-    SlotRole, StyleInspiration, StyleProfileDescriptor, StyleProfileId, StyleProfileRegistry,
-    StyleStrength, SymbolicFieldSpec, SymbolicFramePlan, SymbolicFrameSchema, SymbolicPayloadPlan,
-    TemplateId, TemplateRegistry, TemplateSlotDescriptor, TemplateToken,
-    TextDirection, WritingRegister, render_realization_plan, validate_realization_plan,
+    BitRange, CoreError, CoreResult, GrammarConstraintChecker, LanguageDescriptor,
+    LanguageRealizer, LanguageRegistry, LanguageTag, RealizationPlan,
+    RealizationTemplateDescriptor, SlotAssignment, SlotId, SlotRole, StyleInspiration,
+    StyleProfileDescriptor, StyleProfileId, StyleProfileRegistry, StyleStrength, SymbolicFieldSpec,
+    SymbolicFramePlan, SymbolicFrameSchema, SymbolicPayloadPlan, SymbolicSlotValue, TemplateId,
+    TemplateRegistry, TemplateSlotDescriptor, TemplateToken, TextDirection, WritingRegister,
+    render_realization_plan, validate_realization_plan,
 };
 
 #[derive(Debug, Clone)]
@@ -120,6 +121,47 @@ impl EnglishPrototypeSymbolicMapper {
             )),
         }
     }
+
+    pub fn map_plans_to_frames(
+        &self,
+        plans: &[RealizationPlan],
+    ) -> CoreResult<Vec<SymbolicFramePlan>> {
+        let schemas = self.frame_schemas();
+        let mut frames = Vec::with_capacity(plans.len());
+        let mut bit_cursor = 0usize;
+
+        for plan in plans {
+            let frame = map_plan_to_frame(plan, &schemas, bit_cursor)?;
+            bit_cursor += frame.source.consumed_bits;
+            frames.push(frame);
+        }
+
+        Ok(frames)
+    }
+}
+
+pub fn parse_english_prototype_text(stego_text: &str) -> CoreResult<Vec<RealizationPlan>> {
+    let text = select_english_text_body(stego_text);
+    let mut plans = Vec::new();
+
+    for raw_sentence in split_sentences(text) {
+        let sentence = raw_sentence.trim();
+        if sentence.is_empty() {
+            continue;
+        }
+        if sentence.starts_with("gateway response:") {
+            continue;
+        }
+        plans.push(parse_english_sentence_to_plan(sentence)?);
+    }
+
+    if plans.is_empty() {
+        return Err(CoreError::InvalidTemplate(
+            "english text extractor could not detect canonical prototype sentences".to_string(),
+        ));
+    }
+
+    Ok(plans)
 }
 
 fn map_basic_svo_frame(frame: &SymbolicFramePlan) -> CoreResult<RealizationPlan> {
@@ -189,6 +231,258 @@ fn create_assignment(slot: &str, surface: String) -> CoreResult<linguasteg_core:
         surface,
         lemma: None,
     })
+}
+
+fn map_plan_to_frame(
+    plan: &RealizationPlan,
+    schemas: &[SymbolicFrameSchema],
+    start_bit: usize,
+) -> CoreResult<SymbolicFramePlan> {
+    let schema = schema_for_template(&plan.template_id, schemas)?;
+
+    let values = schema
+        .fields
+        .iter()
+        .map(|field| {
+            let value = match plan.template_id.as_str() {
+                "en-basic-svo" => symbolic_value_for_basic_plan_slot(plan, field.slot.as_str())?,
+                "en-time-location-svo" => {
+                    symbolic_value_for_time_location_plan_slot(plan, field.slot.as_str())?
+                }
+                _ => return Err(CoreError::UnsupportedTemplate(plan.template_id.to_string())),
+            };
+
+            Ok(SymbolicSlotValue {
+                slot: field.slot.clone(),
+                bit_width: field.bit_width,
+                value,
+            })
+        })
+        .collect::<CoreResult<Vec<_>>>()?;
+
+    Ok(SymbolicFramePlan {
+        template_id: schema.template_id.clone(),
+        source: BitRange {
+            start_bit,
+            consumed_bits: schema.total_bits(),
+        },
+        values,
+    })
+}
+
+fn symbolic_value_for_basic_plan_slot(plan: &RealizationPlan, slot: &str) -> CoreResult<u32> {
+    match slot {
+        "subject" => {
+            let assignment = assignment_by_slot(plan, "subject")?;
+            surface_index(subject_forms(), &assignment.surface)
+        }
+        "object" => {
+            let assignment = assignment_by_slot(plan, "object")?;
+            surface_index(object_forms(), &assignment.surface)
+        }
+        "adjective" => {
+            let assignment = assignment_by_slot(plan, "adjective")?;
+            surface_index(adjective_forms(), &assignment.surface)
+        }
+        "verb" => {
+            let assignment = assignment_by_slot(plan, "verb")?;
+            surface_index(verb_forms(), &assignment.surface)
+        }
+        _ => Err(CoreError::InvalidSymbolicPlan(format!(
+            "unsupported slot '{slot}' for template '{}'",
+            plan.template_id
+        ))),
+    }
+}
+
+fn symbolic_value_for_time_location_plan_slot(
+    plan: &RealizationPlan,
+    slot: &str,
+) -> CoreResult<u32> {
+    match slot {
+        "subject" => {
+            let assignment = assignment_by_slot(plan, "subject")?;
+            surface_index(subject_forms(), &assignment.surface)
+        }
+        "time" => {
+            let assignment = assignment_by_slot(plan, "time")?;
+            surface_index(time_forms(), &assignment.surface)
+        }
+        "location" => {
+            let assignment = assignment_by_slot(plan, "location")?;
+            surface_index(location_forms(), &assignment.surface)
+        }
+        "object" => {
+            let assignment = assignment_by_slot(plan, "object")?;
+            surface_index(object_forms(), &assignment.surface)
+        }
+        "verb" => {
+            let assignment = assignment_by_slot(plan, "verb")?;
+            surface_index(verb_forms(), &assignment.surface)
+        }
+        _ => Err(CoreError::InvalidSymbolicPlan(format!(
+            "unsupported slot '{slot}' for template '{}'",
+            plan.template_id
+        ))),
+    }
+}
+
+fn schema_for_template<'a>(
+    template_id: &TemplateId,
+    schemas: &'a [SymbolicFrameSchema],
+) -> CoreResult<&'a SymbolicFrameSchema> {
+    schemas
+        .iter()
+        .find(|schema| schema.template_id == *template_id)
+        .ok_or_else(|| CoreError::UnsupportedTemplate(template_id.to_string()))
+}
+
+fn assignment_by_slot<'a>(plan: &'a RealizationPlan, slot: &str) -> CoreResult<&'a SlotAssignment> {
+    plan.assignments
+        .iter()
+        .find(|assignment| assignment.slot.as_str() == slot)
+        .ok_or_else(|| {
+            CoreError::InvalidSymbolicPlan(format!(
+                "missing slot '{slot}' in plan '{}'",
+                plan.template_id
+            ))
+        })
+}
+
+fn surface_index(values: &[&str], surface: &str) -> CoreResult<u32> {
+    let normalized = surface.trim();
+    let idx = values
+        .iter()
+        .position(|candidate| candidate.eq_ignore_ascii_case(normalized))
+        .ok_or_else(|| {
+            CoreError::InvalidSymbolicPlan(format!(
+                "unknown surface value '{normalized}' in symbolic inventory"
+            ))
+        })?;
+    u32::try_from(idx).map_err(|_| {
+        CoreError::InvalidSymbolicPlan(format!(
+            "surface index {idx} is too large for symbolic value conversion"
+        ))
+    })
+}
+
+fn select_english_text_body(input: &str) -> &str {
+    let marker = "final prototype text:";
+    if let Some(index) = input.find(marker) {
+        let start = index + marker.len();
+        return input[start..].trim();
+    }
+
+    input.trim()
+}
+
+fn split_sentences(input: &str) -> impl Iterator<Item = &str> {
+    input.split(['.', '\n'])
+}
+
+fn parse_english_sentence_to_plan(sentence: &str) -> CoreResult<RealizationPlan> {
+    if sentence.contains(',') {
+        return parse_time_location_svo_sentence(sentence);
+    }
+
+    parse_basic_svo_sentence(sentence)
+}
+
+fn parse_basic_svo_sentence(sentence: &str) -> CoreResult<RealizationPlan> {
+    let (subject, rest) = consume_form_prefix(sentence, subject_forms())
+        .ok_or_else(|| unsupported_shape(sentence))?;
+    let (verb, rest) =
+        consume_form_prefix(rest, verb_forms()).ok_or_else(|| unsupported_shape(sentence))?;
+    let (adjective, rest) =
+        consume_form_prefix(rest, adjective_forms()).ok_or_else(|| unsupported_shape(sentence))?;
+    let (object, rest) =
+        consume_form_prefix(rest, object_forms()).ok_or_else(|| unsupported_shape(sentence))?;
+
+    if !rest.trim().is_empty() {
+        return Err(unsupported_shape(sentence));
+    }
+
+    Ok(RealizationPlan {
+        template_id: TemplateId::new("en-basic-svo")?,
+        assignments: vec![
+            create_assignment("subject", subject.to_string())?,
+            create_assignment("verb", verb.to_string())?,
+            create_assignment("adjective", adjective.to_string())?,
+            create_assignment("object", object.to_string())?,
+        ],
+    })
+}
+
+fn parse_time_location_svo_sentence(sentence: &str) -> CoreResult<RealizationPlan> {
+    let (left, right) = sentence
+        .split_once(',')
+        .ok_or_else(|| unsupported_shape(sentence))?;
+
+    let (subject, rest) =
+        consume_form_prefix(left, subject_forms()).ok_or_else(|| unsupported_shape(sentence))?;
+    let (time, rest) =
+        consume_form_prefix(rest, time_forms()).ok_or_else(|| unsupported_shape(sentence))?;
+    let (location, rest) =
+        consume_form_prefix(rest, location_forms()).ok_or_else(|| unsupported_shape(sentence))?;
+
+    if !rest.trim().is_empty() {
+        return Err(unsupported_shape(sentence));
+    }
+
+    let (verb, rest) =
+        consume_form_prefix(right, verb_forms()).ok_or_else(|| unsupported_shape(sentence))?;
+    let (object, rest) =
+        consume_form_prefix(rest, object_forms()).ok_or_else(|| unsupported_shape(sentence))?;
+
+    if !rest.trim().is_empty() {
+        return Err(unsupported_shape(sentence));
+    }
+
+    Ok(RealizationPlan {
+        template_id: TemplateId::new("en-time-location-svo")?,
+        assignments: vec![
+            create_assignment("subject", subject.to_string())?,
+            create_assignment("time", time.to_string())?,
+            create_assignment("location", location.to_string())?,
+            create_assignment("verb", verb.to_string())?,
+            create_assignment("object", object.to_string())?,
+        ],
+    })
+}
+
+fn consume_form_prefix<'a>(
+    input: &'a str,
+    forms: &[&'static str],
+) -> Option<(&'static str, &'a str)> {
+    let trimmed = input.trim_start();
+    let mut best_match: Option<(&'static str, &'a str)> = None;
+
+    for &form in forms {
+        let Some(rest) = trimmed.strip_prefix(form) else {
+            continue;
+        };
+
+        if !rest.is_empty() && !rest.starts_with(' ') {
+            continue;
+        }
+
+        let candidate = (form, rest.trim_start());
+        let should_replace = match best_match {
+            Some((best, _)) => form.len() > best.len(),
+            None => true,
+        };
+        if should_replace {
+            best_match = Some(candidate);
+        }
+    }
+
+    best_match
+}
+
+fn unsupported_shape(sentence: &str) -> CoreError {
+    CoreError::InvalidTemplate(format!(
+        "unsupported canonical english sentence shape: {sentence}"
+    ))
 }
 
 fn english_languages() -> Vec<LanguageDescriptor> {
@@ -315,12 +609,39 @@ fn subject_forms() -> &'static [&'static str] {
         "the engineer",
         "the visitor",
         "the manager",
+        "the analyst",
+        "the editor",
+        "the designer",
+        "the planner",
+        "the operator",
+        "the curator",
+        "the mentor",
+        "the reviewer",
+        "the architect",
+        "the librarian",
+        "the doctor",
+        "the lawyer",
+        "the chef",
+        "the pilot",
+        "the nurse",
+        "the trader",
+        "the farmer",
+        "the driver",
+        "the clerk",
+        "the coach",
+        "the director",
+        "the inspector",
+        "the producer",
+        "the scientist",
     ]
 }
 
 fn object_forms() -> &'static [&'static str] {
     &[
-        "book", "letter", "photo", "tea", "food", "flower", "note", "report",
+        "book", "letter", "photo", "tea", "food", "flower", "note", "report", "article", "memo",
+        "contract", "ticket", "canvas", "record", "invoice", "plan", "diagram", "manual", "parcel",
+        "sample", "device", "folder", "archive", "dataset", "summary", "script", "draft", "review",
+        "proposal", "schedule", "catalog", "brief",
     ]
 }
 
@@ -332,7 +653,10 @@ fn adjective_forms() -> &'static [&'static str] {
 
 fn verb_forms() -> &'static [&'static str] {
     &[
-        "buys", "writes", "reads", "sees", "keeps", "builds", "finds", "moves",
+        "buys", "writes", "reads", "sees", "keeps", "builds", "finds", "moves", "sends", "brings",
+        "drafts", "reviews", "files", "studies", "cleans", "paints", "records", "prepares",
+        "arranges", "orders", "packs", "repairs", "tracks", "updates", "shares", "stores", "edits",
+        "prints", "checks", "labels", "folds", "copies",
     ]
 }
 
@@ -365,13 +689,15 @@ fn location_forms() -> &'static [&'static str] {
 #[cfg(test)]
 mod tests {
     use linguasteg_core::{
-        GrammarConstraintChecker, LanguageRealizer, LanguageTag, RealizationPlan, SlotAssignment,
-        SlotId, StyleProfileRegistry, TemplateId, TemplateRegistry,
+        BitRange, GrammarConstraintChecker, LanguageRealizer, LanguageTag, RealizationPlan,
+        SlotAssignment, SlotId, StyleProfileRegistry, SymbolicFramePlan, SymbolicSlotValue,
+        TemplateId, TemplateRegistry,
     };
 
     use super::{
         EnglishPrototypeConstraintChecker, EnglishPrototypeLanguagePack, EnglishPrototypeRealizer,
-        EnglishPrototypeSymbolicMapper,
+        EnglishPrototypeSymbolicMapper, adjective_forms, location_forms, object_forms,
+        parse_english_prototype_text, subject_forms, time_forms, verb_forms,
     };
 
     #[test]
@@ -497,5 +823,107 @@ mod tests {
             .render(template, &plan)
             .expect("realization should succeed");
         assert_eq!(rendered, "the writer writes old book");
+    }
+
+    #[test]
+    fn english_symbolic_inventories_match_bit_width_capacity() {
+        assert_eq!(subject_forms().len(), 32);
+        assert_eq!(object_forms().len(), 32);
+        assert_eq!(verb_forms().len(), 32);
+        assert_eq!(adjective_forms().len(), 8);
+        assert_eq!(time_forms().len(), 8);
+        assert_eq!(location_forms().len(), 8);
+    }
+
+    #[test]
+    fn english_mapper_maps_plans_back_to_frames_with_canonical_values() {
+        let mapper = EnglishPrototypeSymbolicMapper;
+        let frames = vec![
+            SymbolicFramePlan {
+                template_id: TemplateId::new("en-basic-svo").expect("template"),
+                source: BitRange {
+                    start_bit: 0,
+                    consumed_bits: 18,
+                },
+                values: vec![
+                    SymbolicSlotValue {
+                        slot: SlotId::new("subject").expect("slot"),
+                        bit_width: 5,
+                        value: 31,
+                    },
+                    SymbolicSlotValue {
+                        slot: SlotId::new("object").expect("slot"),
+                        bit_width: 5,
+                        value: 30,
+                    },
+                    SymbolicSlotValue {
+                        slot: SlotId::new("adjective").expect("slot"),
+                        bit_width: 3,
+                        value: 7,
+                    },
+                    SymbolicSlotValue {
+                        slot: SlotId::new("verb").expect("slot"),
+                        bit_width: 5,
+                        value: 29,
+                    },
+                ],
+            },
+            SymbolicFramePlan {
+                template_id: TemplateId::new("en-time-location-svo").expect("template"),
+                source: BitRange {
+                    start_bit: 18,
+                    consumed_bits: 21,
+                },
+                values: vec![
+                    SymbolicSlotValue {
+                        slot: SlotId::new("subject").expect("slot"),
+                        bit_width: 5,
+                        value: 18,
+                    },
+                    SymbolicSlotValue {
+                        slot: SlotId::new("time").expect("slot"),
+                        bit_width: 3,
+                        value: 6,
+                    },
+                    SymbolicSlotValue {
+                        slot: SlotId::new("location").expect("slot"),
+                        bit_width: 3,
+                        value: 5,
+                    },
+                    SymbolicSlotValue {
+                        slot: SlotId::new("object").expect("slot"),
+                        bit_width: 5,
+                        value: 17,
+                    },
+                    SymbolicSlotValue {
+                        slot: SlotId::new("verb").expect("slot"),
+                        bit_width: 5,
+                        value: 16,
+                    },
+                ],
+            },
+        ];
+
+        let plans = frames
+            .iter()
+            .map(|frame| mapper.map_frame_to_plan(frame))
+            .collect::<Result<Vec<_>, _>>()
+            .expect("forward mapping should work");
+
+        let recovered = mapper
+            .map_plans_to_frames(&plans)
+            .expect("reverse mapping should work");
+
+        assert_eq!(recovered, frames);
+    }
+
+    #[test]
+    fn english_text_parser_parses_canonical_sentences() {
+        let text = "the manager labels clear report. the architect in winter at the office, records manual.";
+        let plans = parse_english_prototype_text(text).expect("text should parse");
+
+        assert_eq!(plans.len(), 2);
+        assert_eq!(plans[0].template_id.as_str(), "en-basic-svo");
+        assert_eq!(plans[1].template_id.as_str(), "en-time-location-svo");
     }
 }
