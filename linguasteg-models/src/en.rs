@@ -174,7 +174,7 @@ pub fn parse_english_prototype_text(stego_text: &str) -> CoreResult<Vec<Realizat
 
 fn map_basic_svo_frame(frame: &SymbolicFramePlan) -> CoreResult<RealizationPlan> {
     let subject = select_form(subject_forms(), symbolic_value_for_slot(frame, "subject")?);
-    let object = select_form(object_forms(), symbolic_value_for_slot(frame, "object")?);
+    let object = select_object_form(symbolic_value_for_slot(frame, "object")?);
     let adjective = select_form(
         adjective_forms(),
         symbolic_value_for_slot(frame, "adjective")?,
@@ -200,7 +200,7 @@ fn map_time_location_svo_frame(frame: &SymbolicFramePlan) -> CoreResult<Realizat
         symbolic_value_for_slot(frame, "location")?,
     );
     let verb = select_form(verb_forms(), symbolic_value_for_slot(frame, "verb")?);
-    let object = select_form(object_forms(), symbolic_value_for_slot(frame, "object")?);
+    let object = select_object_form(symbolic_value_for_slot(frame, "object")?);
 
     Ok(RealizationPlan {
         template_id: TemplateId::new("en-time-location-svo")?,
@@ -286,7 +286,7 @@ fn symbolic_value_for_basic_plan_slot(plan: &RealizationPlan, slot: &str) -> Cor
         }
         "object" => {
             let assignment = assignment_by_slot(plan, "object")?;
-            surface_index(object_forms(), &assignment.surface)
+            object_surface_index(&assignment.surface)
         }
         "adjective" => {
             let assignment = assignment_by_slot(plan, "adjective")?;
@@ -322,7 +322,7 @@ fn symbolic_value_for_time_location_plan_slot(
         }
         "object" => {
             let assignment = assignment_by_slot(plan, "object")?;
-            surface_index(object_forms(), &assignment.surface)
+            object_surface_index(&assignment.surface)
         }
         "verb" => {
             let assignment = assignment_by_slot(plan, "verb")?;
@@ -403,8 +403,7 @@ fn parse_basic_svo_sentence(sentence: &str) -> CoreResult<RealizationPlan> {
         consume_form_prefix(rest, verb_forms()).ok_or_else(|| unsupported_shape(sentence))?;
     let (adjective, rest) =
         consume_form_prefix(rest, adjective_forms()).ok_or_else(|| unsupported_shape(sentence))?;
-    let (object, rest) =
-        consume_form_prefix(rest, object_forms()).ok_or_else(|| unsupported_shape(sentence))?;
+    let (object, rest) = consume_object_prefix(rest).ok_or_else(|| unsupported_shape(sentence))?;
 
     if !rest.trim().is_empty() {
         return Err(unsupported_shape(sentence));
@@ -439,8 +438,7 @@ fn parse_time_location_svo_sentence(sentence: &str) -> CoreResult<RealizationPla
 
     let (verb, rest) =
         consume_form_prefix(right, verb_forms()).ok_or_else(|| unsupported_shape(sentence))?;
-    let (object, rest) =
-        consume_form_prefix(rest, object_forms()).ok_or_else(|| unsupported_shape(sentence))?;
+    let (object, rest) = consume_object_prefix(rest).ok_or_else(|| unsupported_shape(sentence))?;
 
     if !rest.trim().is_empty() {
         return Err(unsupported_shape(sentence));
@@ -485,6 +483,34 @@ fn consume_form_prefix<'a>(
     }
 
     best_match
+}
+
+fn consume_object_prefix<'a>(input: &'a str) -> Option<(&'static str, &'a str)> {
+    let trimmed = input.trim_start();
+    let mut best_match: Option<(&'static str, &'a str, usize)> = None;
+
+    for lexeme in object_lexemes() {
+        for &form in lexeme.accepted_forms {
+            let Some(rest) = trimmed.strip_prefix(form) else {
+                continue;
+            };
+
+            if !rest.is_empty() && !rest.starts_with(' ') {
+                continue;
+            }
+
+            let candidate = (lexeme.canonical, rest.trim_start(), form.len());
+            let should_replace = match best_match {
+                Some((_, _, best_len)) => form.len() > best_len,
+                None => true,
+            };
+            if should_replace {
+                best_match = Some(candidate);
+            }
+        }
+    }
+
+    best_match.map(|(canonical, rest, _)| (canonical, rest))
 }
 
 fn unsupported_shape(sentence: &str) -> CoreError {
@@ -644,13 +670,183 @@ fn subject_forms() -> &'static [&'static str] {
     ]
 }
 
+#[cfg(test)]
 fn object_forms() -> &'static [&'static str] {
     &[
-        "book", "letter", "photo", "tea", "food", "flower", "note", "report", "article", "memo",
-        "contract", "ticket", "canvas", "record", "invoice", "plan", "diagram", "manual", "parcel",
-        "sample", "device", "folder", "archive", "dataset", "summary", "script", "draft", "review",
-        "proposal", "schedule", "catalog", "brief",
+        "book", "letter", "photo", "journal", "briefing", "dossier", "note", "report", "article",
+        "memo", "contract", "ticket", "canvas", "record", "invoice", "plan", "diagram", "manual",
+        "parcel", "sample", "device", "folder", "archive", "dataset", "summary", "script", "draft",
+        "review", "proposal", "schedule", "catalog", "brief",
     ]
+}
+
+#[derive(Debug, Clone, Copy)]
+struct EnglishObjectLexeme {
+    canonical: &'static str,
+    accepted_forms: &'static [&'static str],
+}
+
+fn object_lexemes() -> &'static [EnglishObjectLexeme] {
+    const OBJECT_LEXEMES: [EnglishObjectLexeme; 32] = [
+        EnglishObjectLexeme {
+            canonical: "book",
+            accepted_forms: &["book"],
+        },
+        EnglishObjectLexeme {
+            canonical: "letter",
+            accepted_forms: &["letter"],
+        },
+        EnglishObjectLexeme {
+            canonical: "photo",
+            accepted_forms: &["photo"],
+        },
+        EnglishObjectLexeme {
+            canonical: "journal",
+            accepted_forms: &["journal", "tea"],
+        },
+        EnglishObjectLexeme {
+            canonical: "briefing",
+            accepted_forms: &["briefing", "food"],
+        },
+        EnglishObjectLexeme {
+            canonical: "dossier",
+            accepted_forms: &["dossier", "flower"],
+        },
+        EnglishObjectLexeme {
+            canonical: "note",
+            accepted_forms: &["note"],
+        },
+        EnglishObjectLexeme {
+            canonical: "report",
+            accepted_forms: &["report"],
+        },
+        EnglishObjectLexeme {
+            canonical: "article",
+            accepted_forms: &["article"],
+        },
+        EnglishObjectLexeme {
+            canonical: "memo",
+            accepted_forms: &["memo"],
+        },
+        EnglishObjectLexeme {
+            canonical: "contract",
+            accepted_forms: &["contract"],
+        },
+        EnglishObjectLexeme {
+            canonical: "ticket",
+            accepted_forms: &["ticket"],
+        },
+        EnglishObjectLexeme {
+            canonical: "canvas",
+            accepted_forms: &["canvas"],
+        },
+        EnglishObjectLexeme {
+            canonical: "record",
+            accepted_forms: &["record"],
+        },
+        EnglishObjectLexeme {
+            canonical: "invoice",
+            accepted_forms: &["invoice"],
+        },
+        EnglishObjectLexeme {
+            canonical: "plan",
+            accepted_forms: &["plan"],
+        },
+        EnglishObjectLexeme {
+            canonical: "diagram",
+            accepted_forms: &["diagram"],
+        },
+        EnglishObjectLexeme {
+            canonical: "manual",
+            accepted_forms: &["manual"],
+        },
+        EnglishObjectLexeme {
+            canonical: "parcel",
+            accepted_forms: &["parcel"],
+        },
+        EnglishObjectLexeme {
+            canonical: "sample",
+            accepted_forms: &["sample"],
+        },
+        EnglishObjectLexeme {
+            canonical: "device",
+            accepted_forms: &["device"],
+        },
+        EnglishObjectLexeme {
+            canonical: "folder",
+            accepted_forms: &["folder"],
+        },
+        EnglishObjectLexeme {
+            canonical: "archive",
+            accepted_forms: &["archive"],
+        },
+        EnglishObjectLexeme {
+            canonical: "dataset",
+            accepted_forms: &["dataset"],
+        },
+        EnglishObjectLexeme {
+            canonical: "summary",
+            accepted_forms: &["summary"],
+        },
+        EnglishObjectLexeme {
+            canonical: "script",
+            accepted_forms: &["script"],
+        },
+        EnglishObjectLexeme {
+            canonical: "draft",
+            accepted_forms: &["draft"],
+        },
+        EnglishObjectLexeme {
+            canonical: "review",
+            accepted_forms: &["review"],
+        },
+        EnglishObjectLexeme {
+            canonical: "proposal",
+            accepted_forms: &["proposal"],
+        },
+        EnglishObjectLexeme {
+            canonical: "schedule",
+            accepted_forms: &["schedule"],
+        },
+        EnglishObjectLexeme {
+            canonical: "catalog",
+            accepted_forms: &["catalog"],
+        },
+        EnglishObjectLexeme {
+            canonical: "brief",
+            accepted_forms: &["brief"],
+        },
+    ];
+
+    &OBJECT_LEXEMES
+}
+
+fn select_object_form(value: u32) -> String {
+    let index = (value as usize) % object_lexemes().len();
+    object_lexemes()[index].canonical.to_string()
+}
+
+fn object_surface_index(surface: &str) -> CoreResult<u32> {
+    let normalized = surface.trim();
+    let idx = object_lexemes()
+        .iter()
+        .position(|lexeme| {
+            lexeme
+                .accepted_forms
+                .iter()
+                .any(|form| form.eq_ignore_ascii_case(normalized))
+        })
+        .ok_or_else(|| {
+            CoreError::InvalidSymbolicPlan(format!(
+                "unknown surface value '{normalized}' in symbolic inventory"
+            ))
+        })?;
+
+    u32::try_from(idx).map_err(|_| {
+        CoreError::InvalidSymbolicPlan(format!(
+            "surface index {idx} is too large for symbolic value conversion"
+        ))
+    })
 }
 
 fn adjective_forms() -> &'static [&'static str] {
@@ -933,5 +1129,70 @@ mod tests {
         assert_eq!(plans.len(), 2);
         assert_eq!(plans[0].template_id.as_str(), "en-basic-svo");
         assert_eq!(plans[1].template_id.as_str(), "en-time-location-svo");
+    }
+
+    #[test]
+    fn english_text_parser_accepts_legacy_object_aliases() {
+        let text = "the writer writes quiet tea. the teacher today at home, keeps flower.";
+        let plans = parse_english_prototype_text(text).expect("legacy aliases should parse");
+
+        assert_eq!(plans.len(), 2);
+        let first_object = plans[0]
+            .assignments
+            .iter()
+            .find(|assignment| assignment.slot.as_str() == "object")
+            .expect("object assignment should exist");
+        let second_object = plans[1]
+            .assignments
+            .iter()
+            .find(|assignment| assignment.slot.as_str() == "object")
+            .expect("object assignment should exist");
+
+        assert_eq!(first_object.surface, "journal");
+        assert_eq!(second_object.surface, "dossier");
+    }
+
+    #[test]
+    fn english_mapper_emits_upgraded_object_surface_for_legacy_slot_index() {
+        let mapper = EnglishPrototypeSymbolicMapper;
+        let frame = SymbolicFramePlan {
+            template_id: TemplateId::new("en-basic-svo").expect("template"),
+            source: BitRange {
+                start_bit: 0,
+                consumed_bits: 18,
+            },
+            values: vec![
+                SymbolicSlotValue {
+                    slot: SlotId::new("subject").expect("slot"),
+                    bit_width: 5,
+                    value: 0,
+                },
+                SymbolicSlotValue {
+                    slot: SlotId::new("object").expect("slot"),
+                    bit_width: 5,
+                    value: 3,
+                },
+                SymbolicSlotValue {
+                    slot: SlotId::new("adjective").expect("slot"),
+                    bit_width: 3,
+                    value: 2,
+                },
+                SymbolicSlotValue {
+                    slot: SlotId::new("verb").expect("slot"),
+                    bit_width: 5,
+                    value: 1,
+                },
+            ],
+        };
+
+        let plan = mapper
+            .map_frame_to_plan(&frame)
+            .expect("mapping should succeed");
+        let object = plan
+            .assignments
+            .iter()
+            .find(|assignment| assignment.slot.as_str() == "object")
+            .expect("object assignment should exist");
+        assert_eq!(object.surface, "journal");
     }
 }
