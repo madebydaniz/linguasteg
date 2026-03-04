@@ -1,6 +1,6 @@
 use linguasteg_core::{
-    CryptoEnvelopeInspection, FixedWidthPlanningOptions, SymbolicFramePlan, SymbolicFrameSchema,
-    decode_payload_from_symbolic_frames, inspect_envelope, open_payload,
+    decode_payload_from_symbolic_frames, inspect_envelope, open_payload, CryptoEnvelopeInspection,
+    FixedWidthPlanningOptions, SymbolicFramePlan, SymbolicFrameSchema,
 };
 
 use super::formatters::{build_trace_analysis_json, build_trace_analysis_text};
@@ -45,7 +45,7 @@ pub(crate) fn analyze_trace_summary(
     }
 
     let target = resolve_trace_target(target, auto_detect_target, trace_text)?;
-    let runtime = PrototypeRuntime::new(target).map_err(|error| {
+    let mut runtime = PrototypeRuntime::new(target).map_err(|error| {
         CliError::internal(format!(
             "failed to initialize {} runtime: {error}",
             target.as_str()
@@ -61,34 +61,24 @@ pub(crate) fn analyze_trace_summary(
             }
             parsed_trace_frames
         }
-        DecodeInputMode::Text => {
-            if !runtime.text_decode_lossless {
-                return Err(text_decode_not_lossless_error(
-                    runtime.language_display,
-                    operation,
-                ));
-            }
-            runtime
-                .extract_plans(trace_text)
-                .ok()
-                .filter(|plans| !plans.is_empty())
-                .and_then(|plans| runtime.mapper.map_plans_to_frames(&plans).ok())
-                .ok_or_else(|| operation_text_mode_requires_canonical_text_error(operation))?
-        }
+        DecodeInputMode::Text => resolve_text_frames_with_auto_fallback(
+            &mut runtime,
+            target,
+            auto_detect_target,
+            trace_text,
+            operation,
+            operation_text_mode_requires_canonical_text_error,
+        )?,
         DecodeInputMode::Auto => {
             if parsed_trace_frames.is_empty() {
-                if !runtime.text_decode_lossless {
-                    return Err(text_decode_not_lossless_error(
-                        runtime.language_display,
-                        operation,
-                    ));
-                }
-                runtime
-                    .extract_plans(trace_text)
-                    .ok()
-                    .filter(|plans| !plans.is_empty())
-                    .and_then(|plans| runtime.mapper.map_plans_to_frames(&plans).ok())
-                    .ok_or_else(|| operation_auto_requires_trace_or_text_error(operation))?
+                resolve_text_frames_with_auto_fallback(
+                    &mut runtime,
+                    target,
+                    auto_detect_target,
+                    trace_text,
+                    operation,
+                    operation_auto_requires_trace_or_text_error,
+                )?
             } else {
                 parsed_trace_frames
             }
@@ -99,11 +89,13 @@ pub(crate) fn analyze_trace_summary(
         return Err(CliError::trace("no frame lines were found in trace input"));
     }
 
+    let active_schemas = runtime.mapper.frame_schemas();
+
     analyze_trace(
         runtime.language_code,
         runtime.language_display,
         &frames,
-        &schemas,
+        &active_schemas,
         secret,
     )
 }
@@ -269,4 +261,67 @@ fn operation_auto_requires_trace_or_text_error(operation: &str) -> CliError {
     CliError::input(format!(
         "{operation} requires parseable trace frames or canonical stego text"
     ))
+}
+
+fn resolve_text_frames_with_auto_fallback(
+    runtime: &mut PrototypeRuntime,
+    target: ProtoTarget,
+    auto_detect_target: bool,
+    trace_text: &str,
+    operation: &str,
+    missing_input_error: fn(&str) -> CliError,
+) -> Result<Vec<SymbolicFramePlan>, CliError> {
+    if runtime.text_decode_lossless {
+        if let Some(frames) = extract_text_frames(runtime, trace_text) {
+            return Ok(frames);
+        }
+    } else if !auto_detect_target {
+        return Err(text_decode_not_lossless_error(
+            runtime.language_display,
+            operation,
+        ));
+    }
+
+    if auto_detect_target {
+        let fallback_target = alternate_target(target);
+        let fallback_runtime = PrototypeRuntime::new(fallback_target).map_err(|error| {
+            CliError::internal(format!(
+                "failed to initialize {} runtime: {error}",
+                fallback_target.as_str()
+            ))
+        })?;
+        if fallback_runtime.text_decode_lossless {
+            if let Some(frames) = extract_text_frames(&fallback_runtime, trace_text) {
+                *runtime = fallback_runtime;
+                return Ok(frames);
+            }
+        }
+    }
+
+    if !runtime.text_decode_lossless {
+        return Err(text_decode_not_lossless_error(
+            runtime.language_display,
+            operation,
+        ));
+    }
+
+    Err(missing_input_error(operation))
+}
+
+fn extract_text_frames(
+    runtime: &PrototypeRuntime,
+    trace_text: &str,
+) -> Option<Vec<SymbolicFramePlan>> {
+    runtime
+        .extract_plans(trace_text)
+        .ok()
+        .filter(|plans| !plans.is_empty())
+        .and_then(|plans| runtime.mapper.map_plans_to_frames(&plans).ok())
+}
+
+fn alternate_target(target: ProtoTarget) -> ProtoTarget {
+    match target {
+        ProtoTarget::Farsi => ProtoTarget::English,
+        ProtoTarget::English => ProtoTarget::Farsi,
+    }
 }
