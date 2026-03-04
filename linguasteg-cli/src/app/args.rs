@@ -782,3 +782,93 @@ pub(crate) fn write_usage(mut writer: impl Write) -> std::io::Result<()> {
     )?;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_output_format_arg_sets_json_format() {
+        let mut args = vec!["json".to_string()].into_iter();
+        let mut format = OutputFormat::Text;
+
+        parse_output_format_arg(&mut args, &mut format).expect("format parse should succeed");
+
+        assert!(matches!(format, OutputFormat::Json));
+    }
+
+    #[test]
+    fn parse_proto_lang_arg_sets_english_target() {
+        let mut args = vec!["en".to_string()].into_iter();
+        let mut target = ProtoTarget::Farsi;
+
+        parse_proto_lang_arg(&mut args, &mut target).expect("lang parse should succeed");
+
+        assert_eq!(target, ProtoTarget::English);
+    }
+
+    #[test]
+    fn parse_trace_lang_arg_sets_auto_detect_for_auto() {
+        let mut args = vec!["auto".to_string()].into_iter();
+        let mut target = ProtoTarget::English;
+        let mut auto_detect_target = false;
+
+        parse_trace_lang_arg(&mut args, &mut target, &mut auto_detect_target)
+            .expect("trace lang parse should succeed");
+
+        assert_eq!(target, ProtoTarget::Farsi);
+        assert!(auto_detect_target);
+    }
+
+    #[test]
+    fn parse_discovery_lang_arg_rejects_duplicate_lang_flag() {
+        let mut args = vec!["fa".to_string()].into_iter();
+        let mut target = None;
+        let mut seen_lang = true;
+
+        let error = parse_discovery_lang_arg(&mut args, &mut target, &mut seen_lang)
+            .expect_err("duplicate lang should fail");
+
+        assert_eq!(error.message(), "--lang cannot be provided multiple times");
+    }
+
+    #[test]
+    fn encode_payload_args_rejects_missing_message_and_input() {
+        let payload = EncodePayloadArgs {
+            message: None,
+            input_path: None,
+            output_path: None,
+            seen_message: false,
+            seen_input: false,
+            seen_output: false,
+        };
+
+        let error = payload
+            .ensure_valid()
+            .expect_err("missing message/input should fail");
+
+        assert_eq!(
+            error.message(),
+            "encode requires --message <text> or --input <file>"
+        );
+    }
+
+    #[test]
+    fn secret_args_rejects_mixed_secret_and_secret_file() {
+        let secrets = SecretArgs {
+            secret: Some("value".to_string()),
+            secret_file: Some("/tmp/secret.txt".to_string()),
+            seen_secret: false,
+            seen_secret_file: false,
+        };
+
+        let error = secrets
+            .ensure_not_ambiguous("encode")
+            .expect_err("mixed secret sources should fail");
+
+        assert_eq!(
+            error.message(),
+            "encode accepts either --secret or --secret-file, not both"
+        );
+    }
+}
