@@ -71,7 +71,10 @@ Local command:
 
 - Local fast gate: `./scripts/ci/pre_release_checklist.sh fast`
 - Local full gate: `./scripts/ci/pre_release_checklist.sh full`
+- Freeze report gate: `./scripts/ci/go_no_go_check.sh report`
+- Freeze strict gate: `./scripts/ci/go_no_go_check.sh strict`
 - Detailed checklist: `docs/pre-release-checklist.md`
+- Final go/no-go checklist: `docs/go-no-go-checklist.md`
 
 ## Maintainer Checklist
 

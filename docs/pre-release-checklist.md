@@ -21,6 +21,10 @@ Run from repository root:
   - `./scripts/ci/pre_release_checklist.sh fast`
 - Full gate (recommended before final merge to `main`):
   - `./scripts/ci/pre_release_checklist.sh full`
+- Freeze go/no-go report (recommended before opening PR to `main`):
+  - `./scripts/ci/go_no_go_check.sh report`
+- Freeze go/no-go strict (recommended right before merge to `main`):
+  - `./scripts/ci/go_no_go_check.sh strict`
 
 What `fast` runs:
 
@@ -55,10 +59,11 @@ Additional release checks:
 ## Release Execution Path
 
 1. Ensure `develop` is green and up to date
-2. Open PR from `develop` to `main`
-3. Merge after required checks + approval
-4. Let `release-please` open/update release PR on `main`
-5. Merge release PR
-6. Confirm GitHub Release published
-7. Confirm `publish-crates` jobs (`preflight`, `dry-run`, `publish`) all green
-8. Verify crates availability on crates.io
+2. Run `./scripts/ci/go_no_go_check.sh report`
+3. Open PR from `develop` to `main`
+4. Merge after required checks + approval
+5. Let `release-please` open/update release PR on `main`
+6. Merge release PR
+7. Confirm GitHub Release published
+8. Confirm `publish-crates` jobs (`preflight`, `dry-run`, `publish`) all green
+9. Verify crates availability on crates.io
