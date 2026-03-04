@@ -2,16 +2,16 @@ use std::fmt::Display;
 use std::io::Read;
 
 use linguasteg_core::{
-    DecodeRequest, EncodeRequest, FixedWidthPlanningOptions, LanguageTag, RealizationPlan,
-    SlotAssignment, SlotId, StyleInspiration, StyleProfileId, StyleProfileRegistry, StyleStrength,
-    TemplateId, TemplateRegistry, WritingRegister, open_payload, seal_payload,
+    open_payload, seal_payload, DecodeRequest, EncodeRequest, FixedWidthPlanningOptions,
+    LanguageTag, RealizationPlan, SlotAssignment, SlotId, StyleInspiration, StyleProfileId,
+    StyleProfileRegistry, StyleStrength, TemplateId, TemplateRegistry, WritingRegister,
 };
 
 use super::analysis::{analyze_trace_summary, render_trace_analysis_output};
 use super::formatters::{build_proto_decode_json, build_proto_encode_json, json_escape};
 use super::language::resolve_trace_target;
 use super::runtime::{
-    PrototypeRuntime, supported_languages, supported_models, supported_strategies,
+    supported_languages, supported_models, supported_strategies, PrototypeRuntime,
 };
 use super::trace::{frame_sequence_error, parse_frames_from_trace, schema_for_template};
 use super::types::{
@@ -1338,7 +1338,7 @@ fn resolve_required_secret_bytes(
     match secret {
         Some(value) => Ok(value),
         None => Err(CliError::config(format!(
-            "{command} requires --secret <value> or --secret-file <file> (or LSTEG_SECRET)"
+            "{command} requires --secret <value> or --secret-file <file> (or LSTEG_SECRET/LSTEG_SECRET_FILE)"
         ))),
     }
 }

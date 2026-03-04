@@ -6,7 +6,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use serde_json::Value;
 
 const TEST_SECRET: &str = "linguasteg-test-secret";
-const ENV_KEYS: [&str; 8] = [
+const ENV_KEYS: [&str; 9] = [
     "LSTEG_LANG",
     "LSTEG_FORMAT",
     "LSTEG_INPUT",
@@ -15,6 +15,7 @@ const ENV_KEYS: [&str; 8] = [
     "LSTEG_PROFILE",
     "LSTEG_TRACE",
     "LSTEG_SECRET",
+    "LSTEG_SECRET_FILE",
 ];
 
 fn base_lsteg_command() -> Command {
@@ -811,11 +812,8 @@ fn runtime_errors_return_exit_code_one() {
     assert_eq!(output.status.code(), Some(1));
     let stderr = stderr_string(&output);
     assert!(stderr.contains("LSTEG-CLI-INP-001"));
-    assert!(
-        stderr.contains(
-            "decode requires input from proto-encode trace output or canonical stego text"
-        )
-    );
+    assert!(stderr
+        .contains("decode requires input from proto-encode trace output or canonical stego text"));
 }
 
 #[test]
@@ -1126,6 +1124,77 @@ fn secret_file_is_used_for_encode_and_decode() {
     );
     assert!(decode_with_file_output.status.success());
     assert!(stdout_string(&decode_with_file_output).contains("\"payload_utf8\":\"salam\""));
+}
+
+#[test]
+fn env_secret_file_is_used_for_encode_and_decode() {
+    let secret_file = TempSecretFile::create("env-file-secret");
+    let encode_output = run_lsteg_with_env(
+        &["encode", "--message", "salam", "--emit-trace"],
+        &[
+            ("LSTEG_SECRET", ""),
+            ("LSTEG_SECRET_FILE", secret_file.as_str()),
+        ],
+    );
+    assert!(encode_output.status.success());
+    let trace_text = stdout_string(&encode_output);
+
+    let decode_output = run_lsteg_with_env(
+        &["decode", "--format", "json"],
+        &[
+            ("LSTEG_TRACE", &trace_text),
+            ("LSTEG_SECRET", ""),
+            ("LSTEG_SECRET_FILE", secret_file.as_str()),
+        ],
+    );
+    assert!(decode_output.status.success());
+    assert!(stdout_string(&decode_output).contains("\"payload_utf8\":\"salam\""));
+}
+
+#[test]
+fn encode_rejects_ambiguous_secret_env_sources() {
+    let secret_file = TempSecretFile::create("secret-from-file");
+    let output = run_lsteg_with_env(
+        &["encode", "--message", "salam"],
+        &[
+            ("LSTEG_SECRET", "secret-from-env"),
+            ("LSTEG_SECRET_FILE", secret_file.as_str()),
+        ],
+    );
+    assert_eq!(output.status.code(), Some(1));
+    let stderr = stderr_string(&output);
+    assert!(stderr.contains("LSTEG-CLI-CFG-001"));
+    assert!(stderr.contains(
+        "secret source is ambiguous; set only one of LSTEG_SECRET or LSTEG_SECRET_FILE, or override with --secret/--secret-file"
+    ));
+}
+
+#[test]
+fn cli_secret_overrides_env_secret_file() {
+    let wrong_secret_file = TempSecretFile::create("wrong-env-file-secret");
+    let encode_output = run_lsteg_with_env(
+        &[
+            "encode",
+            "--message",
+            "salam",
+            "--emit-trace",
+            "--secret",
+            "cli-secret",
+        ],
+        &[("LSTEG_SECRET_FILE", wrong_secret_file.as_str())],
+    );
+    assert!(encode_output.status.success());
+    let trace_text = stdout_string(&encode_output);
+
+    let decode_output = run_lsteg_with_env(
+        &["decode", "--format", "json", "--secret", "cli-secret"],
+        &[
+            ("LSTEG_TRACE", &trace_text),
+            ("LSTEG_SECRET_FILE", wrong_secret_file.as_str()),
+        ],
+    );
+    assert!(decode_output.status.success());
+    assert!(stdout_string(&decode_output).contains("\"payload_utf8\":\"salam\""));
 }
 
 #[test]

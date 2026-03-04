@@ -584,15 +584,20 @@ struct SecretArgs {
     secret_file: Option<String>,
     seen_secret: bool,
     seen_secret_file: bool,
+    env_ambiguous: bool,
 }
 
 impl SecretArgs {
     fn from_env() -> Self {
+        let secret = env_optional("LSTEG_SECRET");
+        let secret_file = env_optional("LSTEG_SECRET_FILE");
+        let env_ambiguous = secret.is_some() && secret_file.is_some();
         Self {
-            secret: env_optional("LSTEG_SECRET"),
-            secret_file: None,
+            secret,
+            secret_file,
             seen_secret: false,
             seen_secret_file: false,
+            env_ambiguous,
         }
     }
 
@@ -641,6 +646,11 @@ impl SecretArgs {
 
     fn ensure_not_ambiguous(&self, command: &str) -> Result<(), CliError> {
         if self.secret.is_some() && self.secret_file.is_some() {
+            if self.env_ambiguous {
+                return Err(CliError::config(
+                    "secret source is ambiguous; set only one of LSTEG_SECRET or LSTEG_SECRET_FILE, or override with --secret/--secret-file",
+                ));
+            }
             return Err(CliError::usage(format!(
                 "{command} accepts either --secret or --secret-file, not both"
             )));
@@ -832,7 +842,7 @@ pub(crate) fn write_usage(mut writer: impl Write) -> std::io::Result<()> {
     )?;
     writeln!(
         writer,
-        "Env defaults: LSTEG_LANG (decode/analyze/validate accepts auto), LSTEG_FORMAT, LSTEG_INPUT, LSTEG_OUTPUT, LSTEG_ENCODE_MESSAGE, LSTEG_PROFILE, LSTEG_TRACE, LSTEG_SECRET"
+        "Env defaults: LSTEG_LANG (decode/analyze/validate accepts auto), LSTEG_FORMAT, LSTEG_INPUT, LSTEG_OUTPUT, LSTEG_ENCODE_MESSAGE, LSTEG_PROFILE, LSTEG_TRACE, LSTEG_SECRET, LSTEG_SECRET_FILE"
     )?;
     Ok(())
 }
@@ -914,6 +924,7 @@ mod tests {
             secret_file: Some("/tmp/secret.txt".to_string()),
             seen_secret: false,
             seen_secret_file: false,
+            env_ambiguous: false,
         };
 
         let error = secrets
