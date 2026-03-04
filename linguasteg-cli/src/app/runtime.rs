@@ -1,5 +1,5 @@
 use linguasteg_core::{
-    CoreResult, FixedWidthBitPlanner, GrammarConstraintChecker, LanguageDescriptor,
+    CoreError, CoreResult, FixedWidthBitPlanner, GrammarConstraintChecker, LanguageDescriptor,
     LanguageRealizer, LanguageRegistry, LanguageTag, ModelCapability, ModelDescriptor, ModelId,
     ModelRegistry, ModelSelection, PipelineOptions, PipelineOrchestrator, ProviderId,
     RealizationPlan, RealizationTemplateDescriptor, StrategyDescriptor, StrategyId,
@@ -15,6 +15,7 @@ use linguasteg_models::{
 
 use super::types::ProtoTarget;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct SupportedLanguageInfo {
     pub(crate) code: &'static str,
     pub(crate) display: &'static str,
@@ -35,21 +36,15 @@ pub(crate) struct SupportedModelInfo {
     pub(crate) capabilities: &'static [&'static str],
 }
 
-const SUPPORTED_LANGUAGES: [SupportedLanguageInfo; 2] = [
-    SupportedLanguageInfo {
-        code: "fa",
-        display: "Farsi",
-        direction: "rtl",
-    },
-    SupportedLanguageInfo {
-        code: "en",
-        display: "English",
-        direction: "ltr",
-    },
-];
-
-pub(crate) fn supported_languages() -> &'static [SupportedLanguageInfo] {
-    &SUPPORTED_LANGUAGES
+pub(crate) fn supported_languages() -> Vec<SupportedLanguageInfo> {
+    runtime_providers()
+        .iter()
+        .map(|provider| SupportedLanguageInfo {
+            code: provider.language_code(),
+            display: provider.language_display(),
+            direction: provider.direction(),
+        })
+        .collect()
 }
 
 const SUPPORTED_STRATEGIES: [SupportedStrategyInfo; 1] = [SupportedStrategyInfo {
@@ -183,6 +178,89 @@ impl RuntimeSymbolicMapper for EnglishPrototypeSymbolicMapper {
     }
 }
 
+trait RuntimeProvider: Send + Sync {
+    fn language_code(&self) -> &'static str;
+    fn language_display(&self) -> &'static str;
+    fn direction(&self) -> &'static str;
+    fn build_components(&self) -> RuntimeComponents;
+}
+
+#[derive(Debug, Clone, Copy)]
+struct FarsiRuntimeProvider;
+
+impl RuntimeProvider for FarsiRuntimeProvider {
+    fn language_code(&self) -> &'static str {
+        "fa"
+    }
+
+    fn language_display(&self) -> &'static str {
+        "Farsi"
+    }
+
+    fn direction(&self) -> &'static str {
+        "rtl"
+    }
+
+    fn build_components(&self) -> RuntimeComponents {
+        RuntimeComponents {
+            language_code: self.language_code(),
+            language_display: self.language_display(),
+            text_decode_lossless: true,
+            pack: Box::new(FarsiPrototypeLanguagePack::default()),
+            checker: Box::new(FarsiPrototypeConstraintChecker),
+            realizer: Box::new(FarsiPrototypeRealizer),
+            extractor: Box::new(FarsiPrototypeTextExtractor),
+            mapper: Box::new(FarsiPrototypeSymbolicMapper),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct EnglishRuntimeProvider;
+
+impl RuntimeProvider for EnglishRuntimeProvider {
+    fn language_code(&self) -> &'static str {
+        "en"
+    }
+
+    fn language_display(&self) -> &'static str {
+        "English"
+    }
+
+    fn direction(&self) -> &'static str {
+        "ltr"
+    }
+
+    fn build_components(&self) -> RuntimeComponents {
+        RuntimeComponents {
+            language_code: self.language_code(),
+            language_display: self.language_display(),
+            text_decode_lossless: true,
+            pack: Box::new(EnglishPrototypeLanguagePack::default()),
+            checker: Box::new(EnglishPrototypeConstraintChecker),
+            realizer: Box::new(EnglishPrototypeRealizer),
+            extractor: Box::new(EnglishPrototypeTextExtractor),
+            mapper: Box::new(EnglishPrototypeSymbolicMapper),
+        }
+    }
+}
+
+static FARSI_RUNTIME_PROVIDER: FarsiRuntimeProvider = FarsiRuntimeProvider;
+static ENGLISH_RUNTIME_PROVIDER: EnglishRuntimeProvider = EnglishRuntimeProvider;
+static RUNTIME_PROVIDERS: [&dyn RuntimeProvider; 2] =
+    [&FARSI_RUNTIME_PROVIDER, &ENGLISH_RUNTIME_PROVIDER];
+
+fn runtime_providers() -> &'static [&'static dyn RuntimeProvider] {
+    &RUNTIME_PROVIDERS
+}
+
+fn runtime_provider_for_code(language_code: &str) -> Option<&'static dyn RuntimeProvider> {
+    runtime_providers()
+        .iter()
+        .copied()
+        .find(|provider| provider.language_code() == language_code)
+}
+
 struct RuntimeComponents {
     language_code: &'static str,
     language_display: &'static str,
@@ -212,11 +290,19 @@ pub(crate) struct PrototypeRuntime {
 
 impl PrototypeRuntime {
     pub(crate) fn new(target: ProtoTarget) -> Result<Self, Box<dyn std::error::Error>> {
+        Self::new_for_language_code(target.as_str())
+    }
+
+    pub(crate) fn new_for_language_code(
+        language_code: &str,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
         let strategy_id = StrategyId::new("symbolic-stub")?;
         let provider = ProviderId::new("stub")?;
         let model = ModelId::new("stub-local")?;
 
-        let components = runtime_components(target);
+        let provider_impl = runtime_provider_for_code(language_code)
+            .ok_or_else(|| CoreError::UnsupportedLanguage(language_code.to_string()))?;
+        let components = provider_impl.build_components();
         let language = LanguageTag::new(components.language_code)?;
 
         Ok(Self {
@@ -276,27 +362,34 @@ impl PrototypeRuntime {
     }
 }
 
-fn runtime_components(target: ProtoTarget) -> RuntimeComponents {
-    match target {
-        ProtoTarget::Farsi => RuntimeComponents {
-            language_code: "fa",
-            language_display: "Farsi",
-            text_decode_lossless: true,
-            pack: Box::new(FarsiPrototypeLanguagePack::default()),
-            checker: Box::new(FarsiPrototypeConstraintChecker),
-            realizer: Box::new(FarsiPrototypeRealizer),
-            extractor: Box::new(FarsiPrototypeTextExtractor),
-            mapper: Box::new(FarsiPrototypeSymbolicMapper),
-        },
-        ProtoTarget::English => RuntimeComponents {
-            language_code: "en",
-            language_display: "English",
-            text_decode_lossless: true,
-            pack: Box::new(EnglishPrototypeLanguagePack::default()),
-            checker: Box::new(EnglishPrototypeConstraintChecker),
-            realizer: Box::new(EnglishPrototypeRealizer),
-            extractor: Box::new(EnglishPrototypeTextExtractor),
-            mapper: Box::new(EnglishPrototypeSymbolicMapper),
-        },
+#[cfg(test)]
+mod tests {
+    use super::{PrototypeRuntime, supported_languages};
+
+    #[test]
+    fn supported_languages_are_provided_by_runtime_registry() {
+        let languages = supported_languages();
+        assert!(languages.iter().any(|item| item.code == "fa"));
+        assert!(languages.iter().any(|item| item.code == "en"));
+    }
+
+    #[test]
+    fn runtime_can_be_initialized_from_language_code() {
+        let fa_runtime =
+            PrototypeRuntime::new_for_language_code("fa").expect("fa runtime should initialize");
+        assert_eq!(fa_runtime.language_code, "fa");
+
+        let en_runtime =
+            PrototypeRuntime::new_for_language_code("en").expect("en runtime should initialize");
+        assert_eq!(en_runtime.language_code, "en");
+    }
+
+    #[test]
+    fn runtime_initialization_rejects_unknown_language_code() {
+        let error = match PrototypeRuntime::new_for_language_code("de") {
+            Ok(_) => panic!("unknown language runtime should fail"),
+            Err(error) => error,
+        };
+        assert!(error.to_string().contains("language is not supported: de"));
     }
 }
