@@ -34,7 +34,7 @@ pub use ids::{LanguageTag, ModelId, ProviderId, SlotId, StrategyId, StyleProfile
 pub use orchestration::{OrchestratedDecodeResult, OrchestratedEncodeResult, PipelineOrchestrator};
 pub use pipeline::{
     DecodeOutput, DecodeRequest, Decoder, EncodeOutput, EncodeRequest, Encoder, ModelAdapter,
-    ModelCapability, ModelSelection, PipelineOptions,
+    ModelCapability, ModelSelection, PipelineOptions, TextExtractor,
 };
 pub use registry::TemplateRegistry;
 pub use registry::{LanguageRegistry, ModelRegistry, StrategyRegistry, StyleProfileRegistry};

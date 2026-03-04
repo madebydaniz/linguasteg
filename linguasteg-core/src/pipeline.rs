@@ -1,4 +1,5 @@
 use crate::{CoreResult, LanguageTag, ModelId, ProviderId, StrategyId};
+use crate::RealizationPlan;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EncodeRequest {
@@ -66,4 +67,8 @@ pub trait Encoder: Send + Sync {
 
 pub trait Decoder: Send + Sync {
     fn decode(&self, request: DecodeRequest) -> CoreResult<DecodeOutput>;
+}
+
+pub trait TextExtractor: Send + Sync {
+    fn extract_plans(&self, stego_text: &str) -> CoreResult<Vec<RealizationPlan>>;
 }

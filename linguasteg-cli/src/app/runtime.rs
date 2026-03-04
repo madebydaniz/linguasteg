@@ -4,12 +4,13 @@ use linguasteg_core::{
     ModelRegistry, ModelSelection, PipelineOptions, PipelineOrchestrator, ProviderId,
     RealizationPlan, RealizationTemplateDescriptor, StrategyDescriptor, StrategyId,
     StrategyRegistry, StyleProfileDescriptor, StyleProfileRegistry, SymbolicFrameSchema,
-    SymbolicPayloadPlan, TemplateRegistry,
+    SymbolicPayloadPlan, TemplateRegistry, TextExtractor,
 };
 use linguasteg_models::{
     EnglishPrototypeConstraintChecker, EnglishPrototypeLanguagePack, EnglishPrototypeRealizer,
-    EnglishPrototypeSymbolicMapper, FarsiPrototypeConstraintChecker, FarsiPrototypeLanguagePack,
-    FarsiPrototypeRealizer, FarsiPrototypeSymbolicMapper, InMemoryGatewayRegistry,
+    EnglishPrototypeSymbolicMapper, EnglishPrototypeTextExtractor, FarsiPrototypeConstraintChecker,
+    FarsiPrototypeLanguagePack, FarsiPrototypeRealizer, FarsiPrototypeSymbolicMapper,
+    FarsiPrototypeTextExtractor, InMemoryGatewayRegistry,
 };
 
 use super::types::ProtoTarget;
@@ -167,6 +168,7 @@ struct RuntimeComponents {
     pack: Box<dyn RuntimeLanguagePack>,
     checker: Box<dyn GrammarConstraintChecker>,
     realizer: Box<dyn LanguageRealizer>,
+    extractor: Box<dyn TextExtractor>,
     mapper: Box<dyn RuntimeSymbolicMapper>,
 }
 
@@ -176,6 +178,8 @@ pub(crate) struct PrototypeRuntime {
     pub(crate) pack: RuntimeLanguagePackHandle,
     pub(crate) checker: Box<dyn GrammarConstraintChecker>,
     pub(crate) realizer: Box<dyn LanguageRealizer>,
+    #[allow(dead_code)]
+    pub(crate) extractor: Box<dyn TextExtractor>,
     pub(crate) mapper: Box<dyn RuntimeSymbolicMapper>,
     planner: FixedWidthBitPlanner,
     strategy_registry: InMemoryStrategyRegistry,
@@ -198,6 +202,7 @@ impl PrototypeRuntime {
             pack: RuntimeLanguagePackHandle::new(components.pack),
             checker: components.checker,
             realizer: components.realizer,
+            extractor: components.extractor,
             mapper: components.mapper,
             planner: FixedWidthBitPlanner::default(),
             strategy_registry: InMemoryStrategyRegistry {
@@ -230,6 +235,11 @@ impl PrototypeRuntime {
         )
     }
 
+    #[allow(dead_code)]
+    pub(crate) fn extract_plans(&self, stego_text: &str) -> CoreResult<Vec<RealizationPlan>> {
+        self.extractor.extract_plans(stego_text)
+    }
+
     pub(crate) fn pipeline_options(&self) -> Result<PipelineOptions, Box<dyn std::error::Error>> {
         Ok(PipelineOptions {
             language: LanguageTag::new(self.language_code)?,
@@ -250,6 +260,7 @@ fn runtime_components(target: ProtoTarget) -> RuntimeComponents {
             pack: Box::new(FarsiPrototypeLanguagePack::default()),
             checker: Box::new(FarsiPrototypeConstraintChecker),
             realizer: Box::new(FarsiPrototypeRealizer),
+            extractor: Box::new(FarsiPrototypeTextExtractor),
             mapper: Box::new(FarsiPrototypeSymbolicMapper),
         },
         ProtoTarget::English => RuntimeComponents {
@@ -258,6 +269,7 @@ fn runtime_components(target: ProtoTarget) -> RuntimeComponents {
             pack: Box::new(EnglishPrototypeLanguagePack::default()),
             checker: Box::new(EnglishPrototypeConstraintChecker),
             realizer: Box::new(EnglishPrototypeRealizer),
+            extractor: Box::new(EnglishPrototypeTextExtractor),
             mapper: Box::new(EnglishPrototypeSymbolicMapper),
         },
     }
