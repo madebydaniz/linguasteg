@@ -184,6 +184,34 @@ impl Drop for TempArtifactFile {
     }
 }
 
+struct TempOutputFile {
+    path: PathBuf,
+}
+
+impl TempOutputFile {
+    fn create() -> Self {
+        let mut path = std::env::temp_dir();
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock should be after unix epoch")
+            .as_nanos();
+        path.push(format!("linguasteg-export-{nanos}.json"));
+        Self { path }
+    }
+
+    fn as_str(&self) -> &str {
+        self.path
+            .to_str()
+            .expect("temp output path must be valid utf8")
+    }
+}
+
+impl Drop for TempOutputFile {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.path);
+    }
+}
+
 #[test]
 fn encode_json_outputs_proto_encode_mode() {
     let output = run_lsteg(&["encode", "--message", "salam", "--format", "json"]);
@@ -1087,6 +1115,98 @@ fn data_pin_rejects_checksum_for_multiple_selected_sources() {
         stderr
             .contains("--checksum can be used only when exactly one installed source is selected")
     );
+}
+
+#[test]
+fn data_export_manifest_prints_json_snapshot() {
+    let data_dir = TempDataDir::create();
+    let artifact = TempArtifactFile::create(b"linguasteg-dataset");
+    let artifact_url = artifact.as_file_url();
+    let install_output = run_lsteg_with_env(
+        &[
+            "data",
+            "install",
+            "--lang",
+            "en",
+            "--source",
+            "en-wordlist-wordnik",
+            "--artifact-url",
+            &artifact_url,
+            "--format",
+            "json",
+            "--data-dir",
+            data_dir.as_str(),
+        ],
+        &[],
+    );
+    assert!(install_output.status.success());
+
+    let export_output = run_lsteg_with_env(
+        &[
+            "data",
+            "export-manifest",
+            "--lang",
+            "en",
+            "--source",
+            "en-wordlist-wordnik",
+            "--data-dir",
+            data_dir.as_str(),
+        ],
+        &[],
+    );
+    assert!(export_output.status.success());
+    let stdout = stdout_string(&export_output);
+    assert!(stdout.contains("\"schema_version\": 1"));
+    assert!(stdout.contains("\"source_id\": \"en-wordlist-wordnik\""));
+    assert!(stdout.contains("\"artifact_sha256\":"));
+}
+
+#[test]
+fn data_export_manifest_writes_output_file_when_requested() {
+    let data_dir = TempDataDir::create();
+    let output_file = TempOutputFile::create();
+    let install_output = run_lsteg_with_env(
+        &[
+            "data",
+            "install",
+            "--lang",
+            "fa",
+            "--source",
+            "fa-wordlist-mit",
+            "--format",
+            "json",
+            "--data-dir",
+            data_dir.as_str(),
+        ],
+        &[],
+    );
+    assert!(install_output.status.success());
+
+    let export_output = run_lsteg_with_env(
+        &[
+            "data",
+            "export-manifest",
+            "--lang",
+            "fa",
+            "--source",
+            "fa-wordlist-mit",
+            "--output",
+            output_file.as_str(),
+            "--format",
+            "json",
+            "--data-dir",
+            data_dir.as_str(),
+        ],
+        &[],
+    );
+    assert!(export_output.status.success());
+    let stdout = stdout_string(&export_output);
+    assert!(stdout.contains("\"mode\":\"data-export-manifest\""));
+    assert!(stdout.contains("\"entry_count\":1"));
+
+    let exported = std::fs::read_to_string(output_file.as_str())
+        .expect("exported manifest should be readable");
+    assert!(exported.contains("\"source_id\": \"fa-wordlist-mit\""));
 }
 
 #[test]

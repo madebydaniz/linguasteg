@@ -1,10 +1,10 @@
 use std::io::Write;
 
 use super::types::{
-    AnalyzeOptions, CatalogQueryOptions, CliError, Command, DataCommand, DataInstallOptions,
-    DataListOptions, DataPinOptions, DataStatusOptions, DataVerifyOptions, DecodeInputMode,
-    DecodeOptions, DemoTarget, EncodeOptions, OutputFormat, ProfileQueryOptions, ProtoTarget,
-    SchemaQueryOptions, TemplateQueryOptions, ValidateOptions,
+    AnalyzeOptions, CatalogQueryOptions, CliError, Command, DataCommand, DataExportManifestOptions,
+    DataInstallOptions, DataListOptions, DataPinOptions, DataStatusOptions, DataVerifyOptions,
+    DecodeInputMode, DecodeOptions, DemoTarget, EncodeOptions, OutputFormat, ProfileQueryOptions,
+    ProtoTarget, SchemaQueryOptions, TemplateQueryOptions, ValidateOptions,
 };
 
 pub(crate) fn parse_command(args: Vec<String>) -> Result<Option<Command>, CliError> {
@@ -409,7 +409,7 @@ fn parse_schemas_command(args: impl Iterator<Item = String>) -> Result<Option<Co
 fn parse_data_command(mut args: impl Iterator<Item = String>) -> Result<Option<Command>, CliError> {
     let Some(subcommand) = args.next() else {
         return Err(CliError::usage(
-            "data subcommand is required (supported: list, status, verify, pin, install, update)"
+            "data subcommand is required (supported: list, status, verify, pin, export-manifest, install, update)"
                 .to_string(),
         ));
     };
@@ -422,10 +422,11 @@ fn parse_data_command(mut args: impl Iterator<Item = String>) -> Result<Option<C
         "status" => parse_data_status_command(args),
         "verify" => parse_data_verify_command(args),
         "pin" => parse_data_pin_command(args),
+        "export-manifest" => parse_data_export_manifest_command(args),
         "install" => parse_data_install_command(args, false),
         "update" => parse_data_install_command(args, true),
         _ => Err(CliError::usage(format!(
-            "unknown data subcommand: {subcommand} (supported: list, status, verify, pin, install, update)"
+            "unknown data subcommand: {subcommand} (supported: list, status, verify, pin, export-manifest, install, update)"
         ))),
     }
 }
@@ -634,6 +635,74 @@ fn parse_data_pin_command(
         checksum_sha256,
         data_dir,
     }))))
+}
+
+fn parse_data_export_manifest_command(
+    mut args: impl Iterator<Item = String>,
+) -> Result<Option<Command>, CliError> {
+    let mut format = env_output_format("LSTEG_FORMAT")?.unwrap_or(OutputFormat::Text);
+    let mut target = None;
+    let mut source_id = None;
+    let mut output_path = None;
+    let mut seen_lang = false;
+    let mut seen_source = false;
+    let mut seen_output = false;
+    let mut data_dir = env_optional("LSTEG_DATA_DIR");
+    let mut seen_data_dir = false;
+
+    while let Some(arg) = args.next() {
+        match arg.as_str() {
+            "--help" | "-h" => return Ok(None),
+            "--format" => {
+                parse_output_format_arg(&mut args, &mut format)?;
+            }
+            "--lang" => {
+                parse_discovery_lang_arg(&mut args, &mut target, &mut seen_lang)?;
+            }
+            "--source" => {
+                if seen_source {
+                    return Err(CliError::usage(
+                        "--source cannot be provided multiple times".to_string(),
+                    ));
+                }
+                seen_source = true;
+                source_id = Some(next_arg_value(&mut args, "--source")?);
+            }
+            "--output" => {
+                if seen_output {
+                    return Err(CliError::usage(
+                        "--output cannot be provided multiple times".to_string(),
+                    ));
+                }
+                seen_output = true;
+                output_path = Some(next_arg_value(&mut args, "--output")?);
+            }
+            "--data-dir" => {
+                if seen_data_dir {
+                    return Err(CliError::usage(
+                        "--data-dir cannot be provided multiple times".to_string(),
+                    ));
+                }
+                seen_data_dir = true;
+                data_dir = Some(next_arg_value(&mut args, "--data-dir")?);
+            }
+            _ => {
+                return Err(CliError::usage(format!(
+                    "unknown data export-manifest argument: {arg}"
+                )));
+            }
+        }
+    }
+
+    Ok(Some(Command::Data(DataCommand::ExportManifest(
+        DataExportManifestOptions {
+            format,
+            target,
+            source_id,
+            output_path,
+            data_dir,
+        },
+    ))))
 }
 
 fn parse_data_install_command(
@@ -1188,6 +1257,10 @@ pub(crate) fn write_usage(mut writer: impl Write) -> std::io::Result<()> {
     )?;
     writeln!(
         writer,
+        "       lsteg data export-manifest [--lang fa|en] [--source <id>] [--output <file>] [--data-dir <path>] [--format text|json]"
+    )?;
+    writeln!(
+        writer,
         "       lsteg data install --lang <fa|en|fa,en> [--source <id>] [--artifact-url <url>] [--data-dir <path>] [--format text|json]"
     )?;
     writeln!(
@@ -1581,6 +1654,39 @@ mod tests {
             Some("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
         );
         assert_eq!(options.data_dir.as_deref(), Some("/tmp/lsteg-pin"));
+        assert!(matches!(options.format, OutputFormat::Json));
+    }
+
+    #[test]
+    fn parse_data_export_manifest_command_sets_output_and_source() {
+        let command = parse_command(vec![
+            "data".to_string(),
+            "export-manifest".to_string(),
+            "--lang".to_string(),
+            "fa".to_string(),
+            "--source".to_string(),
+            "fa-wordlist-mit".to_string(),
+            "--output".to_string(),
+            "/tmp/lsteg-export.json".to_string(),
+            "--data-dir".to_string(),
+            "/tmp/lsteg-data".to_string(),
+            "--format".to_string(),
+            "json".to_string(),
+        ])
+        .expect("parse should succeed")
+        .expect("command should exist");
+
+        let Command::Data(DataCommand::ExportManifest(options)) = command else {
+            panic!("expected data export-manifest command");
+        };
+
+        assert_eq!(options.target, Some(ProtoTarget::Farsi));
+        assert_eq!(options.source_id.as_deref(), Some("fa-wordlist-mit"));
+        assert_eq!(
+            options.output_path.as_deref(),
+            Some("/tmp/lsteg-export.json")
+        );
+        assert_eq!(options.data_dir.as_deref(), Some("/tmp/lsteg-data"));
         assert!(matches!(options.format, OutputFormat::Json));
     }
 

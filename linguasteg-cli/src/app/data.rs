@@ -7,8 +7,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use serde::{Deserialize, Serialize};
 
 use super::types::{
-    CliError, DataCommand, DataInstallOptions, DataListOptions, DataPinOptions, DataStatusOptions,
-    DataVerifyOptions, OutputFormat, ProtoTarget,
+    CliError, DataCommand, DataExportManifestOptions, DataInstallOptions, DataListOptions,
+    DataPinOptions, DataStatusOptions, DataVerifyOptions, OutputFormat, ProtoTarget,
 };
 
 const DATA_STATE_FILE: &str = "state.json";
@@ -164,6 +164,37 @@ struct DataPinResponse {
     items: Vec<DataPinItem>,
 }
 
+#[derive(Debug, Clone, Serialize)]
+struct DataExportEntry {
+    language: String,
+    source_id: String,
+    version: String,
+    installed_at_epoch_sec: u64,
+    source_url: Option<String>,
+    license: Option<String>,
+    checksum_sha256: Option<String>,
+    manifest_path: String,
+    manifest_exists: bool,
+    artifact_path: Option<String>,
+    artifact_sha256: Option<String>,
+    manifest_error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct DataExportSnapshot {
+    schema_version: u8,
+    generated_at_epoch_sec: u64,
+    data_dir: String,
+    entries: Vec<DataExportEntry>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct DataExportResponse {
+    mode: &'static str,
+    output_path: String,
+    entry_count: usize,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct InstalledSourceManifest {
     schema_version: u8,
@@ -186,6 +217,7 @@ pub(crate) fn run_data_command(command: DataCommand) -> Result<(), CliError> {
         DataCommand::Status(options) => run_data_status(options),
         DataCommand::Verify(options) => run_data_verify(options),
         DataCommand::Pin(options) => run_data_pin(options),
+        DataCommand::ExportManifest(options) => run_data_export_manifest(options),
         DataCommand::Install(options) => run_data_install(options, false),
         DataCommand::Update(options) => run_data_install(options, true),
     }
@@ -632,6 +664,98 @@ fn run_data_pin(options: DataPinOptions) -> Result<(), CliError> {
     }
 }
 
+fn run_data_export_manifest(options: DataExportManifestOptions) -> Result<(), CliError> {
+    let sources = load_data_sources()?;
+    let data_dir = resolve_data_dir(options.data_dir.as_deref());
+    let state = load_data_state(&data_dir)?;
+
+    if let Some(source_id) = options.source_id.as_deref() {
+        let has_source = state.installs.iter().any(|record| {
+            record.source_id == source_id
+                && options
+                    .target
+                    .is_none_or(|target| record.language == target.as_str())
+        });
+        if !has_source {
+            return Err(CliError::config(format!(
+                "installed source '{}' was not found in data state",
+                source_id
+            )));
+        }
+    }
+
+    let mut entries = state
+        .installs
+        .iter()
+        .filter(|record| {
+            options
+                .target
+                .is_none_or(|target| record.language == target.as_str())
+                && options
+                    .source_id
+                    .as_deref()
+                    .is_none_or(|source_id| source_id == record.source_id)
+        })
+        .map(|record| {
+            let source = sources.iter().find(|item| {
+                item.id == record.source_id && item.language.as_str() == record.language
+            });
+            build_export_entry(&data_dir, record, source)
+        })
+        .collect::<Vec<_>>();
+    entries.sort_by(|left, right| {
+        left.language
+            .cmp(&right.language)
+            .then(left.source_id.cmp(&right.source_id))
+    });
+    if entries.is_empty() {
+        return Err(CliError::config(
+            "no installed sources matched the selected filters".to_string(),
+        ));
+    }
+
+    let snapshot = DataExportSnapshot {
+        schema_version: 1,
+        generated_at_epoch_sec: unix_epoch_seconds()?,
+        data_dir: data_dir.to_string_lossy().to_string(),
+        entries,
+    };
+    let raw = serde_json::to_string_pretty(&snapshot).map_err(|error| {
+        CliError::internal(format!("failed to encode export manifest: {error}"))
+    })?;
+
+    if let Some(output_path) = options.output_path.as_deref() {
+        fs::write(output_path, &raw).map_err(|error| {
+            CliError::io(
+                "failed to write export manifest file",
+                Some(output_path),
+                error,
+            )
+        })?;
+        if matches!(options.format, OutputFormat::Json) {
+            let response = DataExportResponse {
+                mode: "data-export-manifest",
+                output_path: output_path.to_string(),
+                entry_count: snapshot.entries.len(),
+            };
+            let payload = serde_json::to_string(&response).map_err(|error| {
+                CliError::internal(format!(
+                    "failed to encode export-manifest response json: {error}"
+                ))
+            })?;
+            println!("{payload}");
+            return Ok(());
+        }
+        println!("data export-manifest:");
+        println!("output: {}", output_path);
+        println!("entries: {}", snapshot.entries.len());
+        return Ok(());
+    }
+
+    println!("{raw}");
+    Ok(())
+}
+
 fn load_data_sources() -> Result<Vec<DataSource>, CliError> {
     let raw: DataSourceCatalogRaw =
         serde_json::from_str(DATA_SOURCES_MANIFEST).map_err(|error| {
@@ -795,6 +919,88 @@ fn build_status_item(
         status,
         artifact_path: manifest.artifact_path,
         artifact_exists,
+        artifact_sha256: manifest.artifact_sha256,
+        manifest_error: None,
+    }
+}
+
+fn build_export_entry(
+    data_dir: &Path,
+    record: &InstallRecord,
+    source: Option<&DataSource>,
+) -> DataExportEntry {
+    let manifest_path = data_dir
+        .join(&record.language)
+        .join(&record.source_id)
+        .join("manifest.json");
+    if !manifest_path.exists() {
+        return DataExportEntry {
+            language: record.language.clone(),
+            source_id: record.source_id.clone(),
+            version: record.version.clone(),
+            installed_at_epoch_sec: record.installed_at_epoch_sec,
+            source_url: source.map(|item| item.source_url.clone()),
+            license: source.map(|item| item.license.clone()),
+            checksum_sha256: source.and_then(|item| item.checksum_sha256.clone()),
+            manifest_path: manifest_path.to_string_lossy().to_string(),
+            manifest_exists: false,
+            artifact_path: None,
+            artifact_sha256: None,
+            manifest_error: None,
+        };
+    }
+
+    let raw = match fs::read_to_string(&manifest_path) {
+        Ok(value) => value,
+        Err(error) => {
+            return DataExportEntry {
+                language: record.language.clone(),
+                source_id: record.source_id.clone(),
+                version: record.version.clone(),
+                installed_at_epoch_sec: record.installed_at_epoch_sec,
+                source_url: source.map(|item| item.source_url.clone()),
+                license: source.map(|item| item.license.clone()),
+                checksum_sha256: source.and_then(|item| item.checksum_sha256.clone()),
+                manifest_path: manifest_path.to_string_lossy().to_string(),
+                manifest_exists: true,
+                artifact_path: None,
+                artifact_sha256: None,
+                manifest_error: Some(error.to_string()),
+            };
+        }
+    };
+
+    let manifest: InstalledSourceManifest = match serde_json::from_str(&raw) {
+        Ok(value) => value,
+        Err(error) => {
+            return DataExportEntry {
+                language: record.language.clone(),
+                source_id: record.source_id.clone(),
+                version: record.version.clone(),
+                installed_at_epoch_sec: record.installed_at_epoch_sec,
+                source_url: source.map(|item| item.source_url.clone()),
+                license: source.map(|item| item.license.clone()),
+                checksum_sha256: source.and_then(|item| item.checksum_sha256.clone()),
+                manifest_path: manifest_path.to_string_lossy().to_string(),
+                manifest_exists: true,
+                artifact_path: None,
+                artifact_sha256: None,
+                manifest_error: Some(error.to_string()),
+            };
+        }
+    };
+
+    DataExportEntry {
+        language: record.language.clone(),
+        source_id: record.source_id.clone(),
+        version: record.version.clone(),
+        installed_at_epoch_sec: record.installed_at_epoch_sec,
+        source_url: Some(manifest.source_url),
+        license: Some(manifest.license),
+        checksum_sha256: manifest.checksum_sha256,
+        manifest_path: manifest_path.to_string_lossy().to_string(),
+        manifest_exists: true,
+        artifact_path: manifest.artifact_path,
         artifact_sha256: manifest.artifact_sha256,
         manifest_error: None,
     }

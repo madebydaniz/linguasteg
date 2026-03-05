@@ -23,6 +23,7 @@ pub(crate) enum DataCommand {
     Status(DataStatusOptions),
     Verify(DataVerifyOptions),
     Pin(DataPinOptions),
+    ExportManifest(DataExportManifestOptions),
     Install(DataInstallOptions),
     Update(DataInstallOptions),
 }
@@ -51,6 +52,14 @@ pub(crate) struct DataPinOptions {
     pub(crate) target: Option<ProtoTarget>,
     pub(crate) source_id: Option<String>,
     pub(crate) checksum_sha256: Option<String>,
+    pub(crate) data_dir: Option<String>,
+}
+
+pub(crate) struct DataExportManifestOptions {
+    pub(crate) format: OutputFormat,
+    pub(crate) target: Option<ProtoTarget>,
+    pub(crate) source_id: Option<String>,
+    pub(crate) output_path: Option<String>,
     pub(crate) data_dir: Option<String>,
 }
 
