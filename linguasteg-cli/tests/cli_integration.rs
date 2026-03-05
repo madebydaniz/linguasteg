@@ -948,6 +948,148 @@ fn data_verify_skips_when_no_artifact_is_present() {
 }
 
 #[test]
+fn data_pin_sets_manifest_checksum_from_artifact() {
+    let data_dir = TempDataDir::create();
+    let artifact = TempArtifactFile::create(b"linguasteg-dataset");
+    let artifact_url = artifact.as_file_url();
+    let install_output = run_lsteg_with_env(
+        &[
+            "data",
+            "install",
+            "--lang",
+            "en",
+            "--source",
+            "en-wordlist-wordnik",
+            "--artifact-url",
+            &artifact_url,
+            "--format",
+            "json",
+            "--data-dir",
+            data_dir.as_str(),
+        ],
+        &[],
+    );
+    assert!(install_output.status.success());
+
+    let pin_output = run_lsteg_with_env(
+        &[
+            "data",
+            "pin",
+            "--lang",
+            "en",
+            "--source",
+            "en-wordlist-wordnik",
+            "--format",
+            "json",
+            "--data-dir",
+            data_dir.as_str(),
+        ],
+        &[],
+    );
+    assert!(pin_output.status.success());
+    let stdout = stdout_string(&pin_output);
+    assert!(stdout.contains("\"mode\":\"data-pin\""));
+    assert!(stdout.contains("\"updated\":1"));
+    assert!(stdout.contains("\"status\":\"pinned\""));
+
+    let manifest_path = std::path::Path::new(data_dir.as_str())
+        .join("en")
+        .join("en-wordlist-wordnik")
+        .join("manifest.json");
+    let manifest = std::fs::read_to_string(manifest_path).expect("manifest should be readable");
+    assert!(manifest.contains("\"artifact_sha256\": \""));
+    assert!(!manifest.contains("\"artifact_sha256\": null"));
+}
+
+#[test]
+fn data_pin_accepts_explicit_checksum() {
+    let data_dir = TempDataDir::create();
+    let artifact = TempArtifactFile::create(b"linguasteg-dataset");
+    let artifact_url = artifact.as_file_url();
+    let install_output = run_lsteg_with_env(
+        &[
+            "data",
+            "install",
+            "--lang",
+            "en",
+            "--source",
+            "en-wordlist-wordnik",
+            "--artifact-url",
+            &artifact_url,
+            "--format",
+            "json",
+            "--data-dir",
+            data_dir.as_str(),
+        ],
+        &[],
+    );
+    assert!(install_output.status.success());
+
+    let checksum = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+    let pin_output = run_lsteg_with_env(
+        &[
+            "data",
+            "pin",
+            "--lang",
+            "en",
+            "--source",
+            "en-wordlist-wordnik",
+            "--checksum",
+            checksum,
+            "--format",
+            "json",
+            "--data-dir",
+            data_dir.as_str(),
+        ],
+        &[],
+    );
+    assert!(pin_output.status.success());
+    let stdout = stdout_string(&pin_output);
+    assert!(stdout.contains("\"status\":\"pinned\""));
+    assert!(stdout.contains(checksum));
+}
+
+#[test]
+fn data_pin_rejects_checksum_for_multiple_selected_sources() {
+    let data_dir = TempDataDir::create();
+    let install_output = run_lsteg_with_env(
+        &[
+            "data",
+            "install",
+            "--lang",
+            "en,fa",
+            "--format",
+            "json",
+            "--data-dir",
+            data_dir.as_str(),
+        ],
+        &[],
+    );
+    assert!(install_output.status.success());
+
+    let pin_output = run_lsteg_with_env(
+        &[
+            "data",
+            "pin",
+            "--checksum",
+            "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "--format",
+            "json",
+            "--data-dir",
+            data_dir.as_str(),
+        ],
+        &[],
+    );
+    assert_eq!(pin_output.status.code(), Some(2));
+    let stderr = stderr_string(&pin_output);
+    assert!(stderr.contains("LSTEG-CLI-ARG-001"));
+    assert!(
+        stderr
+            .contains("--checksum can be used only when exactly one installed source is selected")
+    );
+}
+
+#[test]
 fn validate_json_reports_integrity_ok() {
     let encode_output = run_lsteg(&["encode", "--message", "salam", "--emit-trace"]);
     assert!(encode_output.status.success());

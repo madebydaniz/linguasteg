@@ -2,9 +2,9 @@ use std::io::Write;
 
 use super::types::{
     AnalyzeOptions, CatalogQueryOptions, CliError, Command, DataCommand, DataInstallOptions,
-    DataListOptions, DataStatusOptions, DataVerifyOptions, DecodeInputMode, DecodeOptions,
-    DemoTarget, EncodeOptions, OutputFormat, ProfileQueryOptions, ProtoTarget, SchemaQueryOptions,
-    TemplateQueryOptions, ValidateOptions,
+    DataListOptions, DataPinOptions, DataStatusOptions, DataVerifyOptions, DecodeInputMode,
+    DecodeOptions, DemoTarget, EncodeOptions, OutputFormat, ProfileQueryOptions, ProtoTarget,
+    SchemaQueryOptions, TemplateQueryOptions, ValidateOptions,
 };
 
 pub(crate) fn parse_command(args: Vec<String>) -> Result<Option<Command>, CliError> {
@@ -409,7 +409,7 @@ fn parse_schemas_command(args: impl Iterator<Item = String>) -> Result<Option<Co
 fn parse_data_command(mut args: impl Iterator<Item = String>) -> Result<Option<Command>, CliError> {
     let Some(subcommand) = args.next() else {
         return Err(CliError::usage(
-            "data subcommand is required (supported: list, status, verify, install, update)"
+            "data subcommand is required (supported: list, status, verify, pin, install, update)"
                 .to_string(),
         ));
     };
@@ -421,10 +421,11 @@ fn parse_data_command(mut args: impl Iterator<Item = String>) -> Result<Option<C
         "list" => parse_data_list_command(args),
         "status" => parse_data_status_command(args),
         "verify" => parse_data_verify_command(args),
+        "pin" => parse_data_pin_command(args),
         "install" => parse_data_install_command(args, false),
         "update" => parse_data_install_command(args, true),
         _ => Err(CliError::usage(format!(
-            "unknown data subcommand: {subcommand} (supported: list, status, verify, install, update)"
+            "unknown data subcommand: {subcommand} (supported: list, status, verify, pin, install, update)"
         ))),
     }
 }
@@ -569,6 +570,70 @@ fn parse_data_verify_command(
             data_dir,
         },
     ))))
+}
+
+fn parse_data_pin_command(
+    mut args: impl Iterator<Item = String>,
+) -> Result<Option<Command>, CliError> {
+    let mut format = env_output_format("LSTEG_FORMAT")?.unwrap_or(OutputFormat::Text);
+    let mut target = None;
+    let mut source_id = None;
+    let mut checksum_sha256 = None;
+    let mut seen_lang = false;
+    let mut seen_source = false;
+    let mut seen_checksum = false;
+    let mut data_dir = env_optional("LSTEG_DATA_DIR");
+    let mut seen_data_dir = false;
+
+    while let Some(arg) = args.next() {
+        match arg.as_str() {
+            "--help" | "-h" => return Ok(None),
+            "--format" => {
+                parse_output_format_arg(&mut args, &mut format)?;
+            }
+            "--lang" => {
+                parse_discovery_lang_arg(&mut args, &mut target, &mut seen_lang)?;
+            }
+            "--source" => {
+                if seen_source {
+                    return Err(CliError::usage(
+                        "--source cannot be provided multiple times".to_string(),
+                    ));
+                }
+                seen_source = true;
+                source_id = Some(next_arg_value(&mut args, "--source")?);
+            }
+            "--checksum" => {
+                if seen_checksum {
+                    return Err(CliError::usage(
+                        "--checksum cannot be provided multiple times".to_string(),
+                    ));
+                }
+                seen_checksum = true;
+                checksum_sha256 = Some(next_arg_value(&mut args, "--checksum")?);
+            }
+            "--data-dir" => {
+                if seen_data_dir {
+                    return Err(CliError::usage(
+                        "--data-dir cannot be provided multiple times".to_string(),
+                    ));
+                }
+                seen_data_dir = true;
+                data_dir = Some(next_arg_value(&mut args, "--data-dir")?);
+            }
+            _ => {
+                return Err(CliError::usage(format!("unknown data pin argument: {arg}")));
+            }
+        }
+    }
+
+    Ok(Some(Command::Data(DataCommand::Pin(DataPinOptions {
+        format,
+        target,
+        source_id,
+        checksum_sha256,
+        data_dir,
+    }))))
 }
 
 fn parse_data_install_command(
@@ -1119,6 +1184,10 @@ pub(crate) fn write_usage(mut writer: impl Write) -> std::io::Result<()> {
     )?;
     writeln!(
         writer,
+        "       lsteg data pin [--lang fa|en] [--source <id>] [--checksum <sha256>] [--data-dir <path>] [--format text|json]"
+    )?;
+    writeln!(
+        writer,
         "       lsteg data install --lang <fa|en|fa,en> [--source <id>] [--artifact-url <url>] [--data-dir <path>] [--format text|json]"
     )?;
     writeln!(
@@ -1479,6 +1548,39 @@ mod tests {
         assert_eq!(options.target, Some(ProtoTarget::English));
         assert_eq!(options.source_id.as_deref(), Some("en-wordlist-wordnik"));
         assert_eq!(options.data_dir.as_deref(), Some("/tmp/lsteg-verify"));
+        assert!(matches!(options.format, OutputFormat::Json));
+    }
+
+    #[test]
+    fn parse_data_pin_command_sets_checksum_and_source() {
+        let command = parse_command(vec![
+            "data".to_string(),
+            "pin".to_string(),
+            "--lang".to_string(),
+            "en".to_string(),
+            "--source".to_string(),
+            "en-wordlist-wordnik".to_string(),
+            "--checksum".to_string(),
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string(),
+            "--data-dir".to_string(),
+            "/tmp/lsteg-pin".to_string(),
+            "--format".to_string(),
+            "json".to_string(),
+        ])
+        .expect("parse should succeed")
+        .expect("command should exist");
+
+        let Command::Data(DataCommand::Pin(options)) = command else {
+            panic!("expected data pin command");
+        };
+
+        assert_eq!(options.target, Some(ProtoTarget::English));
+        assert_eq!(options.source_id.as_deref(), Some("en-wordlist-wordnik"));
+        assert_eq!(
+            options.checksum_sha256.as_deref(),
+            Some("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+        );
+        assert_eq!(options.data_dir.as_deref(), Some("/tmp/lsteg-pin"));
         assert!(matches!(options.format, OutputFormat::Json));
     }
 

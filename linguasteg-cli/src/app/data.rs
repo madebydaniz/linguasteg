@@ -7,7 +7,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use serde::{Deserialize, Serialize};
 
 use super::types::{
-    CliError, DataCommand, DataInstallOptions, DataListOptions, DataStatusOptions,
+    CliError, DataCommand, DataInstallOptions, DataListOptions, DataPinOptions, DataStatusOptions,
     DataVerifyOptions, OutputFormat, ProtoTarget,
 };
 
@@ -144,6 +144,26 @@ struct DataVerifyResponse {
     items: Vec<DataVerifyItem>,
 }
 
+#[derive(Debug, Clone, Serialize)]
+struct DataPinItem {
+    language: String,
+    source_id: String,
+    status: &'static str,
+    manifest_path: String,
+    artifact_path: Option<String>,
+    pinned_sha256: Option<String>,
+    reason: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct DataPinResponse {
+    mode: &'static str,
+    data_dir: String,
+    updated: usize,
+    failed: usize,
+    items: Vec<DataPinItem>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct InstalledSourceManifest {
     schema_version: u8,
@@ -165,6 +185,7 @@ pub(crate) fn run_data_command(command: DataCommand) -> Result<(), CliError> {
         DataCommand::List(options) => run_data_list(options),
         DataCommand::Status(options) => run_data_status(options),
         DataCommand::Verify(options) => run_data_verify(options),
+        DataCommand::Pin(options) => run_data_pin(options),
         DataCommand::Install(options) => run_data_install(options, false),
         DataCommand::Update(options) => run_data_install(options, true),
     }
@@ -501,6 +522,112 @@ fn run_data_verify(options: DataVerifyOptions) -> Result<(), CliError> {
     } else {
         Err(CliError::domain(format!(
             "data verification failed for {failed} source(s)"
+        )))
+    }
+}
+
+fn run_data_pin(options: DataPinOptions) -> Result<(), CliError> {
+    let data_dir = resolve_data_dir(options.data_dir.as_deref());
+    let state = load_data_state(&data_dir)?;
+
+    if let Some(source_id) = options.source_id.as_deref() {
+        let has_source = state.installs.iter().any(|record| {
+            record.source_id == source_id
+                && options
+                    .target
+                    .is_none_or(|target| record.language == target.as_str())
+        });
+        if !has_source {
+            return Err(CliError::config(format!(
+                "installed source '{}' was not found in data state",
+                source_id
+            )));
+        }
+    }
+
+    let selected = state
+        .installs
+        .iter()
+        .filter(|record| {
+            options
+                .target
+                .is_none_or(|target| record.language == target.as_str())
+                && options
+                    .source_id
+                    .as_deref()
+                    .is_none_or(|source_id| source_id == record.source_id)
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+    if selected.is_empty() {
+        return Err(CliError::config(
+            "no installed sources matched the selected filters".to_string(),
+        ));
+    }
+
+    let explicit_checksum = options
+        .checksum_sha256
+        .as_deref()
+        .map(normalize_sha256)
+        .transpose()?;
+    if explicit_checksum.is_some() && selected.len() != 1 {
+        return Err(CliError::usage(
+            "--checksum can be used only when exactly one installed source is selected".to_string(),
+        ));
+    }
+
+    let mut items = selected
+        .iter()
+        .map(|record| build_pin_item(&data_dir, record, explicit_checksum.as_deref()))
+        .collect::<Vec<_>>();
+    items.sort_by(|left, right| {
+        left.language
+            .cmp(&right.language)
+            .then(left.source_id.cmp(&right.source_id))
+    });
+
+    let updated = items.iter().filter(|item| item.status == "pinned").count();
+    let failed = items.len().saturating_sub(updated);
+
+    if matches!(options.format, OutputFormat::Json) {
+        let payload = DataPinResponse {
+            mode: "data-pin",
+            data_dir: data_dir.to_string_lossy().to_string(),
+            updated,
+            failed,
+            items,
+        };
+        let output = serde_json::to_string(&payload).map_err(|error| {
+            CliError::internal(format!("failed to serialize data pin: {error}"))
+        })?;
+        println!("{output}");
+    } else {
+        println!("data pin:");
+        println!("data dir: {}", data_dir.to_string_lossy());
+        println!("summary: updated:{} failed:{}", updated, failed);
+        for item in &items {
+            let artifact_path = item.artifact_path.as_ref().map_or("-", String::as_str);
+            let pinned_sha256 = item.pinned_sha256.as_deref().unwrap_or("-");
+            println!(
+                "- {}/{} status:{} manifest:{} artifact:{} pinned_sha256:{}",
+                item.language,
+                item.source_id,
+                item.status,
+                item.manifest_path,
+                artifact_path,
+                pinned_sha256
+            );
+            if let Some(reason) = &item.reason {
+                println!("  reason: {reason}");
+            }
+        }
+    }
+
+    if failed == 0 {
+        Ok(())
+    } else {
+        Err(CliError::domain(format!(
+            "data pin failed for {failed} source(s)"
         )))
     }
 }
@@ -842,6 +969,153 @@ fn build_verify_item(
         actual_sha256: Some(actual_sha256),
         reason: None,
     }
+}
+
+fn build_pin_item(
+    data_dir: &Path,
+    record: &InstallRecord,
+    explicit_checksum: Option<&str>,
+) -> DataPinItem {
+    let source_dir = data_dir.join(&record.language).join(&record.source_id);
+    let manifest_path = source_dir.join("manifest.json");
+    if !manifest_path.exists() {
+        return DataPinItem {
+            language: record.language.clone(),
+            source_id: record.source_id.clone(),
+            status: "missing-manifest",
+            manifest_path: manifest_path.to_string_lossy().to_string(),
+            artifact_path: None,
+            pinned_sha256: None,
+            reason: None,
+        };
+    }
+
+    let raw = match fs::read_to_string(&manifest_path) {
+        Ok(value) => value,
+        Err(error) => {
+            return DataPinItem {
+                language: record.language.clone(),
+                source_id: record.source_id.clone(),
+                status: "invalid-manifest",
+                manifest_path: manifest_path.to_string_lossy().to_string(),
+                artifact_path: None,
+                pinned_sha256: None,
+                reason: Some(error.to_string()),
+            };
+        }
+    };
+
+    let mut manifest: InstalledSourceManifest = match serde_json::from_str(&raw) {
+        Ok(value) => value,
+        Err(error) => {
+            return DataPinItem {
+                language: record.language.clone(),
+                source_id: record.source_id.clone(),
+                status: "invalid-manifest",
+                manifest_path: manifest_path.to_string_lossy().to_string(),
+                artifact_path: None,
+                pinned_sha256: None,
+                reason: Some(error.to_string()),
+            };
+        }
+    };
+
+    let checksum = match explicit_checksum {
+        Some(value) => value.to_string(),
+        None => {
+            let Some(artifact_raw_path) = manifest.artifact_path.as_deref() else {
+                return DataPinItem {
+                    language: record.language.clone(),
+                    source_id: record.source_id.clone(),
+                    status: "missing-artifact",
+                    manifest_path: manifest_path.to_string_lossy().to_string(),
+                    artifact_path: None,
+                    pinned_sha256: None,
+                    reason: Some(
+                        "artifact_path is not set in manifest; use --checksum for explicit pin"
+                            .to_string(),
+                    ),
+                };
+            };
+            let artifact_path = if Path::new(artifact_raw_path).is_absolute() {
+                PathBuf::from(artifact_raw_path)
+            } else {
+                source_dir.join(artifact_raw_path)
+            };
+            if !artifact_path.exists() {
+                return DataPinItem {
+                    language: record.language.clone(),
+                    source_id: record.source_id.clone(),
+                    status: "missing-artifact",
+                    manifest_path: manifest_path.to_string_lossy().to_string(),
+                    artifact_path: Some(artifact_path.to_string_lossy().to_string()),
+                    pinned_sha256: None,
+                    reason: None,
+                };
+            }
+            match sha256_file_limited(&artifact_path) {
+                Ok(value) => value,
+                Err(reason) => {
+                    return DataPinItem {
+                        language: record.language.clone(),
+                        source_id: record.source_id.clone(),
+                        status: "artifact-read-error",
+                        manifest_path: manifest_path.to_string_lossy().to_string(),
+                        artifact_path: Some(artifact_path.to_string_lossy().to_string()),
+                        pinned_sha256: None,
+                        reason: Some(reason),
+                    };
+                }
+            }
+        }
+    };
+
+    manifest.artifact_sha256 = Some(checksum.clone());
+    let raw = match serde_json::to_string_pretty(&manifest) {
+        Ok(value) => value,
+        Err(error) => {
+            return DataPinItem {
+                language: record.language.clone(),
+                source_id: record.source_id.clone(),
+                status: "write-error",
+                manifest_path: manifest_path.to_string_lossy().to_string(),
+                artifact_path: manifest.artifact_path.clone(),
+                pinned_sha256: Some(checksum),
+                reason: Some(error.to_string()),
+            };
+        }
+    };
+    if let Err(error) = fs::write(&manifest_path, raw) {
+        return DataPinItem {
+            language: record.language.clone(),
+            source_id: record.source_id.clone(),
+            status: "write-error",
+            manifest_path: manifest_path.to_string_lossy().to_string(),
+            artifact_path: manifest.artifact_path.clone(),
+            pinned_sha256: Some(checksum),
+            reason: Some(error.to_string()),
+        };
+    }
+
+    DataPinItem {
+        language: record.language.clone(),
+        source_id: record.source_id.clone(),
+        status: "pinned",
+        manifest_path: manifest_path.to_string_lossy().to_string(),
+        artifact_path: manifest.artifact_path,
+        pinned_sha256: Some(checksum),
+        reason: None,
+    }
+}
+
+fn normalize_sha256(value: &str) -> Result<String, CliError> {
+    let normalized = value.trim().to_ascii_lowercase();
+    if normalized.len() != 64 || !normalized.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        return Err(CliError::usage(
+            "--checksum must be a 64-character sha256 hex string".to_string(),
+        ));
+    }
+    Ok(normalized)
 }
 
 fn sha256_file_limited(path: &Path) -> Result<String, String> {
