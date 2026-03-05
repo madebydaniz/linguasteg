@@ -1346,6 +1346,182 @@ fn data_import_manifest_respects_filters() {
 }
 
 #[test]
+fn data_doctor_reports_missing_manifest_issue() {
+    let data_dir = TempDataDir::create();
+    let install_output = run_lsteg_with_env(
+        &[
+            "data",
+            "install",
+            "--lang",
+            "en",
+            "--source",
+            "en-wordlist-wordnik",
+            "--format",
+            "json",
+            "--data-dir",
+            data_dir.as_str(),
+        ],
+        &[],
+    );
+    assert!(install_output.status.success());
+
+    let manifest_path = std::path::Path::new(data_dir.as_str())
+        .join("en")
+        .join("en-wordlist-wordnik")
+        .join("manifest.json");
+    std::fs::remove_file(&manifest_path).expect("manifest should be removable");
+
+    let doctor_output = run_lsteg_with_env(
+        &[
+            "data",
+            "doctor",
+            "--lang",
+            "en",
+            "--source",
+            "en-wordlist-wordnik",
+            "--format",
+            "json",
+            "--data-dir",
+            data_dir.as_str(),
+        ],
+        &[],
+    );
+    assert_eq!(doctor_output.status.code(), Some(1));
+    let stdout = stdout_string(&doctor_output);
+    assert!(stdout.contains("\"mode\":\"data-doctor\""));
+    assert!(stdout.contains("\"issue\":\"missing-manifest-for-state\""));
+    assert!(stdout.contains("\"status\":\"unresolved\""));
+}
+
+#[test]
+fn data_doctor_fix_removes_state_record_for_missing_manifest() {
+    let data_dir = TempDataDir::create();
+    let install_output = run_lsteg_with_env(
+        &[
+            "data",
+            "install",
+            "--lang",
+            "en",
+            "--source",
+            "en-wordlist-wordnik",
+            "--format",
+            "json",
+            "--data-dir",
+            data_dir.as_str(),
+        ],
+        &[],
+    );
+    assert!(install_output.status.success());
+
+    let manifest_path = std::path::Path::new(data_dir.as_str())
+        .join("en")
+        .join("en-wordlist-wordnik")
+        .join("manifest.json");
+    std::fs::remove_file(&manifest_path).expect("manifest should be removable");
+
+    let doctor_output = run_lsteg_with_env(
+        &[
+            "data",
+            "doctor",
+            "--lang",
+            "en",
+            "--source",
+            "en-wordlist-wordnik",
+            "--fix",
+            "--format",
+            "json",
+            "--data-dir",
+            data_dir.as_str(),
+        ],
+        &[],
+    );
+    assert!(doctor_output.status.success());
+    let stdout = stdout_string(&doctor_output);
+    assert!(stdout.contains("\"status\":\"fixed\""));
+    assert!(stdout.contains("\"unresolved\":0"));
+
+    let status_output = run_lsteg_with_env(
+        &[
+            "data",
+            "status",
+            "--lang",
+            "en",
+            "--format",
+            "json",
+            "--data-dir",
+            data_dir.as_str(),
+        ],
+        &[],
+    );
+    assert!(status_output.status.success());
+    let status_stdout = stdout_string(&status_output);
+    assert!(status_stdout.contains("\"items\":[]"));
+}
+
+#[test]
+fn data_doctor_fix_imports_orphan_manifest_into_state() {
+    let data_dir = TempDataDir::create();
+    let install_output = run_lsteg_with_env(
+        &[
+            "data",
+            "install",
+            "--lang",
+            "en",
+            "--source",
+            "en-wordlist-wordnik",
+            "--format",
+            "json",
+            "--data-dir",
+            data_dir.as_str(),
+        ],
+        &[],
+    );
+    assert!(install_output.status.success());
+
+    let state_path = std::path::Path::new(data_dir.as_str()).join("state.json");
+    std::fs::write(&state_path, "{\"schema_version\":1,\"installs\":[]}")
+        .expect("state file should be writable");
+
+    let doctor_output = run_lsteg_with_env(
+        &[
+            "data",
+            "doctor",
+            "--lang",
+            "en",
+            "--source",
+            "en-wordlist-wordnik",
+            "--fix",
+            "--format",
+            "json",
+            "--data-dir",
+            data_dir.as_str(),
+        ],
+        &[],
+    );
+    assert!(doctor_output.status.success());
+    let stdout = stdout_string(&doctor_output);
+    assert!(stdout.contains("\"issue\":\"orphan-manifest\""));
+    assert!(stdout.contains("\"status\":\"fixed\""));
+
+    let status_output = run_lsteg_with_env(
+        &[
+            "data",
+            "status",
+            "--lang",
+            "en",
+            "--format",
+            "json",
+            "--data-dir",
+            data_dir.as_str(),
+        ],
+        &[],
+    );
+    assert!(status_output.status.success());
+    let status_stdout = stdout_string(&status_output);
+    assert!(status_stdout.contains("\"source_id\":\"en-wordlist-wordnik\""));
+}
+
+#[test]
 fn validate_json_reports_integrity_ok() {
     let encode_output = run_lsteg(&["encode", "--message", "salam", "--emit-trace"]);
     assert!(encode_output.status.success());

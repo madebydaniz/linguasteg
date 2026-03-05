@@ -22,6 +22,7 @@ pub(crate) enum DataCommand {
     List(DataListOptions),
     Status(DataStatusOptions),
     Verify(DataVerifyOptions),
+    Doctor(DataDoctorOptions),
     Pin(DataPinOptions),
     ExportManifest(DataExportManifestOptions),
     ImportManifest(DataImportManifestOptions),
@@ -45,6 +46,14 @@ pub(crate) struct DataVerifyOptions {
     pub(crate) format: OutputFormat,
     pub(crate) target: Option<ProtoTarget>,
     pub(crate) source_id: Option<String>,
+    pub(crate) data_dir: Option<String>,
+}
+
+pub(crate) struct DataDoctorOptions {
+    pub(crate) format: OutputFormat,
+    pub(crate) target: Option<ProtoTarget>,
+    pub(crate) source_id: Option<String>,
+    pub(crate) fix: bool,
     pub(crate) data_dir: Option<String>,
 }
 

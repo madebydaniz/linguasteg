@@ -7,7 +7,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use serde::{Deserialize, Serialize};
 
 use super::types::{
-    CliError, DataCommand, DataExportManifestOptions, DataImportManifestOptions,
+    CliError, DataCommand, DataDoctorOptions, DataExportManifestOptions, DataImportManifestOptions,
     DataInstallOptions, DataListOptions, DataPinOptions, DataStatusOptions, DataVerifyOptions,
     OutputFormat, ProtoTarget,
 };
@@ -146,6 +146,27 @@ struct DataVerifyResponse {
 }
 
 #[derive(Debug, Clone, Serialize)]
+struct DataDoctorItem {
+    language: String,
+    source_id: String,
+    issue: &'static str,
+    status: &'static str,
+    path: String,
+    message: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct DataDoctorResponse {
+    mode: &'static str,
+    data_dir: String,
+    fix_applied: bool,
+    detected: usize,
+    fixed: usize,
+    unresolved: usize,
+    items: Vec<DataDoctorItem>,
+}
+
+#[derive(Debug, Clone, Serialize)]
 struct DataPinItem {
     language: String,
     source_id: String,
@@ -234,6 +255,7 @@ pub(crate) fn run_data_command(command: DataCommand) -> Result<(), CliError> {
         DataCommand::List(options) => run_data_list(options),
         DataCommand::Status(options) => run_data_status(options),
         DataCommand::Verify(options) => run_data_verify(options),
+        DataCommand::Doctor(options) => run_data_doctor(options),
         DataCommand::Pin(options) => run_data_pin(options),
         DataCommand::ExportManifest(options) => run_data_export_manifest(options),
         DataCommand::ImportManifest(options) => run_data_import_manifest(options),
@@ -573,6 +595,252 @@ fn run_data_verify(options: DataVerifyOptions) -> Result<(), CliError> {
     } else {
         Err(CliError::domain(format!(
             "data verification failed for {failed} source(s)"
+        )))
+    }
+}
+
+fn run_data_doctor(options: DataDoctorOptions) -> Result<(), CliError> {
+    let data_dir = resolve_data_dir(options.data_dir.as_deref());
+    let mut state = load_data_state(&data_dir)?;
+    let mut items = Vec::new();
+    let mut remove_keys: HashSet<(String, String)> = HashSet::new();
+    let mut upsert_records: HashMap<(String, String), InstallRecord> = HashMap::new();
+
+    for record in &state.installs {
+        if options
+            .target
+            .is_some_and(|target| record.language != target.as_str())
+        {
+            continue;
+        }
+        if options
+            .source_id
+            .as_deref()
+            .is_some_and(|source_id| source_id != record.source_id)
+        {
+            continue;
+        }
+
+        let manifest_path = data_dir
+            .join(&record.language)
+            .join(&record.source_id)
+            .join("manifest.json");
+        if !manifest_path.exists() {
+            let status = if options.fix {
+                remove_keys.insert((record.language.clone(), record.source_id.clone()));
+                "fixed"
+            } else {
+                "unresolved"
+            };
+            items.push(DataDoctorItem {
+                language: record.language.clone(),
+                source_id: record.source_id.clone(),
+                issue: "missing-manifest-for-state",
+                status,
+                path: manifest_path.to_string_lossy().to_string(),
+                message: None,
+            });
+            continue;
+        }
+
+        let manifest = match read_manifest_for_doctor(&manifest_path) {
+            Ok(value) => value,
+            Err(message) => {
+                items.push(DataDoctorItem {
+                    language: record.language.clone(),
+                    source_id: record.source_id.clone(),
+                    issue: "invalid-manifest",
+                    status: "unresolved",
+                    path: manifest_path.to_string_lossy().to_string(),
+                    message: Some(message),
+                });
+                continue;
+            }
+        };
+
+        if manifest.language != record.language || manifest.source_id != record.source_id {
+            items.push(DataDoctorItem {
+                language: record.language.clone(),
+                source_id: record.source_id.clone(),
+                issue: "manifest-record-mismatch",
+                status: "unresolved",
+                path: manifest_path.to_string_lossy().to_string(),
+                message: Some(format!(
+                    "manifest points to {}/{}",
+                    manifest.language, manifest.source_id
+                )),
+            });
+            continue;
+        }
+
+        if manifest.version != record.version
+            || manifest.installed_at_epoch_sec != record.installed_at_epoch_sec
+        {
+            let status = if options.fix {
+                upsert_records.insert(
+                    (record.language.clone(), record.source_id.clone()),
+                    InstallRecord {
+                        language: record.language.clone(),
+                        source_id: record.source_id.clone(),
+                        version: manifest.version.clone(),
+                        installed_at_epoch_sec: manifest.installed_at_epoch_sec,
+                    },
+                );
+                "fixed"
+            } else {
+                "unresolved"
+            };
+            items.push(DataDoctorItem {
+                language: record.language.clone(),
+                source_id: record.source_id.clone(),
+                issue: "state-drift",
+                status,
+                path: manifest_path.to_string_lossy().to_string(),
+                message: Some("state record differs from manifest metadata".to_string()),
+            });
+        }
+    }
+
+    let manifest_candidates =
+        collect_manifest_candidates(&data_dir, options.target, options.source_id.as_deref())?;
+    for candidate in manifest_candidates {
+        let key = (candidate.language.clone(), candidate.source_id.clone());
+        let in_state = state.installs.iter().any(|record| {
+            record.language == candidate.language
+                && record.source_id == candidate.source_id
+                && !remove_keys.contains(&(record.language.clone(), record.source_id.clone()))
+        }) || upsert_records.contains_key(&key);
+        if in_state {
+            continue;
+        }
+
+        let manifest = match read_manifest_for_doctor(&candidate.manifest_path) {
+            Ok(value) => value,
+            Err(message) => {
+                items.push(DataDoctorItem {
+                    language: candidate.language.clone(),
+                    source_id: candidate.source_id.clone(),
+                    issue: "invalid-manifest",
+                    status: "unresolved",
+                    path: candidate.manifest_path.to_string_lossy().to_string(),
+                    message: Some(message),
+                });
+                continue;
+            }
+        };
+        if manifest.language != candidate.language || manifest.source_id != candidate.source_id {
+            items.push(DataDoctorItem {
+                language: candidate.language.clone(),
+                source_id: candidate.source_id.clone(),
+                issue: "manifest-path-mismatch",
+                status: "unresolved",
+                path: candidate.manifest_path.to_string_lossy().to_string(),
+                message: Some(format!(
+                    "manifest path suggests {}/{}, payload is {}/{}",
+                    candidate.language, candidate.source_id, manifest.language, manifest.source_id
+                )),
+            });
+            continue;
+        }
+
+        let status = if options.fix {
+            upsert_records.insert(
+                (manifest.language.clone(), manifest.source_id.clone()),
+                InstallRecord {
+                    language: manifest.language.clone(),
+                    source_id: manifest.source_id.clone(),
+                    version: manifest.version.clone(),
+                    installed_at_epoch_sec: manifest.installed_at_epoch_sec,
+                },
+            );
+            "fixed"
+        } else {
+            "unresolved"
+        };
+        items.push(DataDoctorItem {
+            language: candidate.language,
+            source_id: candidate.source_id,
+            issue: "orphan-manifest",
+            status,
+            path: candidate.manifest_path.to_string_lossy().to_string(),
+            message: None,
+        });
+    }
+
+    let mut state_changed = false;
+    if options.fix {
+        let before_len = state.installs.len();
+        state.installs.retain(|record| {
+            !remove_keys.contains(&(record.language.clone(), record.source_id.clone()))
+        });
+        if state.installs.len() != before_len {
+            state_changed = true;
+        }
+        for record in upsert_records.values() {
+            let _ = upsert_install_record(
+                &mut state,
+                &record.language,
+                &record.source_id,
+                &record.version,
+                record.installed_at_epoch_sec,
+            );
+            state_changed = true;
+        }
+        if state_changed {
+            save_data_state(&data_dir, &state)?;
+        }
+    }
+
+    items.sort_by(|left, right| {
+        left.language
+            .cmp(&right.language)
+            .then(left.source_id.cmp(&right.source_id))
+            .then(left.issue.cmp(right.issue))
+    });
+    let detected = items.len();
+    let fixed = items.iter().filter(|item| item.status == "fixed").count();
+    let unresolved = items
+        .iter()
+        .filter(|item| item.status == "unresolved")
+        .count();
+
+    if matches!(options.format, OutputFormat::Json) {
+        let payload = DataDoctorResponse {
+            mode: "data-doctor",
+            data_dir: data_dir.to_string_lossy().to_string(),
+            fix_applied: options.fix,
+            detected,
+            fixed,
+            unresolved,
+            items,
+        };
+        let output = serde_json::to_string(&payload).map_err(|error| {
+            CliError::internal(format!("failed to serialize data doctor response: {error}"))
+        })?;
+        println!("{output}");
+    } else {
+        println!("data doctor:");
+        println!("data dir: {}", data_dir.to_string_lossy());
+        println!(
+            "summary: detected:{} fixed:{} unresolved:{}",
+            detected, fixed, unresolved
+        );
+        for item in &items {
+            println!(
+                "- {}/{} issue:{} status:{} path:{}",
+                item.language, item.source_id, item.issue, item.status, item.path
+            );
+            if let Some(message) = &item.message {
+                println!("  message: {message}");
+            }
+        }
+    }
+
+    if unresolved == 0 {
+        Ok(())
+    } else {
+        Err(CliError::domain(format!(
+            "data doctor found {unresolved} unresolved issue(s)"
         )))
     }
 }
@@ -919,6 +1187,80 @@ fn run_data_import_manifest(options: DataImportManifestOptions) -> Result<(), Cl
         );
     }
     Ok(())
+}
+
+#[derive(Debug, Clone)]
+struct ManifestCandidate {
+    language: String,
+    source_id: String,
+    manifest_path: PathBuf,
+}
+
+fn collect_manifest_candidates(
+    data_dir: &Path,
+    target: Option<ProtoTarget>,
+    source_filter: Option<&str>,
+) -> Result<Vec<ManifestCandidate>, CliError> {
+    let mut items = Vec::new();
+    let language_codes = match target {
+        Some(value) => vec![value.as_str().to_string()],
+        None => vec!["fa".to_string(), "en".to_string()],
+    };
+    for language in language_codes {
+        let language_dir = data_dir.join(&language);
+        if !language_dir.exists() {
+            continue;
+        }
+        let entries = fs::read_dir(&language_dir).map_err(|error| {
+            CliError::io(
+                "failed to read language data directory",
+                Some(&language_dir.to_string_lossy()),
+                error,
+            )
+        })?;
+        for entry in entries {
+            let entry = entry.map_err(|error| {
+                CliError::io(
+                    "failed to read source directory entry",
+                    Some(&language_dir.to_string_lossy()),
+                    error,
+                )
+            })?;
+            let source_path = entry.path();
+            if !source_path.is_dir() {
+                continue;
+            }
+            let source_id = entry.file_name().to_string_lossy().to_string();
+            if source_filter.is_some_and(|value| value != source_id.as_str()) {
+                continue;
+            }
+            let manifest_path = source_path.join("manifest.json");
+            if !manifest_path.exists() {
+                continue;
+            }
+            items.push(ManifestCandidate {
+                language: language.clone(),
+                source_id,
+                manifest_path,
+            });
+        }
+    }
+    Ok(items)
+}
+
+fn read_manifest_for_doctor(path: &Path) -> Result<InstalledSourceManifest, String> {
+    let raw = fs::read_to_string(path).map_err(|error| {
+        format!(
+            "failed to read manifest '{}': {error}",
+            path.to_string_lossy()
+        )
+    })?;
+    serde_json::from_str(&raw).map_err(|error| {
+        format!(
+            "failed to parse manifest '{}': {error}",
+            path.to_string_lossy()
+        )
+    })
 }
 
 fn load_data_sources() -> Result<Vec<DataSource>, CliError> {
