@@ -1210,6 +1210,142 @@ fn data_export_manifest_writes_output_file_when_requested() {
 }
 
 #[test]
+fn data_import_manifest_restores_state_and_manifests() {
+    let source_data_dir = TempDataDir::create();
+    let target_data_dir = TempDataDir::create();
+    let export_file = TempOutputFile::create();
+
+    let install_output = run_lsteg_with_env(
+        &[
+            "data",
+            "install",
+            "--lang",
+            "en",
+            "--source",
+            "en-wordlist-wordnik",
+            "--format",
+            "json",
+            "--data-dir",
+            source_data_dir.as_str(),
+        ],
+        &[],
+    );
+    assert!(install_output.status.success());
+
+    let export_output = run_lsteg_with_env(
+        &[
+            "data",
+            "export-manifest",
+            "--lang",
+            "en",
+            "--source",
+            "en-wordlist-wordnik",
+            "--output",
+            export_file.as_str(),
+            "--format",
+            "json",
+            "--data-dir",
+            source_data_dir.as_str(),
+        ],
+        &[],
+    );
+    assert!(export_output.status.success());
+
+    let import_output = run_lsteg_with_env(
+        &[
+            "data",
+            "import-manifest",
+            "--input",
+            export_file.as_str(),
+            "--format",
+            "json",
+            "--data-dir",
+            target_data_dir.as_str(),
+        ],
+        &[],
+    );
+    assert!(import_output.status.success());
+    let stdout = stdout_string(&import_output);
+    assert!(stdout.contains("\"mode\":\"data-import-manifest\""));
+    assert!(stdout.contains("\"source_id\":\"en-wordlist-wordnik\""));
+
+    let status_output = run_lsteg_with_env(
+        &[
+            "data",
+            "status",
+            "--lang",
+            "en",
+            "--format",
+            "json",
+            "--data-dir",
+            target_data_dir.as_str(),
+        ],
+        &[],
+    );
+    assert!(status_output.status.success());
+    let status_stdout = stdout_string(&status_output);
+    assert!(status_stdout.contains("\"source_id\":\"en-wordlist-wordnik\""));
+    assert!(status_stdout.contains("\"manifest_exists\":true"));
+}
+
+#[test]
+fn data_import_manifest_respects_filters() {
+    let source_data_dir = TempDataDir::create();
+    let target_data_dir = TempDataDir::create();
+    let export_file = TempOutputFile::create();
+
+    let install_output = run_lsteg_with_env(
+        &[
+            "data",
+            "install",
+            "--lang",
+            "en,fa",
+            "--format",
+            "json",
+            "--data-dir",
+            source_data_dir.as_str(),
+        ],
+        &[],
+    );
+    assert!(install_output.status.success());
+
+    let export_output = run_lsteg_with_env(
+        &[
+            "data",
+            "export-manifest",
+            "--output",
+            export_file.as_str(),
+            "--format",
+            "json",
+            "--data-dir",
+            source_data_dir.as_str(),
+        ],
+        &[],
+    );
+    assert!(export_output.status.success());
+
+    let import_output = run_lsteg_with_env(
+        &[
+            "data",
+            "import-manifest",
+            "--input",
+            export_file.as_str(),
+            "--lang",
+            "fa",
+            "--format",
+            "json",
+            "--data-dir",
+            target_data_dir.as_str(),
+        ],
+        &[],
+    );
+    assert!(import_output.status.success());
+    let stdout = stdout_string(&import_output);
+    assert!(stdout.contains("\"language\":\"fa\""));
+    assert!(!stdout.contains("\"language\":\"en\""));
+}
+
+#[test]
 fn validate_json_reports_integrity_ok() {
     let encode_output = run_lsteg(&["encode", "--message", "salam", "--emit-trace"]);
     assert!(encode_output.status.success());

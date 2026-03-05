@@ -7,8 +7,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use serde::{Deserialize, Serialize};
 
 use super::types::{
-    CliError, DataCommand, DataExportManifestOptions, DataInstallOptions, DataListOptions,
-    DataPinOptions, DataStatusOptions, DataVerifyOptions, OutputFormat, ProtoTarget,
+    CliError, DataCommand, DataExportManifestOptions, DataImportManifestOptions,
+    DataInstallOptions, DataListOptions, DataPinOptions, DataStatusOptions, DataVerifyOptions,
+    OutputFormat, ProtoTarget,
 };
 
 const DATA_STATE_FILE: &str = "state.json";
@@ -164,7 +165,7 @@ struct DataPinResponse {
     items: Vec<DataPinItem>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct DataExportEntry {
     language: String,
     source_id: String,
@@ -180,7 +181,7 @@ struct DataExportEntry {
     manifest_error: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct DataExportSnapshot {
     schema_version: u8,
     generated_at_epoch_sec: u64,
@@ -193,6 +194,23 @@ struct DataExportResponse {
     mode: &'static str,
     output_path: String,
     entry_count: usize,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct DataImportItem {
+    language: String,
+    source_id: String,
+    status: &'static str,
+    manifest_path: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct DataImportResponse {
+    mode: &'static str,
+    data_dir: String,
+    imported: usize,
+    updated: usize,
+    items: Vec<DataImportItem>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -218,6 +236,7 @@ pub(crate) fn run_data_command(command: DataCommand) -> Result<(), CliError> {
         DataCommand::Verify(options) => run_data_verify(options),
         DataCommand::Pin(options) => run_data_pin(options),
         DataCommand::ExportManifest(options) => run_data_export_manifest(options),
+        DataCommand::ImportManifest(options) => run_data_import_manifest(options),
         DataCommand::Install(options) => run_data_install(options, false),
         DataCommand::Update(options) => run_data_install(options, true),
     }
@@ -753,6 +772,152 @@ fn run_data_export_manifest(options: DataExportManifestOptions) -> Result<(), Cl
     }
 
     println!("{raw}");
+    Ok(())
+}
+
+fn run_data_import_manifest(options: DataImportManifestOptions) -> Result<(), CliError> {
+    let data_dir = resolve_data_dir(options.data_dir.as_deref());
+    fs::create_dir_all(&data_dir).map_err(|error| {
+        CliError::io(
+            "failed to create data directory",
+            Some(&data_dir.to_string_lossy()),
+            error,
+        )
+    })?;
+    let raw = fs::read_to_string(&options.input_path).map_err(|error| {
+        CliError::io(
+            "failed to read import manifest file",
+            Some(&options.input_path),
+            error,
+        )
+    })?;
+    let snapshot: DataExportSnapshot = serde_json::from_str(&raw).map_err(|error| {
+        CliError::config(format!(
+            "failed to parse import manifest '{}': {error}",
+            options.input_path
+        ))
+    })?;
+    if snapshot.schema_version != 1 {
+        return Err(CliError::config(format!(
+            "unsupported import manifest schema_version {} (expected 1)",
+            snapshot.schema_version
+        )));
+    }
+
+    let mut state = load_data_state(&data_dir)?;
+    let mut items = Vec::new();
+    let mut imported = 0_usize;
+    let mut updated = 0_usize;
+    for entry in snapshot.entries {
+        if options
+            .target
+            .is_some_and(|target| entry.language != target.as_str())
+        {
+            continue;
+        }
+        if options
+            .source_id
+            .as_deref()
+            .is_some_and(|source_id| source_id != entry.source_id)
+        {
+            continue;
+        }
+
+        let target = parse_data_language(&entry.language)?;
+        let source_dir = data_dir.join(target.as_str()).join(&entry.source_id);
+        fs::create_dir_all(&source_dir).map_err(|error| {
+            CliError::io(
+                "failed to create source data directory",
+                Some(&source_dir.to_string_lossy()),
+                error,
+            )
+        })?;
+
+        let manifest = InstalledSourceManifest {
+            schema_version: 1,
+            language: entry.language.clone(),
+            source_id: entry.source_id.clone(),
+            source_url: entry
+                .source_url
+                .unwrap_or_else(|| format!("imported://{}", entry.source_id)),
+            version: entry.version.clone(),
+            license: entry.license.unwrap_or_else(|| "unknown".to_string()),
+            checksum_sha256: entry.checksum_sha256.clone(),
+            artifact_url: None,
+            artifact_path: entry.artifact_path.clone(),
+            artifact_sha256: entry.artifact_sha256.clone(),
+            artifact_bytes: None,
+            installed_at_epoch_sec: entry.installed_at_epoch_sec,
+        };
+        let manifest_path = source_dir.join("manifest.json");
+        let manifest_raw = serde_json::to_string_pretty(&manifest).map_err(|error| {
+            CliError::internal(format!(
+                "failed to encode imported source manifest '{}': {error}",
+                entry.source_id
+            ))
+        })?;
+        fs::write(&manifest_path, manifest_raw).map_err(|error| {
+            CliError::io(
+                "failed to write imported source manifest",
+                Some(&manifest_path.to_string_lossy()),
+                error,
+            )
+        })?;
+
+        let status = upsert_install_record(
+            &mut state,
+            &entry.language,
+            &entry.source_id,
+            &entry.version,
+            entry.installed_at_epoch_sec,
+        );
+        if status == "imported" {
+            imported += 1;
+        } else {
+            updated += 1;
+        }
+        items.push(DataImportItem {
+            language: entry.language,
+            source_id: entry.source_id,
+            status,
+            manifest_path: manifest_path.to_string_lossy().to_string(),
+        });
+    }
+
+    if items.is_empty() {
+        return Err(CliError::config(
+            "no import-manifest entries matched the selected filters".to_string(),
+        ));
+    }
+
+    save_data_state(&data_dir, &state)?;
+
+    if matches!(options.format, OutputFormat::Json) {
+        let payload = DataImportResponse {
+            mode: "data-import-manifest",
+            data_dir: data_dir.to_string_lossy().to_string(),
+            imported,
+            updated,
+            items,
+        };
+        let output = serde_json::to_string(&payload).map_err(|error| {
+            CliError::internal(format!(
+                "failed to serialize data import-manifest response: {error}"
+            ))
+        })?;
+        println!("{output}");
+        return Ok(());
+    }
+
+    println!("data import-manifest:");
+    println!("data dir: {}", data_dir.to_string_lossy());
+    println!("imported: {imported} updated: {updated}");
+    for item in items {
+        println!(
+            "- {}/{} status:{} manifest:{}",
+            item.language, item.source_id, item.status, item.manifest_path
+        );
+    }
     Ok(())
 }
 
@@ -1497,6 +1662,35 @@ fn upsert_install_state<'a>(
                 installed_at_epoch_sec: now,
             });
             "installed"
+        }
+    }
+}
+
+fn upsert_install_record(
+    state: &mut DataState,
+    language: &str,
+    source_id: &str,
+    version: &str,
+    installed_at_epoch_sec: u64,
+) -> &'static str {
+    let existing = state
+        .installs
+        .iter_mut()
+        .find(|item| item.language == language && item.source_id == source_id);
+    match existing {
+        Some(record) => {
+            record.version = version.to_string();
+            record.installed_at_epoch_sec = installed_at_epoch_sec;
+            "updated"
+        }
+        None => {
+            state.installs.push(InstallRecord {
+                language: language.to_string(),
+                source_id: source_id.to_string(),
+                version: version.to_string(),
+                installed_at_epoch_sec,
+            });
+            "imported"
         }
     }
 }
