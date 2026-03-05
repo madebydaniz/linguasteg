@@ -312,6 +312,9 @@ fn catalog_text_contains_all_sections() {
     assert!(stdout.contains(
         "- en/en-neutral-prototype (Neutral English Prototype) register: neutral strength: light inspiration: register-only (<none>)"
     ));
+    assert!(stdout.contains(
+        "- en/en-shakespeare-inspired-light (Shakespeare-inspired (Light)) register: literary strength: light inspiration: author-inspired (William Shakespeare)"
+    ));
     assert!(stdout.contains("- en/en-basic-svo total_bits: 18"));
 }
 
@@ -402,6 +405,9 @@ fn profiles_text_lists_supported_profiles() {
     assert!(stdout.contains("- fa/fa-neutral-formal (Formal Persian (Neutral))"));
     assert!(stdout.contains("- fa/fa-saadi-inspired-light (Saadi-inspired (Light))"));
     assert!(stdout.contains("- en/en-neutral-prototype (Neutral English Prototype)"));
+    assert!(stdout.contains("- en/en-shakespeare-inspired-light (Shakespeare-inspired (Light))"));
+    assert!(stdout.contains("- en/en-dickens-inspired-light (Dickens-inspired (Light))"));
+    assert!(stdout.contains("- en/en-austen-inspired-light (Austen-inspired (Light))"));
 }
 
 #[test]
@@ -416,6 +422,8 @@ fn profiles_json_exposes_contract() {
     assert!(stdout.contains("\"inspiration_kind\":\"author-inspired\""));
     assert!(stdout.contains("\"inspiration_label\":\"Saadi\""));
     assert!(stdout.contains("\"language\":\"en\""));
+    assert!(stdout.contains("\"id\":\"en-shakespeare-inspired-light\""));
+    assert!(stdout.contains("\"inspiration_label\":\"William Shakespeare\""));
 }
 
 #[test]
@@ -427,6 +435,9 @@ fn profiles_lang_filter_limits_output() {
     assert!(stdout.contains("\"mode\":\"profiles\""));
     assert!(stdout.contains("\"language\":\"en\""));
     assert!(stdout.contains("\"id\":\"en-neutral-prototype\""));
+    assert!(stdout.contains("\"id\":\"en-shakespeare-inspired-light\""));
+    assert!(stdout.contains("\"id\":\"en-dickens-inspired-light\""));
+    assert!(stdout.contains("\"id\":\"en-austen-inspired-light\""));
     assert!(!stdout.contains("\"id\":\"fa-neutral-formal\""));
 }
 
@@ -893,8 +904,11 @@ fn runtime_errors_return_exit_code_one() {
     assert_eq!(output.status.code(), Some(1));
     let stderr = stderr_string(&output);
     assert!(stderr.contains("LSTEG-CLI-INP-001"));
-    assert!(stderr
-        .contains("decode requires input from proto-encode trace output or canonical stego text"));
+    assert!(
+        stderr.contains(
+            "decode requires input from proto-encode trace output or canonical stego text"
+        )
+    );
 }
 
 #[test]

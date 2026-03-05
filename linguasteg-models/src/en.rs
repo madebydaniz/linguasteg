@@ -96,6 +96,33 @@ fn normalize_english_spacing(input: &str) -> String {
 #[derive(Debug, Default, Clone, Copy)]
 pub struct EnglishPrototypeSymbolicMapper;
 
+const EN_PROFILE_NEUTRAL: &str = "en-neutral-prototype";
+const EN_PROFILE_SHAKESPEARE_LIGHT: &str = "en-shakespeare-inspired-light";
+const EN_PROFILE_DICKENS_LIGHT: &str = "en-dickens-inspired-light";
+const EN_PROFILE_AUSTEN_LIGHT: &str = "en-austen-inspired-light";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum EnglishEncodeProfile {
+    NeutralPrototype,
+    ShakespeareInspiredLight,
+    DickensInspiredLight,
+    AustenInspiredLight,
+}
+
+impl EnglishEncodeProfile {
+    fn from_profile_id(profile_id: Option<&StyleProfileId>) -> CoreResult<Self> {
+        match profile_id.map(StyleProfileId::as_str) {
+            None | Some(EN_PROFILE_NEUTRAL) => Ok(Self::NeutralPrototype),
+            Some(EN_PROFILE_SHAKESPEARE_LIGHT) => Ok(Self::ShakespeareInspiredLight),
+            Some(EN_PROFILE_DICKENS_LIGHT) => Ok(Self::DickensInspiredLight),
+            Some(EN_PROFILE_AUSTEN_LIGHT) => Ok(Self::AustenInspiredLight),
+            Some(value) => Err(CoreError::InvalidTemplate(format!(
+                "unsupported english style profile '{value}'"
+            ))),
+        }
+    }
+}
+
 impl EnglishPrototypeSymbolicMapper {
     pub fn frame_schemas(&self) -> Vec<SymbolicFrameSchema> {
         english_symbolic_frame_schemas()
@@ -111,19 +138,28 @@ impl EnglishPrototypeSymbolicMapper {
     pub fn map_payload_to_plans_with_profile(
         &self,
         payload_plan: &SymbolicPayloadPlan,
-        _profile_id: Option<&StyleProfileId>,
+        profile_id: Option<&StyleProfileId>,
     ) -> CoreResult<Vec<RealizationPlan>> {
+        let profile = EnglishEncodeProfile::from_profile_id(profile_id)?;
         payload_plan
             .frames
             .iter()
-            .map(|frame| self.map_frame_to_plan(frame))
+            .map(|frame| self.map_frame_to_plan_with_profile(frame, profile))
             .collect()
     }
 
     pub fn map_frame_to_plan(&self, frame: &SymbolicFramePlan) -> CoreResult<RealizationPlan> {
+        self.map_frame_to_plan_with_profile(frame, EnglishEncodeProfile::NeutralPrototype)
+    }
+
+    fn map_frame_to_plan_with_profile(
+        &self,
+        frame: &SymbolicFramePlan,
+        profile: EnglishEncodeProfile,
+    ) -> CoreResult<RealizationPlan> {
         match frame.template_id.as_str() {
-            "en-basic-svo" => map_basic_svo_frame(frame),
-            "en-time-location-svo" => map_time_location_svo_frame(frame),
+            "en-basic-svo" => map_basic_svo_frame(frame, profile),
+            "en-time-location-svo" => map_time_location_svo_frame(frame, profile),
             _ => Err(CoreError::UnsupportedTemplate(
                 frame.template_id.to_string(),
             )),
@@ -172,13 +208,17 @@ pub fn parse_english_prototype_text(stego_text: &str) -> CoreResult<Vec<Realizat
     Ok(plans)
 }
 
-fn map_basic_svo_frame(frame: &SymbolicFramePlan) -> CoreResult<RealizationPlan> {
+fn map_basic_svo_frame(
+    frame: &SymbolicFramePlan,
+    profile: EnglishEncodeProfile,
+) -> CoreResult<RealizationPlan> {
     let object_value = symbolic_value_for_slot(frame, "object")?;
     let adjective_value = symbolic_value_for_slot(frame, "adjective")?;
     let verb_value = symbolic_value_for_slot(frame, "verb")?;
     let subject = select_form(subject_forms(), symbolic_value_for_slot(frame, "subject")?);
-    let object = select_object_surface(object_value, verb_value);
-    let adjective = select_adjective_surface(adjective_value, &object);
+    let object = select_object_surface(profile, object_value, verb_value);
+    let object_class = object_class(object_lexeme_for_value(object_value).canonical);
+    let adjective = select_adjective_surface(profile, adjective_value, object_class, object_value);
     let verb = select_form(verb_forms(), verb_value);
 
     Ok(RealizationPlan {
@@ -192,7 +232,10 @@ fn map_basic_svo_frame(frame: &SymbolicFramePlan) -> CoreResult<RealizationPlan>
     })
 }
 
-fn map_time_location_svo_frame(frame: &SymbolicFramePlan) -> CoreResult<RealizationPlan> {
+fn map_time_location_svo_frame(
+    frame: &SymbolicFramePlan,
+    profile: EnglishEncodeProfile,
+) -> CoreResult<RealizationPlan> {
     let object_value = symbolic_value_for_slot(frame, "object")?;
     let verb_value = symbolic_value_for_slot(frame, "verb")?;
     let subject = select_form(subject_forms(), symbolic_value_for_slot(frame, "subject")?);
@@ -202,7 +245,7 @@ fn map_time_location_svo_frame(frame: &SymbolicFramePlan) -> CoreResult<Realizat
         symbolic_value_for_slot(frame, "location")?,
     );
     let verb = select_form(verb_forms(), verb_value);
-    let object = select_object_surface(object_value, verb_value);
+    let object = select_object_surface(profile, object_value, verb_value);
 
     Ok(RealizationPlan {
         template_id: TemplateId::new("en-time-location-svo")?,
@@ -558,14 +601,46 @@ fn english_languages() -> Vec<LanguageDescriptor> {
 }
 
 fn english_style_profiles() -> Vec<StyleProfileDescriptor> {
-    vec![StyleProfileDescriptor {
-        id: StyleProfileId::new("en-neutral-prototype").expect("valid style profile id"),
-        language: LanguageTag::new("en").expect("valid language tag"),
-        display_name: "Neutral English Prototype".to_string(),
-        register: WritingRegister::Neutral,
-        strength: StyleStrength::Light,
-        inspiration: StyleInspiration::RegisterOnly,
-    }]
+    vec![
+        StyleProfileDescriptor {
+            id: StyleProfileId::new(EN_PROFILE_NEUTRAL).expect("valid style profile id"),
+            language: LanguageTag::new("en").expect("valid language tag"),
+            display_name: "Neutral English Prototype".to_string(),
+            register: WritingRegister::Neutral,
+            strength: StyleStrength::Light,
+            inspiration: StyleInspiration::RegisterOnly,
+        },
+        StyleProfileDescriptor {
+            id: StyleProfileId::new(EN_PROFILE_SHAKESPEARE_LIGHT).expect("valid style profile id"),
+            language: LanguageTag::new("en").expect("valid language tag"),
+            display_name: "Shakespeare-inspired (Light)".to_string(),
+            register: WritingRegister::Literary,
+            strength: StyleStrength::Light,
+            inspiration: StyleInspiration::PublicDomainAuthorInspired {
+                author_label: "William Shakespeare".to_string(),
+            },
+        },
+        StyleProfileDescriptor {
+            id: StyleProfileId::new(EN_PROFILE_DICKENS_LIGHT).expect("valid style profile id"),
+            language: LanguageTag::new("en").expect("valid language tag"),
+            display_name: "Dickens-inspired (Light)".to_string(),
+            register: WritingRegister::Literary,
+            strength: StyleStrength::Light,
+            inspiration: StyleInspiration::PublicDomainAuthorInspired {
+                author_label: "Charles Dickens".to_string(),
+            },
+        },
+        StyleProfileDescriptor {
+            id: StyleProfileId::new(EN_PROFILE_AUSTEN_LIGHT).expect("valid style profile id"),
+            language: LanguageTag::new("en").expect("valid language tag"),
+            display_name: "Austen-inspired (Light)".to_string(),
+            register: WritingRegister::Literary,
+            strength: StyleStrength::Light,
+            inspiration: StyleInspiration::PublicDomainAuthorInspired {
+                author_label: "Jane Austen".to_string(),
+            },
+        },
+    ]
 }
 
 fn english_templates() -> Vec<RealizationTemplateDescriptor> {
@@ -729,11 +804,11 @@ fn object_lexemes() -> &'static [EnglishObjectLexeme] {
     const OBJECT_LEXEMES: [EnglishObjectLexeme; 32] = [
         EnglishObjectLexeme {
             canonical: "book",
-            accepted_forms: &["book"],
+            accepted_forms: &["book", "volume"],
         },
         EnglishObjectLexeme {
             canonical: "letter",
-            accepted_forms: &["letter", "missive"],
+            accepted_forms: &["letter", "missive", "epistle"],
         },
         EnglishObjectLexeme {
             canonical: "photo",
@@ -769,7 +844,7 @@ fn object_lexemes() -> &'static [EnglishObjectLexeme] {
         },
         EnglishObjectLexeme {
             canonical: "contract",
-            accepted_forms: &["contract"],
+            accepted_forms: &["contract", "agreement"],
         },
         EnglishObjectLexeme {
             canonical: "ticket",
@@ -781,7 +856,7 @@ fn object_lexemes() -> &'static [EnglishObjectLexeme] {
         },
         EnglishObjectLexeme {
             canonical: "record",
-            accepted_forms: &["record", "entry"],
+            accepted_forms: &["record", "entry", "chronicle"],
         },
         EnglishObjectLexeme {
             canonical: "invoice",
@@ -789,7 +864,7 @@ fn object_lexemes() -> &'static [EnglishObjectLexeme] {
         },
         EnglishObjectLexeme {
             canonical: "plan",
-            accepted_forms: &["plan"],
+            accepted_forms: &["plan", "scheme"],
         },
         EnglishObjectLexeme {
             canonical: "diagram",
@@ -825,7 +900,7 @@ fn object_lexemes() -> &'static [EnglishObjectLexeme] {
         },
         EnglishObjectLexeme {
             canonical: "summary",
-            accepted_forms: &["summary"],
+            accepted_forms: &["summary", "abstract"],
         },
         EnglishObjectLexeme {
             canonical: "script",
@@ -837,7 +912,7 @@ fn object_lexemes() -> &'static [EnglishObjectLexeme] {
         },
         EnglishObjectLexeme {
             canonical: "review",
-            accepted_forms: &["review", "assessment"],
+            accepted_forms: &["review", "assessment", "critique"],
         },
         EnglishObjectLexeme {
             canonical: "proposal",
@@ -865,16 +940,50 @@ fn object_lexeme_for_value(value: u32) -> &'static EnglishObjectLexeme {
     &object_lexemes()[index]
 }
 
-fn select_object_surface(value: u32, verb_value: u32) -> String {
+fn select_object_surface(profile: EnglishEncodeProfile, value: u32, verb_value: u32) -> String {
     let lexeme = object_lexeme_for_value(value);
     let verb_index = (verb_value as usize) % verb_forms().len();
-    let surface = match (lexeme.canonical, verb_index) {
+    let base_surface = match (lexeme.canonical, verb_index) {
         ("record", 16) => "entry",
         ("draft", 10) => "outline",
         ("review", 11) => "assessment",
         _ => lexeme.canonical,
     };
-    surface.to_string()
+
+    let profile_surface = author_object_variant(profile, lexeme.canonical, value, verb_index);
+    profile_surface.unwrap_or(base_surface).to_string()
+}
+
+fn author_object_variant(
+    profile: EnglishEncodeProfile,
+    canonical: &str,
+    value: u32,
+    verb_index: usize,
+) -> Option<&'static str> {
+    if !is_light_profile_variant(value, verb_index, 2) {
+        return None;
+    }
+
+    match profile {
+        EnglishEncodeProfile::ShakespeareInspiredLight => match canonical {
+            "letter" => Some("epistle"),
+            "record" => Some("chronicle"),
+            "book" => Some("volume"),
+            _ => None,
+        },
+        EnglishEncodeProfile::DickensInspiredLight => match canonical {
+            "contract" => Some("agreement"),
+            "summary" => Some("abstract"),
+            "review" => Some("critique"),
+            _ => None,
+        },
+        EnglishEncodeProfile::AustenInspiredLight => match canonical {
+            "plan" => Some("scheme"),
+            "letter" => Some("epistle"),
+            _ => None,
+        },
+        EnglishEncodeProfile::NeutralPrototype => None,
+    }
 }
 
 fn object_class(canonical: &str) -> EnglishObjectClass {
@@ -920,7 +1029,7 @@ fn adjective_lexemes() -> &'static [EnglishAdjectiveLexeme] {
     const ADJECTIVE_LEXEMES: [EnglishAdjectiveLexeme; 8] = [
         EnglishAdjectiveLexeme {
             canonical: "old",
-            accepted_forms: &["old"],
+            accepted_forms: &["old", "aged"],
         },
         EnglishAdjectiveLexeme {
             canonical: "new",
@@ -932,23 +1041,23 @@ fn adjective_lexemes() -> &'static [EnglishAdjectiveLexeme] {
         },
         EnglishAdjectiveLexeme {
             canonical: "bright",
-            accepted_forms: &["bright"],
+            accepted_forms: &["bright", "luminous"],
         },
         EnglishAdjectiveLexeme {
             canonical: "warm",
-            accepted_forms: &["warm", "recent"],
+            accepted_forms: &["warm", "recent", "hearty"],
         },
         EnglishAdjectiveLexeme {
             canonical: "fresh",
-            accepted_forms: &["fresh", "current"],
+            accepted_forms: &["fresh", "current", "novel"],
         },
         EnglishAdjectiveLexeme {
             canonical: "small",
-            accepted_forms: &["small"],
+            accepted_forms: &["small", "modest"],
         },
         EnglishAdjectiveLexeme {
             canonical: "clear",
-            accepted_forms: &["clear"],
+            accepted_forms: &["clear", "lucid"],
         },
     ];
 
@@ -960,16 +1069,59 @@ fn adjective_lexeme_for_value(value: u32) -> &'static EnglishAdjectiveLexeme {
     &adjective_lexemes()[index]
 }
 
-fn select_adjective_surface(value: u32, object_surface: &str) -> String {
+fn select_adjective_surface(
+    profile: EnglishEncodeProfile,
+    value: u32,
+    class: EnglishObjectClass,
+    object_value: u32,
+) -> String {
     let lexeme = adjective_lexeme_for_value(value);
-    let class = object_class(object_surface);
-    let surface = match (lexeme.canonical, class) {
+    let base_surface = match (lexeme.canonical, class) {
         ("quiet", EnglishObjectClass::Document | EnglishObjectClass::Data) => "concise",
         ("warm", EnglishObjectClass::Document | EnglishObjectClass::Data) => "recent",
         ("fresh", EnglishObjectClass::Document | EnglishObjectClass::Data) => "current",
         _ => lexeme.canonical,
     };
-    surface.to_string()
+
+    let profile_surface = author_adjective_variant(profile, lexeme.canonical, value, object_value);
+    profile_surface.unwrap_or(base_surface).to_string()
+}
+
+fn author_adjective_variant(
+    profile: EnglishEncodeProfile,
+    canonical: &str,
+    value: u32,
+    object_value: u32,
+) -> Option<&'static str> {
+    if !is_light_profile_variant(value, object_value as usize, 1) {
+        return None;
+    }
+
+    match profile {
+        EnglishEncodeProfile::ShakespeareInspiredLight => match canonical {
+            "bright" => Some("luminous"),
+            "old" => Some("aged"),
+            _ => None,
+        },
+        EnglishEncodeProfile::DickensInspiredLight => match canonical {
+            "warm" => Some("hearty"),
+            "small" => Some("modest"),
+            _ => None,
+        },
+        EnglishEncodeProfile::AustenInspiredLight => match canonical {
+            "clear" => Some("lucid"),
+            "fresh" => Some("novel"),
+            _ => None,
+        },
+        EnglishEncodeProfile::NeutralPrototype => None,
+    }
+}
+
+fn is_light_profile_variant(left: u32, right: usize, salt: u64) -> bool {
+    let mix = (u64::from(left)).wrapping_mul(0x9E37_79B9_7F4A_7C15)
+        ^ (right as u64).wrapping_mul(0xD1B5_4A32_D192_ED03)
+        ^ salt;
+    (mix & 0b11) == 0
 }
 
 fn adjective_surface_index(surface: &str) -> CoreResult<u32> {
@@ -997,7 +1149,9 @@ fn adjective_surface_index(surface: &str) -> CoreResult<u32> {
 
 #[cfg(test)]
 fn adjective_forms() -> &'static [&'static str] {
-    &["old", "new", "quiet", "bright", "warm", "fresh", "small", "clear"]
+    &[
+        "old", "new", "quiet", "bright", "warm", "fresh", "small", "clear",
+    ]
 }
 
 fn verb_forms() -> &'static [&'static str] {
@@ -1039,23 +1193,30 @@ fn location_forms() -> &'static [&'static str] {
 mod tests {
     use linguasteg_core::{
         BitRange, GrammarConstraintChecker, LanguageRealizer, LanguageTag, RealizationPlan,
-        SlotAssignment, SlotId, StyleProfileRegistry, SymbolicFramePlan, SymbolicSlotValue,
-        TemplateId, TemplateRegistry,
+        SlotAssignment, SlotId, StyleProfileId, StyleProfileRegistry, SymbolicFramePlan,
+        SymbolicPayloadPlan, SymbolicSlotValue, TemplateId, TemplateRegistry,
     };
 
     use super::{
-        EnglishPrototypeConstraintChecker, EnglishPrototypeLanguagePack, EnglishPrototypeRealizer,
-        EnglishPrototypeSymbolicMapper, adjective_forms, location_forms, object_forms,
-        parse_english_prototype_text, subject_forms, time_forms, verb_forms,
+        EN_PROFILE_SHAKESPEARE_LIGHT, EnglishPrototypeConstraintChecker,
+        EnglishPrototypeLanguagePack, EnglishPrototypeRealizer, EnglishPrototypeSymbolicMapper,
+        adjective_forms, location_forms, object_forms, parse_english_prototype_text, subject_forms,
+        time_forms, verb_forms,
     };
 
     #[test]
     fn english_pack_exposes_templates_and_style_profiles() {
         let pack = EnglishPrototypeLanguagePack::default();
         let en = LanguageTag::new("en").expect("valid language");
+        let profiles = pack.style_profiles_for_language(&en);
 
         assert_eq!(pack.templates_for_language(&en).len(), 2);
-        assert_eq!(pack.style_profiles_for_language(&en).len(), 1);
+        assert_eq!(profiles.len(), 4);
+        assert!(
+            profiles
+                .iter()
+                .any(|profile| profile.id.as_str() == EN_PROFILE_SHAKESPEARE_LIGHT)
+        );
     }
 
     #[test]
@@ -1339,5 +1500,68 @@ mod tests {
             .find(|assignment| assignment.slot.as_str() == "object")
             .expect("object assignment should exist");
         assert_eq!(object.surface, "journal");
+    }
+
+    #[test]
+    fn english_mapper_profile_variants_remain_symbolically_reversible() {
+        let mapper = EnglishPrototypeSymbolicMapper;
+        let object_value = 1u32;
+        let verb_value = (0u32..32)
+            .find(|value| super::is_light_profile_variant(object_value, *value as usize, 2))
+            .expect("a profile variant gate should exist");
+        let payload_plan = SymbolicPayloadPlan {
+            original_len_bytes: 2,
+            encoded_len_bytes: 2,
+            length_prefix_bytes: 2,
+            padding_bits: 0,
+            frames: vec![SymbolicFramePlan {
+                template_id: TemplateId::new("en-basic-svo").expect("template"),
+                source: BitRange {
+                    start_bit: 0,
+                    consumed_bits: 18,
+                },
+                values: vec![
+                    SymbolicSlotValue {
+                        slot: SlotId::new("subject").expect("slot"),
+                        bit_width: 5,
+                        value: 0,
+                    },
+                    SymbolicSlotValue {
+                        slot: SlotId::new("object").expect("slot"),
+                        bit_width: 5,
+                        value: object_value,
+                    },
+                    SymbolicSlotValue {
+                        slot: SlotId::new("adjective").expect("slot"),
+                        bit_width: 3,
+                        value: 0,
+                    },
+                    SymbolicSlotValue {
+                        slot: SlotId::new("verb").expect("slot"),
+                        bit_width: 5,
+                        value: verb_value,
+                    },
+                ],
+            }],
+        };
+        let profile_id =
+            StyleProfileId::new(EN_PROFILE_SHAKESPEARE_LIGHT).expect("valid style profile id");
+
+        let plans = mapper
+            .map_payload_to_plans_with_profile(&payload_plan, Some(&profile_id))
+            .expect("profile mapping should succeed");
+        let object_surface = plans[0]
+            .assignments
+            .iter()
+            .find(|assignment| assignment.slot.as_str() == "object")
+            .expect("object assignment should exist")
+            .surface
+            .as_str();
+        assert_eq!(object_surface, "epistle");
+
+        let recovered = mapper
+            .map_plans_to_frames(&plans)
+            .expect("reverse mapping should preserve symbolic frame");
+        assert_eq!(recovered, payload_plan.frames);
     }
 }
