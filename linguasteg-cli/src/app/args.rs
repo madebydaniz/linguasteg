@@ -2,9 +2,9 @@ use std::io::Write;
 
 use super::types::{
     AnalyzeOptions, CatalogQueryOptions, CliError, Command, DataCommand, DataInstallOptions,
-    DataListOptions, DataStatusOptions, DecodeInputMode, DecodeOptions, DemoTarget, EncodeOptions,
-    OutputFormat, ProfileQueryOptions, ProtoTarget, SchemaQueryOptions, TemplateQueryOptions,
-    ValidateOptions,
+    DataListOptions, DataStatusOptions, DataVerifyOptions, DecodeInputMode, DecodeOptions,
+    DemoTarget, EncodeOptions, OutputFormat, ProfileQueryOptions, ProtoTarget, SchemaQueryOptions,
+    TemplateQueryOptions, ValidateOptions,
 };
 
 pub(crate) fn parse_command(args: Vec<String>) -> Result<Option<Command>, CliError> {
@@ -409,7 +409,8 @@ fn parse_schemas_command(args: impl Iterator<Item = String>) -> Result<Option<Co
 fn parse_data_command(mut args: impl Iterator<Item = String>) -> Result<Option<Command>, CliError> {
     let Some(subcommand) = args.next() else {
         return Err(CliError::usage(
-            "data subcommand is required (supported: list, status, install, update)".to_string(),
+            "data subcommand is required (supported: list, status, verify, install, update)"
+                .to_string(),
         ));
     };
     if subcommand == "--help" || subcommand == "-h" {
@@ -419,10 +420,11 @@ fn parse_data_command(mut args: impl Iterator<Item = String>) -> Result<Option<C
     match subcommand.as_str() {
         "list" => parse_data_list_command(args),
         "status" => parse_data_status_command(args),
+        "verify" => parse_data_verify_command(args),
         "install" => parse_data_install_command(args, false),
         "update" => parse_data_install_command(args, true),
         _ => Err(CliError::usage(format!(
-            "unknown data subcommand: {subcommand} (supported: list, status, install, update)"
+            "unknown data subcommand: {subcommand} (supported: list, status, verify, install, update)"
         ))),
     }
 }
@@ -508,6 +510,62 @@ fn parse_data_status_command(
         DataStatusOptions {
             format,
             target,
+            data_dir,
+        },
+    ))))
+}
+
+fn parse_data_verify_command(
+    mut args: impl Iterator<Item = String>,
+) -> Result<Option<Command>, CliError> {
+    let mut format = env_output_format("LSTEG_FORMAT")?.unwrap_or(OutputFormat::Text);
+    let mut target = None;
+    let mut source_id = None;
+    let mut seen_lang = false;
+    let mut seen_source = false;
+    let mut data_dir = env_optional("LSTEG_DATA_DIR");
+    let mut seen_data_dir = false;
+
+    while let Some(arg) = args.next() {
+        match arg.as_str() {
+            "--help" | "-h" => return Ok(None),
+            "--format" => {
+                parse_output_format_arg(&mut args, &mut format)?;
+            }
+            "--lang" => {
+                parse_discovery_lang_arg(&mut args, &mut target, &mut seen_lang)?;
+            }
+            "--source" => {
+                if seen_source {
+                    return Err(CliError::usage(
+                        "--source cannot be provided multiple times".to_string(),
+                    ));
+                }
+                seen_source = true;
+                source_id = Some(next_arg_value(&mut args, "--source")?);
+            }
+            "--data-dir" => {
+                if seen_data_dir {
+                    return Err(CliError::usage(
+                        "--data-dir cannot be provided multiple times".to_string(),
+                    ));
+                }
+                seen_data_dir = true;
+                data_dir = Some(next_arg_value(&mut args, "--data-dir")?);
+            }
+            _ => {
+                return Err(CliError::usage(format!(
+                    "unknown data verify argument: {arg}"
+                )));
+            }
+        }
+    }
+
+    Ok(Some(Command::Data(DataCommand::Verify(
+        DataVerifyOptions {
+            format,
+            target,
+            source_id,
             data_dir,
         },
     ))))
@@ -1057,6 +1115,10 @@ pub(crate) fn write_usage(mut writer: impl Write) -> std::io::Result<()> {
     )?;
     writeln!(
         writer,
+        "       lsteg data verify [--lang fa|en] [--source <id>] [--data-dir <path>] [--format text|json]"
+    )?;
+    writeln!(
+        writer,
         "       lsteg data install --lang <fa|en|fa,en> [--source <id>] [--artifact-url <url>] [--data-dir <path>] [--format text|json]"
     )?;
     writeln!(
@@ -1390,6 +1452,33 @@ mod tests {
 
         assert_eq!(options.target, Some(ProtoTarget::Farsi));
         assert_eq!(options.data_dir.as_deref(), Some("/tmp/lsteg-status"));
+        assert!(matches!(options.format, OutputFormat::Json));
+    }
+
+    #[test]
+    fn parse_data_verify_command_sets_source_and_filter() {
+        let command = parse_command(vec![
+            "data".to_string(),
+            "verify".to_string(),
+            "--lang".to_string(),
+            "en".to_string(),
+            "--source".to_string(),
+            "en-wordlist-wordnik".to_string(),
+            "--data-dir".to_string(),
+            "/tmp/lsteg-verify".to_string(),
+            "--format".to_string(),
+            "json".to_string(),
+        ])
+        .expect("parse should succeed")
+        .expect("command should exist");
+
+        let Command::Data(DataCommand::Verify(options)) = command else {
+            panic!("expected data verify command");
+        };
+
+        assert_eq!(options.target, Some(ProtoTarget::English));
+        assert_eq!(options.source_id.as_deref(), Some("en-wordlist-wordnik"));
+        assert_eq!(options.data_dir.as_deref(), Some("/tmp/lsteg-verify"));
         assert!(matches!(options.format, OutputFormat::Json));
     }
 

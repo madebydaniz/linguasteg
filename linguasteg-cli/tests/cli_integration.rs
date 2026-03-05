@@ -807,6 +807,147 @@ fn data_status_reports_missing_artifact_when_removed() {
 }
 
 #[test]
+fn data_verify_reports_ok_for_matching_artifact() {
+    let data_dir = TempDataDir::create();
+    let artifact = TempArtifactFile::create(b"linguasteg-dataset");
+    let artifact_url = artifact.as_file_url();
+    let install_output = run_lsteg_with_env(
+        &[
+            "data",
+            "install",
+            "--lang",
+            "en",
+            "--source",
+            "en-wordlist-wordnik",
+            "--artifact-url",
+            &artifact_url,
+            "--format",
+            "json",
+            "--data-dir",
+            data_dir.as_str(),
+        ],
+        &[],
+    );
+    assert!(install_output.status.success());
+
+    let verify_output = run_lsteg_with_env(
+        &[
+            "data",
+            "verify",
+            "--lang",
+            "en",
+            "--source",
+            "en-wordlist-wordnik",
+            "--format",
+            "json",
+            "--data-dir",
+            data_dir.as_str(),
+        ],
+        &[],
+    );
+    assert!(verify_output.status.success());
+    let stdout = stdout_string(&verify_output);
+    assert!(stdout.contains("\"mode\":\"data-verify\""));
+    assert!(stdout.contains("\"integrity_ok\":true"));
+    assert!(stdout.contains("\"passed\":1"));
+    assert!(stdout.contains("\"failed\":0"));
+    assert!(stdout.contains("\"status\":\"ok\""));
+}
+
+#[test]
+fn data_verify_fails_for_checksum_mismatch() {
+    let data_dir = TempDataDir::create();
+    let artifact = TempArtifactFile::create(b"linguasteg-dataset");
+    let artifact_url = artifact.as_file_url();
+    let install_output = run_lsteg_with_env(
+        &[
+            "data",
+            "install",
+            "--lang",
+            "en",
+            "--source",
+            "en-wordlist-wordnik",
+            "--artifact-url",
+            &artifact_url,
+            "--format",
+            "json",
+            "--data-dir",
+            data_dir.as_str(),
+        ],
+        &[],
+    );
+    assert!(install_output.status.success());
+
+    let artifact_path = std::path::Path::new(data_dir.as_str())
+        .join("en")
+        .join("en-wordlist-wordnik")
+        .join("artifact.bin");
+    std::fs::write(&artifact_path, b"tampered-content").expect("artifact should be writable");
+
+    let verify_output = run_lsteg_with_env(
+        &[
+            "data",
+            "verify",
+            "--lang",
+            "en",
+            "--source",
+            "en-wordlist-wordnik",
+            "--format",
+            "json",
+            "--data-dir",
+            data_dir.as_str(),
+        ],
+        &[],
+    );
+    assert_eq!(verify_output.status.code(), Some(1));
+    let stdout = stdout_string(&verify_output);
+    assert!(stdout.contains("\"integrity_ok\":false"));
+    assert!(stdout.contains("\"failed\":1"));
+    assert!(stdout.contains("\"status\":\"checksum-mismatch\""));
+    let stderr = stderr_string(&verify_output);
+    assert!(stderr.contains("LSTEG-CLI-DOM-001"));
+    assert!(stderr.contains("data verification failed"));
+}
+
+#[test]
+fn data_verify_skips_when_no_artifact_is_present() {
+    let data_dir = TempDataDir::create();
+    let install_output = run_lsteg_with_env(
+        &[
+            "data",
+            "install",
+            "--lang",
+            "en",
+            "--format",
+            "json",
+            "--data-dir",
+            data_dir.as_str(),
+        ],
+        &[],
+    );
+    assert!(install_output.status.success());
+
+    let verify_output = run_lsteg_with_env(
+        &[
+            "data",
+            "verify",
+            "--lang",
+            "en",
+            "--format",
+            "json",
+            "--data-dir",
+            data_dir.as_str(),
+        ],
+        &[],
+    );
+    assert!(verify_output.status.success());
+    let stdout = stdout_string(&verify_output);
+    assert!(stdout.contains("\"integrity_ok\":true"));
+    assert!(stdout.contains("\"skipped\":1"));
+    assert!(stdout.contains("\"status\":\"skipped-no-artifact\""));
+}
+
+#[test]
 fn validate_json_reports_integrity_ok() {
     let encode_output = run_lsteg(&["encode", "--message", "salam", "--emit-trace"]);
     assert!(encode_output.status.success());

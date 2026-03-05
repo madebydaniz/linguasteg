@@ -7,8 +7,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use serde::{Deserialize, Serialize};
 
 use super::types::{
-    CliError, DataCommand, DataInstallOptions, DataListOptions, DataStatusOptions, OutputFormat,
-    ProtoTarget,
+    CliError, DataCommand, DataInstallOptions, DataListOptions, DataStatusOptions,
+    DataVerifyOptions, OutputFormat, ProtoTarget,
 };
 
 const DATA_STATE_FILE: &str = "state.json";
@@ -120,6 +120,30 @@ struct DataStatusResponse {
     items: Vec<DataStatusItem>,
 }
 
+#[derive(Debug, Clone, Serialize)]
+struct DataVerifyItem {
+    language: String,
+    source_id: String,
+    status: &'static str,
+    verifiable: bool,
+    manifest_path: String,
+    artifact_path: Option<String>,
+    expected_sha256: Option<String>,
+    actual_sha256: Option<String>,
+    reason: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct DataVerifyResponse {
+    mode: &'static str,
+    data_dir: String,
+    integrity_ok: bool,
+    passed: usize,
+    failed: usize,
+    skipped: usize,
+    items: Vec<DataVerifyItem>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct InstalledSourceManifest {
     schema_version: u8,
@@ -140,6 +164,7 @@ pub(crate) fn run_data_command(command: DataCommand) -> Result<(), CliError> {
     match command {
         DataCommand::List(options) => run_data_list(options),
         DataCommand::Status(options) => run_data_status(options),
+        DataCommand::Verify(options) => run_data_verify(options),
         DataCommand::Install(options) => run_data_install(options, false),
         DataCommand::Update(options) => run_data_install(options, true),
     }
@@ -367,6 +392,119 @@ fn run_data_status(options: DataStatusOptions) -> Result<(), CliError> {
     Ok(())
 }
 
+fn run_data_verify(options: DataVerifyOptions) -> Result<(), CliError> {
+    let sources = load_data_sources()?;
+    let data_dir = resolve_data_dir(options.data_dir.as_deref());
+    let state = load_data_state(&data_dir)?;
+
+    if let Some(source_id) = options.source_id.as_deref() {
+        let has_source = state.installs.iter().any(|record| {
+            record.source_id == source_id
+                && options
+                    .target
+                    .is_none_or(|target| record.language == target.as_str())
+        });
+        if !has_source {
+            return Err(CliError::config(format!(
+                "installed source '{}' was not found in data state",
+                source_id
+            )));
+        }
+    }
+
+    let mut items = state
+        .installs
+        .iter()
+        .filter(|record| {
+            options
+                .target
+                .is_none_or(|target| record.language == target.as_str())
+                && options
+                    .source_id
+                    .as_deref()
+                    .is_none_or(|source_id| source_id == record.source_id)
+        })
+        .map(|record| {
+            let source = sources.iter().find(|item| {
+                item.id == record.source_id && item.language.as_str() == record.language
+            });
+            build_verify_item(&data_dir, record, source)
+        })
+        .collect::<Vec<_>>();
+    items.sort_by(|left, right| {
+        left.language
+            .cmp(&right.language)
+            .then(left.source_id.cmp(&right.source_id))
+    });
+
+    let mut passed = 0_usize;
+    let mut failed = 0_usize;
+    let mut skipped = 0_usize;
+    for item in &items {
+        match item.status {
+            "ok" => passed += 1,
+            "skipped-no-artifact" | "skipped-no-checksum" => skipped += 1,
+            _ => failed += 1,
+        }
+    }
+    let integrity_ok = failed == 0;
+
+    if matches!(options.format, OutputFormat::Json) {
+        let payload = DataVerifyResponse {
+            mode: "data-verify",
+            data_dir: data_dir.to_string_lossy().to_string(),
+            integrity_ok,
+            passed,
+            failed,
+            skipped,
+            items,
+        };
+        let output = serde_json::to_string(&payload).map_err(|error| {
+            CliError::internal(format!("failed to serialize data verify: {error}"))
+        })?;
+        println!("{output}");
+    } else {
+        println!("data verify:");
+        println!("data dir: {}", data_dir.to_string_lossy());
+        println!(
+            "summary: passed:{} failed:{} skipped:{} integrity_ok:{}",
+            passed,
+            failed,
+            skipped,
+            if integrity_ok { "yes" } else { "no" }
+        );
+        for item in &items {
+            let artifact_path = item.artifact_path.as_ref().map_or("-", String::as_str);
+            println!(
+                "- {}/{} status:{} verifiable:{} manifest:{} artifact:{}",
+                item.language,
+                item.source_id,
+                item.status,
+                if item.verifiable { "yes" } else { "no" },
+                item.manifest_path,
+                artifact_path
+            );
+            if let Some(reason) = &item.reason {
+                println!("  reason: {reason}");
+            }
+            if let Some(expected) = &item.expected_sha256 {
+                println!("  expected_sha256: {expected}");
+            }
+            if let Some(actual) = &item.actual_sha256 {
+                println!("  actual_sha256: {actual}");
+            }
+        }
+    }
+
+    if integrity_ok {
+        Ok(())
+    } else {
+        Err(CliError::domain(format!(
+            "data verification failed for {failed} source(s)"
+        )))
+    }
+}
+
 fn load_data_sources() -> Result<Vec<DataSource>, CliError> {
     let raw: DataSourceCatalogRaw =
         serde_json::from_str(DATA_SOURCES_MANIFEST).map_err(|error| {
@@ -533,6 +671,206 @@ fn build_status_item(
         artifact_sha256: manifest.artifact_sha256,
         manifest_error: None,
     }
+}
+
+fn build_verify_item(
+    data_dir: &Path,
+    record: &InstallRecord,
+    source: Option<&DataSource>,
+) -> DataVerifyItem {
+    let source_dir = data_dir.join(&record.language).join(&record.source_id);
+    let manifest_path = source_dir.join("manifest.json");
+    if !manifest_path.exists() {
+        return DataVerifyItem {
+            language: record.language.clone(),
+            source_id: record.source_id.clone(),
+            status: "missing-manifest",
+            verifiable: false,
+            manifest_path: manifest_path.to_string_lossy().to_string(),
+            artifact_path: None,
+            expected_sha256: None,
+            actual_sha256: None,
+            reason: None,
+        };
+    }
+
+    let raw = match fs::read_to_string(&manifest_path) {
+        Ok(value) => value,
+        Err(error) => {
+            return DataVerifyItem {
+                language: record.language.clone(),
+                source_id: record.source_id.clone(),
+                status: "invalid-manifest",
+                verifiable: false,
+                manifest_path: manifest_path.to_string_lossy().to_string(),
+                artifact_path: None,
+                expected_sha256: None,
+                actual_sha256: None,
+                reason: Some(error.to_string()),
+            };
+        }
+    };
+
+    let manifest: InstalledSourceManifest = match serde_json::from_str(&raw) {
+        Ok(value) => value,
+        Err(error) => {
+            return DataVerifyItem {
+                language: record.language.clone(),
+                source_id: record.source_id.clone(),
+                status: "invalid-manifest",
+                verifiable: false,
+                manifest_path: manifest_path.to_string_lossy().to_string(),
+                artifact_path: None,
+                expected_sha256: None,
+                actual_sha256: None,
+                reason: Some(error.to_string()),
+            };
+        }
+    };
+
+    let Some(artifact_raw_path) = manifest.artifact_path else {
+        return DataVerifyItem {
+            language: record.language.clone(),
+            source_id: record.source_id.clone(),
+            status: "skipped-no-artifact",
+            verifiable: false,
+            manifest_path: manifest_path.to_string_lossy().to_string(),
+            artifact_path: None,
+            expected_sha256: source.and_then(|item| item.checksum_sha256.clone()),
+            actual_sha256: None,
+            reason: None,
+        };
+    };
+
+    let artifact_path = if Path::new(&artifact_raw_path).is_absolute() {
+        PathBuf::from(&artifact_raw_path)
+    } else {
+        source_dir.join(&artifact_raw_path)
+    };
+    if !artifact_path.exists() {
+        return DataVerifyItem {
+            language: record.language.clone(),
+            source_id: record.source_id.clone(),
+            status: "missing-artifact",
+            verifiable: true,
+            manifest_path: manifest_path.to_string_lossy().to_string(),
+            artifact_path: Some(artifact_path.to_string_lossy().to_string()),
+            expected_sha256: source
+                .and_then(|item| item.checksum_sha256.clone())
+                .or(manifest.artifact_sha256),
+            actual_sha256: None,
+            reason: None,
+        };
+    }
+
+    let actual_sha256 = match sha256_file_limited(&artifact_path) {
+        Ok(value) => value,
+        Err(reason) => {
+            return DataVerifyItem {
+                language: record.language.clone(),
+                source_id: record.source_id.clone(),
+                status: "artifact-read-error",
+                verifiable: true,
+                manifest_path: manifest_path.to_string_lossy().to_string(),
+                artifact_path: Some(artifact_path.to_string_lossy().to_string()),
+                expected_sha256: source
+                    .and_then(|item| item.checksum_sha256.clone())
+                    .or(manifest.artifact_sha256),
+                actual_sha256: None,
+                reason: Some(reason),
+            };
+        }
+    };
+
+    if let Some(manifest_sha) = manifest.artifact_sha256.as_deref() {
+        if manifest_sha != actual_sha256 {
+            return DataVerifyItem {
+                language: record.language.clone(),
+                source_id: record.source_id.clone(),
+                status: "checksum-mismatch",
+                verifiable: true,
+                manifest_path: manifest_path.to_string_lossy().to_string(),
+                artifact_path: Some(artifact_path.to_string_lossy().to_string()),
+                expected_sha256: Some(manifest_sha.to_string()),
+                actual_sha256: Some(actual_sha256),
+                reason: Some("manifest artifact_sha256 mismatch".to_string()),
+            };
+        }
+    }
+
+    if let Some(source_sha) = source.and_then(|item| item.checksum_sha256.as_deref()) {
+        if source_sha != actual_sha256 {
+            return DataVerifyItem {
+                language: record.language.clone(),
+                source_id: record.source_id.clone(),
+                status: "checksum-mismatch",
+                verifiable: true,
+                manifest_path: manifest_path.to_string_lossy().to_string(),
+                artifact_path: Some(artifact_path.to_string_lossy().to_string()),
+                expected_sha256: Some(source_sha.to_string()),
+                actual_sha256: Some(actual_sha256),
+                reason: Some("catalog checksum_sha256 mismatch".to_string()),
+            };
+        }
+    }
+
+    let expected_sha256 = source
+        .and_then(|item| item.checksum_sha256.clone())
+        .or(manifest.artifact_sha256);
+    if expected_sha256.is_none() {
+        return DataVerifyItem {
+            language: record.language.clone(),
+            source_id: record.source_id.clone(),
+            status: "skipped-no-checksum",
+            verifiable: false,
+            manifest_path: manifest_path.to_string_lossy().to_string(),
+            artifact_path: Some(artifact_path.to_string_lossy().to_string()),
+            expected_sha256: None,
+            actual_sha256: Some(actual_sha256),
+            reason: None,
+        };
+    }
+
+    DataVerifyItem {
+        language: record.language.clone(),
+        source_id: record.source_id.clone(),
+        status: "ok",
+        verifiable: true,
+        manifest_path: manifest_path.to_string_lossy().to_string(),
+        artifact_path: Some(artifact_path.to_string_lossy().to_string()),
+        expected_sha256,
+        actual_sha256: Some(actual_sha256),
+        reason: None,
+    }
+}
+
+fn sha256_file_limited(path: &Path) -> Result<String, String> {
+    let metadata = fs::metadata(path).map_err(|error| {
+        format!(
+            "failed to stat artifact file '{}': {error}",
+            path.to_string_lossy()
+        )
+    })?;
+    let file_len = usize::try_from(metadata.len()).map_err(|_| {
+        format!(
+            "artifact file is too large to verify: {}",
+            path.to_string_lossy()
+        )
+    })?;
+    if file_len > MAX_ARTIFACT_BYTES {
+        return Err(format!(
+            "artifact exceeds max allowed size ({} bytes): {}",
+            MAX_ARTIFACT_BYTES,
+            path.to_string_lossy()
+        ));
+    }
+    let bytes = fs::read(path).map_err(|error| {
+        format!(
+            "failed to read artifact file '{}': {error}",
+            path.to_string_lossy()
+        )
+    })?;
+    Ok(sha256_hex(&bytes))
 }
 
 fn parse_data_language(value: &str) -> Result<ProtoTarget, CliError> {

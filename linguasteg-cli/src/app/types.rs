@@ -21,6 +21,7 @@ pub(crate) enum Command {
 pub(crate) enum DataCommand {
     List(DataListOptions),
     Status(DataStatusOptions),
+    Verify(DataVerifyOptions),
     Install(DataInstallOptions),
     Update(DataInstallOptions),
 }
@@ -34,6 +35,13 @@ pub(crate) struct DataListOptions {
 pub(crate) struct DataStatusOptions {
     pub(crate) format: OutputFormat,
     pub(crate) target: Option<ProtoTarget>,
+    pub(crate) data_dir: Option<String>,
+}
+
+pub(crate) struct DataVerifyOptions {
+    pub(crate) format: OutputFormat,
+    pub(crate) target: Option<ProtoTarget>,
+    pub(crate) source_id: Option<String>,
     pub(crate) data_dir: Option<String>,
 }
 
