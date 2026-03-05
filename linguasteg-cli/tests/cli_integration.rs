@@ -595,6 +595,47 @@ fn data_update_marks_existing_install_as_updated() {
 }
 
 #[test]
+fn data_install_accepts_explicit_source_for_single_language() {
+    let data_dir = TempDataDir::create();
+    let output = run_lsteg_with_env(
+        &[
+            "data",
+            "install",
+            "--lang",
+            "fa",
+            "--source",
+            "fa-wordlist-mit",
+            "--format",
+            "json",
+            "--data-dir",
+            data_dir.as_str(),
+        ],
+        &[],
+    );
+    assert!(output.status.success());
+    let stdout = stdout_string(&output);
+    assert!(stdout.contains("\"source_id\":\"fa-wordlist-mit\""));
+}
+
+#[test]
+fn data_install_rejects_source_with_multi_language_target() {
+    let output = run_lsteg(&[
+        "data",
+        "install",
+        "--lang",
+        "fa,en",
+        "--source",
+        "fa-wordlist-mit",
+        "--format",
+        "json",
+    ]);
+    assert_eq!(output.status.code(), Some(2));
+    let stderr = stderr_string(&output);
+    assert!(stderr.contains("LSTEG-CLI-ARG-001"));
+    assert!(stderr.contains("--source can be used only with a single language in --lang"));
+}
+
+#[test]
 fn validate_json_reports_integrity_ok() {
     let encode_output = run_lsteg(&["encode", "--message", "salam", "--emit-trace"]);
     assert!(encode_output.status.success());

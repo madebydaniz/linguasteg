@@ -473,7 +473,9 @@ fn parse_data_install_command(
 ) -> Result<Option<Command>, CliError> {
     let mut format = env_output_format("LSTEG_FORMAT")?.unwrap_or(OutputFormat::Text);
     let mut targets: Option<Vec<ProtoTarget>> = None;
+    let mut source_id = None;
     let mut seen_lang = false;
+    let mut seen_source = false;
     let mut data_dir = env_optional("LSTEG_DATA_DIR");
     let mut seen_data_dir = false;
 
@@ -492,6 +494,15 @@ fn parse_data_install_command(
                 seen_lang = true;
                 let value = next_arg_value(&mut args, "--lang")?;
                 targets = Some(parse_data_lang_targets(&value)?);
+            }
+            "--source" => {
+                if seen_source {
+                    return Err(CliError::usage(
+                        "--source cannot be provided multiple times".to_string(),
+                    ));
+                }
+                seen_source = true;
+                source_id = Some(next_arg_value(&mut args, "--source")?);
             }
             "--data-dir" => {
                 if seen_data_dir {
@@ -521,6 +532,7 @@ fn parse_data_install_command(
     let options = DataInstallOptions {
         format,
         targets,
+        source_id,
         data_dir,
     };
     let command = if update {
@@ -983,11 +995,11 @@ pub(crate) fn write_usage(mut writer: impl Write) -> std::io::Result<()> {
     )?;
     writeln!(
         writer,
-        "       lsteg data install --lang <fa|en|fa,en> [--data-dir <path>] [--format text|json]"
+        "       lsteg data install --lang <fa|en|fa,en> [--source <id>] [--data-dir <path>] [--format text|json]"
     )?;
     writeln!(
         writer,
-        "       lsteg data update --lang <fa|en|fa,en> [--data-dir <path>] [--format text|json]"
+        "       lsteg data update --lang <fa|en|fa,en> [--source <id>] [--data-dir <path>] [--format text|json]"
     )?;
     writeln!(writer, "       lsteg demo <fa|en>")?;
     writeln!(
@@ -1254,6 +1266,7 @@ mod tests {
         assert_eq!(options.targets.len(), 2);
         assert_eq!(options.targets[0], ProtoTarget::Farsi);
         assert_eq!(options.targets[1], ProtoTarget::English);
+        assert!(options.source_id.is_none());
     }
 
     #[test]
@@ -1292,5 +1305,26 @@ mod tests {
         assert_eq!(options.target, Some(ProtoTarget::English));
         assert_eq!(options.data_dir.as_deref(), Some("/tmp/lsteg-data"));
         assert!(matches!(options.format, OutputFormat::Json));
+    }
+
+    #[test]
+    fn parse_data_update_command_sets_source_override() {
+        let command = parse_command(vec![
+            "data".to_string(),
+            "update".to_string(),
+            "--lang".to_string(),
+            "fa".to_string(),
+            "--source".to_string(),
+            "fa-wordlist-mit".to_string(),
+        ])
+        .expect("parse should succeed")
+        .expect("command should exist");
+
+        let Command::Data(DataCommand::Update(options)) = command else {
+            panic!("expected data update command");
+        };
+
+        assert_eq!(options.targets, vec![ProtoTarget::Farsi]);
+        assert_eq!(options.source_id.as_deref(), Some("fa-wordlist-mit"));
     }
 }

@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "sources": [
+    {
+      "id": "en-wordnet-princeton",
+      "language": "en",
+      "source_url": "https://wordnet.princeton.edu/",
+      "license": "Princeton WordNet License",
+      "version": "3.1",
+      "checksum_sha256": null,
+      "recommended": true
+    },
+    {
+      "id": "en-wordlist-wordnik",
+      "language": "en",
+      "source_url": "https://github.com/wordnik/wordlist",
+      "license": "MIT",
+      "version": "main",
+      "checksum_sha256": null,
+      "recommended": false
+    },
+    {
+      "id": "fa-wordlist-cc0",
+      "language": "fa",
+      "source_url": "https://github.com/jadijadi/persianwords",
+      "license": "CC0-1.0",
+      "version": "main",
+      "checksum_sha256": null,
+      "recommended": true
+    },
+    {
+      "id": "fa-wordlist-mit",
+      "language": "fa",
+      "source_url": "https://github.com/mvalipour/word-list-fa",
+      "license": "MIT",
+      "version": "main",
+      "checksum_sha256": null,
+      "recommended": false
+    },
+    {
+      "id": "fa-kaikki-wiktionary",
+      "language": "fa",
+      "source_url": "https://kaikki.org/dictionary/Persian/index.html",
+      "license": "CC-BY-SA-3.0 + GFDL",
+      "version": "latest",
+      "checksum_sha256": null,
+      "recommended": false
+    }
+  ]
+}

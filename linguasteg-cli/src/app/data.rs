@@ -1,3 +1,4 @@
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -8,66 +9,37 @@ use super::types::{
     CliError, DataCommand, DataInstallOptions, DataListOptions, OutputFormat, ProtoTarget,
 };
 
-#[derive(Debug, Clone, Copy)]
-struct DataSource {
-    id: &'static str,
-    language: ProtoTarget,
-    source_url: &'static str,
-    license: &'static str,
-    version: &'static str,
-    checksum_sha256: Option<&'static str>,
+const DATA_STATE_FILE: &str = "state.json";
+const DATA_SOURCES_MANIFEST: &str = include_str!("../../assets/data_sources.json");
+const MANIFEST_SCHEMA_VERSION: u8 = 1;
+
+#[derive(Debug, Clone, Deserialize)]
+struct DataSourceCatalogRaw {
+    schema_version: u8,
+    sources: Vec<DataSourceRaw>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct DataSourceRaw {
+    id: String,
+    language: String,
+    source_url: String,
+    license: String,
+    version: String,
+    checksum_sha256: Option<String>,
     recommended: bool,
 }
 
-const DATA_STATE_FILE: &str = "state.json";
-
-const DATA_SOURCES: [DataSource; 5] = [
-    DataSource {
-        id: "en-wordnet-princeton",
-        language: ProtoTarget::English,
-        source_url: "https://wordnet.princeton.edu/",
-        license: "Princeton WordNet License",
-        version: "3.1",
-        checksum_sha256: None,
-        recommended: true,
-    },
-    DataSource {
-        id: "en-wordlist-wordnik",
-        language: ProtoTarget::English,
-        source_url: "https://github.com/wordnik/wordlist",
-        license: "MIT",
-        version: "main",
-        checksum_sha256: None,
-        recommended: false,
-    },
-    DataSource {
-        id: "fa-wordlist-cc0",
-        language: ProtoTarget::Farsi,
-        source_url: "https://github.com/jadijadi/persianwords",
-        license: "CC0-1.0",
-        version: "main",
-        checksum_sha256: None,
-        recommended: true,
-    },
-    DataSource {
-        id: "fa-wordlist-mit",
-        language: ProtoTarget::Farsi,
-        source_url: "https://github.com/mvalipour/word-list-fa",
-        license: "MIT",
-        version: "main",
-        checksum_sha256: None,
-        recommended: false,
-    },
-    DataSource {
-        id: "fa-kaikki-wiktionary",
-        language: ProtoTarget::Farsi,
-        source_url: "https://kaikki.org/dictionary/Persian/index.html",
-        license: "CC-BY-SA-3.0 + GFDL",
-        version: "latest",
-        checksum_sha256: None,
-        recommended: false,
-    },
-];
+#[derive(Debug, Clone)]
+struct DataSource {
+    id: String,
+    language: ProtoTarget,
+    source_url: String,
+    license: String,
+    version: String,
+    checksum_sha256: Option<String>,
+    recommended: bool,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 struct DataState {
@@ -140,14 +112,15 @@ pub(crate) fn run_data_command(command: DataCommand) -> Result<(), CliError> {
 }
 
 fn run_data_list(options: DataListOptions) -> Result<(), CliError> {
+    let sources = load_data_sources()?;
     let data_dir = resolve_data_dir(options.data_dir.as_deref());
     let state = load_data_state(&data_dir)?;
-    let items = DATA_SOURCES
+    let items = sources
         .iter()
         .filter(|source| {
             options
                 .target
-                .is_none_or(|target| target == source.language)
+                .is_none_or(|target| source.language == target)
         })
         .map(|source| {
             let installed = state.installs.iter().any(|record| {
@@ -155,11 +128,11 @@ fn run_data_list(options: DataListOptions) -> Result<(), CliError> {
             });
             DataListItem {
                 language: source.language.as_str().to_string(),
-                source_id: source.id.to_string(),
-                version: source.version.to_string(),
-                source_url: source.source_url.to_string(),
-                license: source.license.to_string(),
-                checksum_sha256: source.checksum_sha256.map(str::to_string),
+                source_id: source.id.clone(),
+                version: source.version.clone(),
+                source_url: source.source_url.clone(),
+                license: source.license.clone(),
+                checksum_sha256: source.checksum_sha256.clone(),
                 recommended: source.recommended,
                 installed,
             }
@@ -196,6 +169,13 @@ fn run_data_list(options: DataListOptions) -> Result<(), CliError> {
 }
 
 fn run_data_install(options: DataInstallOptions, force_refresh: bool) -> Result<(), CliError> {
+    let sources = load_data_sources()?;
+    if options.source_id.is_some() && options.targets.len() != 1 {
+        return Err(CliError::usage(
+            "--source can be used only with a single language in --lang".to_string(),
+        ));
+    }
+
     let data_dir = resolve_data_dir(options.data_dir.as_deref());
     fs::create_dir_all(&data_dir).map_err(|error| {
         CliError::io(
@@ -210,18 +190,13 @@ fn run_data_install(options: DataInstallOptions, force_refresh: bool) -> Result<
     let mut items = Vec::with_capacity(options.targets.len());
 
     for target in &options.targets {
-        let source = recommended_source_for(*target).ok_or_else(|| {
-            CliError::config(format!(
-                "no recommended data source is registered for language '{}'",
-                target.as_str()
-            ))
-        })?;
+        let source = resolve_source_for_target(&sources, *target, options.source_id.as_deref())?;
         let status = upsert_install_state(&mut state, source, now, force_refresh);
         let manifest_path = write_install_manifest(&data_dir, source, now)?;
         items.push(DataInstallItem {
             language: source.language.as_str().to_string(),
-            source_id: source.id.to_string(),
-            version: source.version.to_string(),
+            source_id: source.id.clone(),
+            version: source.version.clone(),
             status: status.to_string(),
             manifest_path: manifest_path.to_string_lossy().to_string(),
         });
@@ -264,10 +239,117 @@ fn run_data_install(options: DataInstallOptions, force_refresh: bool) -> Result<
     Ok(())
 }
 
-fn recommended_source_for(target: ProtoTarget) -> Option<&'static DataSource> {
-    DATA_SOURCES
+fn load_data_sources() -> Result<Vec<DataSource>, CliError> {
+    let raw: DataSourceCatalogRaw =
+        serde_json::from_str(DATA_SOURCES_MANIFEST).map_err(|error| {
+            CliError::config(format!("invalid data sources manifest json: {error}"))
+        })?;
+    if raw.schema_version != MANIFEST_SCHEMA_VERSION {
+        return Err(CliError::config(format!(
+            "unsupported data sources manifest schema_version {} (expected {})",
+            raw.schema_version, MANIFEST_SCHEMA_VERSION
+        )));
+    }
+    if raw.sources.is_empty() {
+        return Err(CliError::config(
+            "data sources manifest does not contain any source entries".to_string(),
+        ));
+    }
+
+    let mut seen_ids = HashSet::new();
+    let mut source_count_by_language: HashMap<String, usize> = HashMap::new();
+    let mut recommended_count_by_language: HashMap<String, usize> = HashMap::new();
+    let mut sources = Vec::with_capacity(raw.sources.len());
+
+    for entry in raw.sources {
+        if !seen_ids.insert(entry.id.clone()) {
+            return Err(CliError::config(format!(
+                "data sources manifest has duplicate source id '{}'",
+                entry.id
+            )));
+        }
+        let language = parse_data_language(&entry.language)?;
+        *source_count_by_language
+            .entry(entry.language.clone())
+            .or_insert(0) += 1;
+        if entry.recommended {
+            *recommended_count_by_language
+                .entry(entry.language.clone())
+                .or_insert(0) += 1;
+        }
+        sources.push(DataSource {
+            id: entry.id,
+            language,
+            source_url: entry.source_url,
+            license: entry.license,
+            version: entry.version,
+            checksum_sha256: entry.checksum_sha256,
+            recommended: entry.recommended,
+        });
+    }
+
+    for (language_code, source_count) in source_count_by_language {
+        if source_count == 0 {
+            continue;
+        }
+        let recommended_count = recommended_count_by_language
+            .get(&language_code)
+            .copied()
+            .unwrap_or(0);
+        if recommended_count != 1 {
+            return Err(CliError::config(format!(
+                "data sources manifest must contain exactly one recommended source for language '{}' (found {})",
+                language_code, recommended_count
+            )));
+        }
+    }
+
+    Ok(sources)
+}
+
+fn parse_data_language(value: &str) -> Result<ProtoTarget, CliError> {
+    match value {
+        "fa" => Ok(ProtoTarget::Farsi),
+        "en" => Ok(ProtoTarget::English),
+        _ => Err(CliError::config(format!(
+            "unsupported language '{value}' in data sources manifest"
+        ))),
+    }
+}
+
+fn resolve_source_for_target<'a>(
+    sources: &'a [DataSource],
+    target: ProtoTarget,
+    source_id: Option<&str>,
+) -> Result<&'a DataSource, CliError> {
+    if let Some(source_id) = source_id {
+        let source = sources
+            .iter()
+            .find(|item| item.id == source_id)
+            .ok_or_else(|| {
+                CliError::config(format!(
+                    "unknown data source id '{source_id}' (use 'lsteg data list')"
+                ))
+            })?;
+        if source.language != target {
+            return Err(CliError::config(format!(
+                "source '{}' is not available for language '{}'",
+                source_id,
+                target.as_str()
+            )));
+        }
+        return Ok(source);
+    }
+
+    sources
         .iter()
-        .find(|source| source.language == target && source.recommended)
+        .find(|item| item.language == target && item.recommended)
+        .ok_or_else(|| {
+            CliError::config(format!(
+                "no recommended data source is registered for language '{}'",
+                target.as_str()
+            ))
+        })
 }
 
 fn resolve_data_dir(explicit: Option<&str>) -> PathBuf {
@@ -354,7 +436,7 @@ fn upsert_install_state<'a>(
     match existing {
         Some(record) => {
             if force_refresh {
-                record.version = source.version.to_string();
+                record.version = source.version.clone();
                 record.installed_at_epoch_sec = now;
                 "updated"
             } else {
@@ -364,8 +446,8 @@ fn upsert_install_state<'a>(
         None => {
             state.installs.push(InstallRecord {
                 language: source.language.as_str().to_string(),
-                source_id: source.id.to_string(),
-                version: source.version.to_string(),
+                source_id: source.id.clone(),
+                version: source.version.clone(),
                 installed_at_epoch_sec: now,
             });
             "installed"
@@ -379,7 +461,7 @@ fn write_install_manifest(
     installed_at_epoch_sec: u64,
 ) -> Result<PathBuf, CliError> {
     let language_dir = data_dir.join(source.language.as_str());
-    let source_dir = language_dir.join(source.id);
+    let source_dir = language_dir.join(&source.id);
     fs::create_dir_all(&source_dir).map_err(|error| {
         CliError::io(
             "failed to create source data directory",
@@ -391,11 +473,11 @@ fn write_install_manifest(
     let manifest = InstalledSourceManifest {
         schema_version: 1,
         language: source.language.as_str().to_string(),
-        source_id: source.id.to_string(),
-        source_url: source.source_url.to_string(),
-        version: source.version.to_string(),
-        license: source.license.to_string(),
-        checksum_sha256: source.checksum_sha256.map(str::to_string),
+        source_id: source.id.clone(),
+        source_url: source.source_url.clone(),
+        version: source.version.clone(),
+        license: source.license.clone(),
+        checksum_sha256: source.checksum_sha256.clone(),
         installed_at_epoch_sec,
     };
     let manifest_path = source_dir.join("manifest.json");
