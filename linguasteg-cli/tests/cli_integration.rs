@@ -152,6 +152,38 @@ impl Drop for TempDataDir {
     }
 }
 
+struct TempArtifactFile {
+    path: PathBuf,
+}
+
+impl TempArtifactFile {
+    fn create(contents: &[u8]) -> Self {
+        let mut path = std::env::temp_dir();
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock should be after unix epoch")
+            .as_nanos();
+        path.push(format!("linguasteg-artifact-{nanos}.bin"));
+        std::fs::write(&path, contents).expect("failed to write temp artifact file");
+        Self { path }
+    }
+
+    fn as_file_url(&self) -> String {
+        format!(
+            "file://{}",
+            self.path
+                .to_str()
+                .expect("temp artifact path must be valid utf8")
+        )
+    }
+}
+
+impl Drop for TempArtifactFile {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.path);
+    }
+}
+
 #[test]
 fn encode_json_outputs_proto_encode_mode() {
     let output = run_lsteg(&["encode", "--message", "salam", "--format", "json"]);
@@ -633,6 +665,56 @@ fn data_install_rejects_source_with_multi_language_target() {
     let stderr = stderr_string(&output);
     assert!(stderr.contains("LSTEG-CLI-ARG-001"));
     assert!(stderr.contains("--source can be used only with a single language in --lang"));
+}
+
+#[test]
+fn data_install_with_artifact_url_stores_artifact_and_hash() {
+    let data_dir = TempDataDir::create();
+    let artifact = TempArtifactFile::create(b"linguasteg-dataset");
+    let artifact_url = artifact.as_file_url();
+    let output = run_lsteg_with_env(
+        &[
+            "data",
+            "install",
+            "--lang",
+            "en",
+            "--source",
+            "en-wordlist-wordnik",
+            "--artifact-url",
+            &artifact_url,
+            "--format",
+            "json",
+            "--data-dir",
+            data_dir.as_str(),
+        ],
+        &[],
+    );
+    assert!(output.status.success());
+    let stdout = stdout_string(&output);
+    assert!(stdout.contains("\"source_id\":\"en-wordlist-wordnik\""));
+    assert!(stdout.contains("\"artifact_sha256\":\""));
+
+    let artifact_path = std::path::Path::new(data_dir.as_str())
+        .join("en")
+        .join("en-wordlist-wordnik")
+        .join("artifact.bin");
+    assert!(artifact_path.exists());
+}
+
+#[test]
+fn data_install_rejects_artifact_url_with_multi_language_target() {
+    let output = run_lsteg(&[
+        "data",
+        "install",
+        "--lang",
+        "fa,en",
+        "--artifact-url",
+        "file:///tmp/anything.bin",
+    ]);
+    assert_eq!(output.status.code(), Some(2));
+    let stderr = stderr_string(&output);
+    assert!(stderr.contains("LSTEG-CLI-ARG-001"));
+    assert!(stderr.contains("--artifact-url can be used only with a single language in --lang"));
 }
 
 #[test]

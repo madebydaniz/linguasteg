@@ -474,8 +474,10 @@ fn parse_data_install_command(
     let mut format = env_output_format("LSTEG_FORMAT")?.unwrap_or(OutputFormat::Text);
     let mut targets: Option<Vec<ProtoTarget>> = None;
     let mut source_id = None;
+    let mut artifact_url = None;
     let mut seen_lang = false;
     let mut seen_source = false;
+    let mut seen_artifact_url = false;
     let mut data_dir = env_optional("LSTEG_DATA_DIR");
     let mut seen_data_dir = false;
 
@@ -503,6 +505,15 @@ fn parse_data_install_command(
                 }
                 seen_source = true;
                 source_id = Some(next_arg_value(&mut args, "--source")?);
+            }
+            "--artifact-url" => {
+                if seen_artifact_url {
+                    return Err(CliError::usage(
+                        "--artifact-url cannot be provided multiple times".to_string(),
+                    ));
+                }
+                seen_artifact_url = true;
+                artifact_url = Some(next_arg_value(&mut args, "--artifact-url")?);
             }
             "--data-dir" => {
                 if seen_data_dir {
@@ -533,6 +544,7 @@ fn parse_data_install_command(
         format,
         targets,
         source_id,
+        artifact_url,
         data_dir,
     };
     let command = if update {
@@ -995,11 +1007,11 @@ pub(crate) fn write_usage(mut writer: impl Write) -> std::io::Result<()> {
     )?;
     writeln!(
         writer,
-        "       lsteg data install --lang <fa|en|fa,en> [--source <id>] [--data-dir <path>] [--format text|json]"
+        "       lsteg data install --lang <fa|en|fa,en> [--source <id>] [--artifact-url <url>] [--data-dir <path>] [--format text|json]"
     )?;
     writeln!(
         writer,
-        "       lsteg data update --lang <fa|en|fa,en> [--source <id>] [--data-dir <path>] [--format text|json]"
+        "       lsteg data update --lang <fa|en|fa,en> [--source <id>] [--artifact-url <url>] [--data-dir <path>] [--format text|json]"
     )?;
     writeln!(writer, "       lsteg demo <fa|en>")?;
     writeln!(
@@ -1316,6 +1328,8 @@ mod tests {
             "fa".to_string(),
             "--source".to_string(),
             "fa-wordlist-mit".to_string(),
+            "--artifact-url".to_string(),
+            "file:///tmp/fa-words.txt".to_string(),
         ])
         .expect("parse should succeed")
         .expect("command should exist");
@@ -1326,5 +1340,9 @@ mod tests {
 
         assert_eq!(options.targets, vec![ProtoTarget::Farsi]);
         assert_eq!(options.source_id.as_deref(), Some("fa-wordlist-mit"));
+        assert_eq!(
+            options.artifact_url.as_deref(),
+            Some("file:///tmp/fa-words.txt")
+        );
     }
 }

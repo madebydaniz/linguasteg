@@ -19,3 +19,5 @@ linguasteg-core.workspace = true
 linguasteg-models.workspace = true
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"
+sha2 = "0.10.9"
+ureq = { version = "2.12.1", default-features = true }

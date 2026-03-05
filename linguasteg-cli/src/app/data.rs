@@ -1,5 +1,6 @@
 use std::collections::{HashMap, HashSet};
 use std::fs;
+use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -12,6 +13,7 @@ use super::types::{
 const DATA_STATE_FILE: &str = "state.json";
 const DATA_SOURCES_MANIFEST: &str = include_str!("../../assets/data_sources.json");
 const MANIFEST_SCHEMA_VERSION: u8 = 1;
+const MAX_ARTIFACT_BYTES: usize = 64 * 1024 * 1024;
 
 #[derive(Debug, Clone, Deserialize)]
 struct DataSourceCatalogRaw {
@@ -74,6 +76,8 @@ struct DataInstallItem {
     version: String,
     status: String,
     manifest_path: String,
+    artifact_path: Option<String>,
+    artifact_sha256: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -100,6 +104,10 @@ struct InstalledSourceManifest {
     version: String,
     license: String,
     checksum_sha256: Option<String>,
+    artifact_url: Option<String>,
+    artifact_path: Option<String>,
+    artifact_sha256: Option<String>,
+    artifact_bytes: Option<usize>,
     installed_at_epoch_sec: u64,
 }
 
@@ -175,6 +183,11 @@ fn run_data_install(options: DataInstallOptions, force_refresh: bool) -> Result<
             "--source can be used only with a single language in --lang".to_string(),
         ));
     }
+    if options.artifact_url.is_some() && options.targets.len() != 1 {
+        return Err(CliError::usage(
+            "--artifact-url can be used only with a single language in --lang".to_string(),
+        ));
+    }
 
     let data_dir = resolve_data_dir(options.data_dir.as_deref());
     fs::create_dir_all(&data_dir).map_err(|error| {
@@ -192,13 +205,28 @@ fn run_data_install(options: DataInstallOptions, force_refresh: bool) -> Result<
     for target in &options.targets {
         let source = resolve_source_for_target(&sources, *target, options.source_id.as_deref())?;
         let status = upsert_install_state(&mut state, source, now, force_refresh);
-        let manifest_path = write_install_manifest(&data_dir, source, now)?;
+        let artifact = options
+            .artifact_url
+            .as_deref()
+            .map(|url| fetch_and_store_artifact(&data_dir, source, url))
+            .transpose()?;
+        let manifest_path = write_install_manifest(
+            &data_dir,
+            source,
+            now,
+            options.artifact_url.as_deref(),
+            artifact.as_ref(),
+        )?;
         items.push(DataInstallItem {
             language: source.language.as_str().to_string(),
             source_id: source.id.clone(),
             version: source.version.clone(),
             status: status.to_string(),
             manifest_path: manifest_path.to_string_lossy().to_string(),
+            artifact_path: artifact
+                .as_ref()
+                .map(|item| item.path.to_string_lossy().to_string()),
+            artifact_sha256: artifact.as_ref().map(|item| item.sha256.clone()),
         });
     }
 
@@ -231,10 +259,22 @@ fn run_data_install(options: DataInstallOptions, force_refresh: bool) -> Result<
     println!("data dir: {}", data_dir.to_string_lossy());
     println!("note: {note}");
     for item in items {
+        let artifact_suffix = item
+            .artifact_path
+            .as_ref()
+            .map_or_else(String::new, |path| format!(" artifact:{path}"));
         println!(
-            "- {}/{} version:{} status:{} manifest:{}",
-            item.language, item.source_id, item.version, item.status, item.manifest_path
+            "- {}/{} version:{} status:{} manifest:{}{}",
+            item.language,
+            item.source_id,
+            item.version,
+            item.status,
+            item.manifest_path,
+            artifact_suffix
         );
+        if let Some(sha256) = &item.artifact_sha256 {
+            println!("  sha256: {sha256}");
+        }
     }
     Ok(())
 }
@@ -459,6 +499,8 @@ fn write_install_manifest(
     data_dir: &Path,
     source: &DataSource,
     installed_at_epoch_sec: u64,
+    artifact_url: Option<&str>,
+    artifact: Option<&StoredArtifact>,
 ) -> Result<PathBuf, CliError> {
     let language_dir = data_dir.join(source.language.as_str());
     let source_dir = language_dir.join(&source.id);
@@ -478,6 +520,12 @@ fn write_install_manifest(
         version: source.version.clone(),
         license: source.license.clone(),
         checksum_sha256: source.checksum_sha256.clone(),
+        artifact_url: artifact_url.map(ToString::to_string),
+        artifact_path: artifact
+            .as_ref()
+            .map(|item| item.path.to_string_lossy().to_string()),
+        artifact_sha256: artifact.as_ref().map(|item| item.sha256.clone()),
+        artifact_bytes: artifact.as_ref().map(|item| item.byte_len),
         installed_at_epoch_sec,
     };
     let manifest_path = source_dir.join("manifest.json");
@@ -492,4 +540,129 @@ fn write_install_manifest(
         )
     })?;
     Ok(manifest_path)
+}
+
+#[derive(Debug, Clone)]
+struct StoredArtifact {
+    path: PathBuf,
+    sha256: String,
+    byte_len: usize,
+}
+
+fn fetch_and_store_artifact(
+    data_dir: &Path,
+    source: &DataSource,
+    artifact_url: &str,
+) -> Result<StoredArtifact, CliError> {
+    let bytes = read_artifact_bytes(artifact_url)?;
+    let sha256 = sha256_hex(&bytes);
+    let source_dir = data_dir.join(source.language.as_str()).join(&source.id);
+    fs::create_dir_all(&source_dir).map_err(|error| {
+        CliError::io(
+            "failed to create source data directory",
+            Some(&source_dir.to_string_lossy()),
+            error,
+        )
+    })?;
+    let artifact_path = source_dir.join("artifact.bin");
+    fs::write(&artifact_path, &bytes).map_err(|error| {
+        CliError::io(
+            "failed to write source artifact",
+            Some(&artifact_path.to_string_lossy()),
+            error,
+        )
+    })?;
+    Ok(StoredArtifact {
+        path: artifact_path,
+        sha256,
+        byte_len: bytes.len(),
+    })
+}
+
+fn read_artifact_bytes(url: &str) -> Result<Vec<u8>, CliError> {
+    if let Some(path) = url.strip_prefix("file://") {
+        return read_local_file_limited(Path::new(path));
+    }
+    if let Some(path) = url.strip_prefix("path://") {
+        return read_local_file_limited(Path::new(path));
+    }
+    if url.starts_with('/') {
+        return read_local_file_limited(Path::new(url));
+    }
+    if url.starts_with("http://") || url.starts_with("https://") {
+        return read_http_bytes(url);
+    }
+    Err(CliError::input(format!(
+        "unsupported artifact url '{url}' (supported: file://, path://, absolute path, http://, https://)"
+    )))
+}
+
+fn read_local_file_limited(path: &Path) -> Result<Vec<u8>, CliError> {
+    let metadata = fs::metadata(path).map_err(|error| {
+        CliError::io(
+            "failed to stat artifact file",
+            Some(&path.to_string_lossy()),
+            error,
+        )
+    })?;
+    let file_len = usize::try_from(metadata.len()).map_err(|_| {
+        CliError::input(format!(
+            "artifact file is too large to load: {}",
+            path.to_string_lossy()
+        ))
+    })?;
+    if file_len > MAX_ARTIFACT_BYTES {
+        return Err(CliError::input(format!(
+            "artifact exceeds max allowed size ({} bytes): {}",
+            MAX_ARTIFACT_BYTES,
+            path.to_string_lossy()
+        )));
+    }
+    fs::read(path).map_err(|error| {
+        CliError::io(
+            "failed to read artifact file",
+            Some(&path.to_string_lossy()),
+            error,
+        )
+    })
+}
+
+fn read_http_bytes(url: &str) -> Result<Vec<u8>, CliError> {
+    let response = ureq::get(url)
+        .call()
+        .map_err(|error| CliError::io("failed to download artifact url", Some(url), error))?;
+    let mut reader = response.into_reader();
+    let mut buffer = Vec::new();
+    reader.read_to_end(&mut buffer).map_err(|error| {
+        CliError::io("failed to read downloaded artifact bytes", Some(url), error)
+    })?;
+    if buffer.len() > MAX_ARTIFACT_BYTES {
+        return Err(CliError::input(format!(
+            "downloaded artifact exceeds max allowed size ({} bytes): {url}",
+            MAX_ARTIFACT_BYTES
+        )));
+    }
+    Ok(buffer)
+}
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    use sha2::{Digest, Sha256};
+
+    let mut hasher = Sha256::new();
+    hasher.update(bytes);
+    let digest = hasher.finalize();
+    let mut out = String::with_capacity(digest.len() * 2);
+    for byte in digest {
+        out.push(hex_char(byte >> 4));
+        out.push(hex_char(byte & 0x0f));
+    }
+    out
+}
+
+fn hex_char(value: u8) -> char {
+    match value {
+        0..=9 => (b'0' + value) as char,
+        10..=15 => (b'a' + (value - 10)) as char,
+        _ => '0',
+    }
 }

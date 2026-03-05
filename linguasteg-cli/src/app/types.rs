@@ -34,6 +34,7 @@ pub(crate) struct DataInstallOptions {
     pub(crate) format: OutputFormat,
     pub(crate) targets: Vec<ProtoTarget>,
     pub(crate) source_id: Option<String>,
+    pub(crate) artifact_url: Option<String>,
     pub(crate) data_dir: Option<String>,
 }
 
