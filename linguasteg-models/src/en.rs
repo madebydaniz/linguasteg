@@ -215,11 +215,11 @@ fn map_basic_svo_frame(
     let object_value = symbolic_value_for_slot(frame, "object")?;
     let adjective_value = symbolic_value_for_slot(frame, "adjective")?;
     let verb_value = symbolic_value_for_slot(frame, "verb")?;
+    let verb = select_verb_surface(profile, verb_value, object_value);
     let subject = select_form(subject_forms(), symbolic_value_for_slot(frame, "subject")?);
     let object = select_object_surface(profile, object_value, verb_value);
     let object_class = object_class(object_lexeme_for_value(object_value).canonical);
     let adjective = select_adjective_surface(profile, adjective_value, object_class, object_value);
-    let verb = select_form(verb_forms(), verb_value);
 
     Ok(RealizationPlan {
         template_id: TemplateId::new("en-basic-svo")?,
@@ -238,13 +238,13 @@ fn map_time_location_svo_frame(
 ) -> CoreResult<RealizationPlan> {
     let object_value = symbolic_value_for_slot(frame, "object")?;
     let verb_value = symbolic_value_for_slot(frame, "verb")?;
+    let verb = select_verb_surface(profile, verb_value, object_value);
     let subject = select_form(subject_forms(), symbolic_value_for_slot(frame, "subject")?);
     let time = select_form(time_forms(), symbolic_value_for_slot(frame, "time")?);
     let location = select_form(
         location_forms(),
         symbolic_value_for_slot(frame, "location")?,
     );
-    let verb = select_form(verb_forms(), verb_value);
     let object = select_object_surface(profile, object_value, verb_value);
 
     Ok(RealizationPlan {
@@ -339,7 +339,7 @@ fn symbolic_value_for_basic_plan_slot(plan: &RealizationPlan, slot: &str) -> Cor
         }
         "verb" => {
             let assignment = assignment_by_slot(plan, "verb")?;
-            surface_index(verb_forms(), &assignment.surface)
+            verb_surface_index(&assignment.surface)
         }
         _ => Err(CoreError::InvalidSymbolicPlan(format!(
             "unsupported slot '{slot}' for template '{}'",
@@ -371,7 +371,7 @@ fn symbolic_value_for_time_location_plan_slot(
         }
         "verb" => {
             let assignment = assignment_by_slot(plan, "verb")?;
-            surface_index(verb_forms(), &assignment.surface)
+            verb_surface_index(&assignment.surface)
         }
         _ => Err(CoreError::InvalidSymbolicPlan(format!(
             "unsupported slot '{slot}' for template '{}'",
@@ -444,8 +444,7 @@ fn parse_english_sentence_to_plan(sentence: &str) -> CoreResult<RealizationPlan>
 fn parse_basic_svo_sentence(sentence: &str) -> CoreResult<RealizationPlan> {
     let (subject, rest) = consume_form_prefix(sentence, subject_forms())
         .ok_or_else(|| unsupported_shape(sentence))?;
-    let (verb, rest) =
-        consume_form_prefix(rest, verb_forms()).ok_or_else(|| unsupported_shape(sentence))?;
+    let (verb, rest) = consume_verb_prefix(rest).ok_or_else(|| unsupported_shape(sentence))?;
     let (adjective, rest) =
         consume_adjective_prefix(rest).ok_or_else(|| unsupported_shape(sentence))?;
     let (object, rest) = consume_object_prefix(rest).ok_or_else(|| unsupported_shape(sentence))?;
@@ -481,8 +480,7 @@ fn parse_time_location_svo_sentence(sentence: &str) -> CoreResult<RealizationPla
         return Err(unsupported_shape(sentence));
     }
 
-    let (verb, rest) =
-        consume_form_prefix(right, verb_forms()).ok_or_else(|| unsupported_shape(sentence))?;
+    let (verb, rest) = consume_verb_prefix(right).ok_or_else(|| unsupported_shape(sentence))?;
     let (object, rest) = consume_object_prefix(rest).ok_or_else(|| unsupported_shape(sentence))?;
 
     if !rest.trim().is_empty() {
@@ -563,6 +561,34 @@ fn consume_adjective_prefix<'a>(input: &'a str) -> Option<(&'static str, &'a str
     let mut best_match: Option<(&'static str, &'a str, usize)> = None;
 
     for lexeme in adjective_lexemes() {
+        for &form in lexeme.accepted_forms {
+            let Some(rest) = trimmed.strip_prefix(form) else {
+                continue;
+            };
+
+            if !rest.is_empty() && !rest.starts_with(' ') {
+                continue;
+            }
+
+            let candidate = (lexeme.canonical, rest.trim_start(), form.len());
+            let should_replace = match best_match {
+                Some((_, _, best_len)) => form.len() > best_len,
+                None => true,
+            };
+            if should_replace {
+                best_match = Some(candidate);
+            }
+        }
+    }
+
+    best_match.map(|(canonical, rest, _)| (canonical, rest))
+}
+
+fn consume_verb_prefix<'a>(input: &'a str) -> Option<(&'static str, &'a str)> {
+    let trimmed = input.trim_start();
+    let mut best_match: Option<(&'static str, &'a str, usize)> = None;
+
+    for lexeme in verb_lexemes() {
         for &form in lexeme.accepted_forms {
             let Some(rest) = trimmed.strip_prefix(form) else {
                 continue;
@@ -942,7 +968,7 @@ fn object_lexeme_for_value(value: u32) -> &'static EnglishObjectLexeme {
 
 fn select_object_surface(profile: EnglishEncodeProfile, value: u32, verb_value: u32) -> String {
     let lexeme = object_lexeme_for_value(value);
-    let verb_index = (verb_value as usize) % verb_forms().len();
+    let verb_index = (verb_value as usize) % verb_lexemes().len();
     let base_surface = match (lexeme.canonical, verb_index) {
         ("record", 16) => "entry",
         ("draft", 10) => "outline",
@@ -1154,6 +1180,213 @@ fn adjective_forms() -> &'static [&'static str] {
     ]
 }
 
+#[derive(Debug, Clone, Copy)]
+struct EnglishVerbLexeme {
+    canonical: &'static str,
+    accepted_forms: &'static [&'static str],
+}
+
+fn verb_lexemes() -> &'static [EnglishVerbLexeme] {
+    const VERB_LEXEMES: [EnglishVerbLexeme; 32] = [
+        EnglishVerbLexeme {
+            canonical: "buys",
+            accepted_forms: &["buys", "acquires"],
+        },
+        EnglishVerbLexeme {
+            canonical: "writes",
+            accepted_forms: &["writes", "composes"],
+        },
+        EnglishVerbLexeme {
+            canonical: "reads",
+            accepted_forms: &["reads", "peruses"],
+        },
+        EnglishVerbLexeme {
+            canonical: "sees",
+            accepted_forms: &["sees", "observes"],
+        },
+        EnglishVerbLexeme {
+            canonical: "keeps",
+            accepted_forms: &["keeps", "retains"],
+        },
+        EnglishVerbLexeme {
+            canonical: "builds",
+            accepted_forms: &["builds", "crafts"],
+        },
+        EnglishVerbLexeme {
+            canonical: "finds",
+            accepted_forms: &["finds"],
+        },
+        EnglishVerbLexeme {
+            canonical: "moves",
+            accepted_forms: &["moves"],
+        },
+        EnglishVerbLexeme {
+            canonical: "sends",
+            accepted_forms: &["sends"],
+        },
+        EnglishVerbLexeme {
+            canonical: "brings",
+            accepted_forms: &["brings"],
+        },
+        EnglishVerbLexeme {
+            canonical: "drafts",
+            accepted_forms: &["drafts"],
+        },
+        EnglishVerbLexeme {
+            canonical: "reviews",
+            accepted_forms: &["reviews", "considers"],
+        },
+        EnglishVerbLexeme {
+            canonical: "files",
+            accepted_forms: &["files"],
+        },
+        EnglishVerbLexeme {
+            canonical: "studies",
+            accepted_forms: &["studies", "examines"],
+        },
+        EnglishVerbLexeme {
+            canonical: "cleans",
+            accepted_forms: &["cleans"],
+        },
+        EnglishVerbLexeme {
+            canonical: "paints",
+            accepted_forms: &["paints"],
+        },
+        EnglishVerbLexeme {
+            canonical: "records",
+            accepted_forms: &["records", "chronicles"],
+        },
+        EnglishVerbLexeme {
+            canonical: "prepares",
+            accepted_forms: &["prepares"],
+        },
+        EnglishVerbLexeme {
+            canonical: "arranges",
+            accepted_forms: &["arranges"],
+        },
+        EnglishVerbLexeme {
+            canonical: "orders",
+            accepted_forms: &["orders", "requests"],
+        },
+        EnglishVerbLexeme {
+            canonical: "packs",
+            accepted_forms: &["packs"],
+        },
+        EnglishVerbLexeme {
+            canonical: "repairs",
+            accepted_forms: &["repairs"],
+        },
+        EnglishVerbLexeme {
+            canonical: "tracks",
+            accepted_forms: &["tracks"],
+        },
+        EnglishVerbLexeme {
+            canonical: "updates",
+            accepted_forms: &["updates"],
+        },
+        EnglishVerbLexeme {
+            canonical: "shares",
+            accepted_forms: &["shares"],
+        },
+        EnglishVerbLexeme {
+            canonical: "stores",
+            accepted_forms: &["stores"],
+        },
+        EnglishVerbLexeme {
+            canonical: "edits",
+            accepted_forms: &["edits"],
+        },
+        EnglishVerbLexeme {
+            canonical: "prints",
+            accepted_forms: &["prints"],
+        },
+        EnglishVerbLexeme {
+            canonical: "checks",
+            accepted_forms: &["checks"],
+        },
+        EnglishVerbLexeme {
+            canonical: "labels",
+            accepted_forms: &["labels"],
+        },
+        EnglishVerbLexeme {
+            canonical: "folds",
+            accepted_forms: &["folds"],
+        },
+        EnglishVerbLexeme {
+            canonical: "copies",
+            accepted_forms: &["copies"],
+        },
+    ];
+
+    &VERB_LEXEMES
+}
+
+fn verb_lexeme_for_value(value: u32) -> &'static EnglishVerbLexeme {
+    let index = (value as usize) % verb_lexemes().len();
+    &verb_lexemes()[index]
+}
+
+fn select_verb_surface(profile: EnglishEncodeProfile, value: u32, object_value: u32) -> String {
+    let lexeme = verb_lexeme_for_value(value);
+    let profile_surface = author_verb_variant(profile, lexeme.canonical, value, object_value);
+    profile_surface.unwrap_or(lexeme.canonical).to_string()
+}
+
+fn author_verb_variant(
+    profile: EnglishEncodeProfile,
+    canonical: &str,
+    value: u32,
+    object_value: u32,
+) -> Option<&'static str> {
+    if !is_light_profile_variant(value, object_value as usize, 3) {
+        return None;
+    }
+
+    match profile {
+        EnglishEncodeProfile::ShakespeareInspiredLight => match canonical {
+            "writes" => Some("composes"),
+            "reads" => Some("peruses"),
+            "records" => Some("chronicles"),
+            _ => None,
+        },
+        EnglishEncodeProfile::DickensInspiredLight => match canonical {
+            "builds" => Some("crafts"),
+            "studies" => Some("examines"),
+            _ => None,
+        },
+        EnglishEncodeProfile::AustenInspiredLight => match canonical {
+            "reviews" => Some("considers"),
+            "orders" => Some("requests"),
+            _ => None,
+        },
+        EnglishEncodeProfile::NeutralPrototype => None,
+    }
+}
+
+fn verb_surface_index(surface: &str) -> CoreResult<u32> {
+    let normalized = surface.trim();
+    let idx = verb_lexemes()
+        .iter()
+        .position(|lexeme| {
+            lexeme
+                .accepted_forms
+                .iter()
+                .any(|form| form.eq_ignore_ascii_case(normalized))
+        })
+        .ok_or_else(|| {
+            CoreError::InvalidSymbolicPlan(format!(
+                "unknown surface value '{normalized}' in symbolic inventory"
+            ))
+        })?;
+
+    u32::try_from(idx).map_err(|_| {
+        CoreError::InvalidSymbolicPlan(format!(
+            "surface index {idx} is too large for symbolic value conversion"
+        ))
+    })
+}
+
+#[cfg(test)]
 fn verb_forms() -> &'static [&'static str] {
     &[
         "buys", "writes", "reads", "sees", "keeps", "builds", "finds", "moves", "sends", "brings",
@@ -1456,6 +1689,27 @@ mod tests {
 
         assert_eq!(first_object.surface, "journal");
         assert_eq!(second_object.surface, "dossier");
+    }
+
+    #[test]
+    fn english_text_parser_accepts_profile_verb_aliases() {
+        let text = "the writer composes quiet letter. the teacher today at home, considers report.";
+        let plans = parse_english_prototype_text(text).expect("profile verb aliases should parse");
+
+        assert_eq!(plans.len(), 2);
+        let first_verb = plans[0]
+            .assignments
+            .iter()
+            .find(|assignment| assignment.slot.as_str() == "verb")
+            .expect("verb assignment should exist");
+        let second_verb = plans[1]
+            .assignments
+            .iter()
+            .find(|assignment| assignment.slot.as_str() == "verb")
+            .expect("verb assignment should exist");
+
+        assert_eq!(first_verb.surface, "writes");
+        assert_eq!(second_verb.surface, "reviews");
     }
 
     #[test]
