@@ -1,11 +1,11 @@
 use std::io::Write;
 
 use super::types::{
-    AnalyzeOptions, CatalogQueryOptions, CliError, Command, DataCommand, DataDoctorOptions,
-    DataExportManifestOptions, DataImportManifestOptions, DataInstallOptions, DataListOptions,
-    DataPinOptions, DataStatusOptions, DataVerifyOptions, DecodeInputMode, DecodeOptions,
-    DemoTarget, EncodeOptions, OutputFormat, ProfileQueryOptions, ProtoTarget, SchemaQueryOptions,
-    TemplateQueryOptions, ValidateOptions,
+    AnalyzeOptions, CatalogQueryOptions, CliError, Command, DataCleanOptions, DataCommand,
+    DataDoctorOptions, DataExportManifestOptions, DataImportManifestOptions, DataInstallOptions,
+    DataListOptions, DataPinOptions, DataStatusOptions, DataVerifyOptions, DecodeInputMode,
+    DecodeOptions, DemoTarget, EncodeOptions, OutputFormat, ProfileQueryOptions, ProtoTarget,
+    SchemaQueryOptions, TemplateQueryOptions, ValidateOptions,
 };
 
 pub(crate) fn parse_command(args: Vec<String>) -> Result<Option<Command>, CliError> {
@@ -410,7 +410,7 @@ fn parse_schemas_command(args: impl Iterator<Item = String>) -> Result<Option<Co
 fn parse_data_command(mut args: impl Iterator<Item = String>) -> Result<Option<Command>, CliError> {
     let Some(subcommand) = args.next() else {
         return Err(CliError::usage(
-            "data subcommand is required (supported: list, status, verify, doctor, pin, export-manifest, import-manifest, install, update)"
+            "data subcommand is required (supported: list, status, verify, doctor, clean, pin, export-manifest, import-manifest, install, update)"
                 .to_string(),
         ));
     };
@@ -423,13 +423,14 @@ fn parse_data_command(mut args: impl Iterator<Item = String>) -> Result<Option<C
         "status" => parse_data_status_command(args),
         "verify" => parse_data_verify_command(args),
         "doctor" => parse_data_doctor_command(args),
+        "clean" => parse_data_clean_command(args),
         "pin" => parse_data_pin_command(args),
         "export-manifest" => parse_data_export_manifest_command(args),
         "import-manifest" => parse_data_import_manifest_command(args),
         "install" => parse_data_install_command(args, false),
         "update" => parse_data_install_command(args, true),
         _ => Err(CliError::usage(format!(
-            "unknown data subcommand: {subcommand} (supported: list, status, verify, doctor, pin, export-manifest, import-manifest, install, update)"
+            "unknown data subcommand: {subcommand} (supported: list, status, verify, doctor, clean, pin, export-manifest, import-manifest, install, update)"
         ))),
     }
 }
@@ -642,6 +643,72 @@ fn parse_data_doctor_command(
             data_dir,
         },
     ))))
+}
+
+fn parse_data_clean_command(
+    mut args: impl Iterator<Item = String>,
+) -> Result<Option<Command>, CliError> {
+    let mut format = env_output_format("LSTEG_FORMAT")?.unwrap_or(OutputFormat::Text);
+    let mut target = None;
+    let mut source_id = None;
+    let mut apply = false;
+    let mut seen_lang = false;
+    let mut seen_source = false;
+    let mut seen_apply = false;
+    let mut data_dir = env_optional("LSTEG_DATA_DIR");
+    let mut seen_data_dir = false;
+
+    while let Some(arg) = args.next() {
+        match arg.as_str() {
+            "--help" | "-h" => return Ok(None),
+            "--format" => {
+                parse_output_format_arg(&mut args, &mut format)?;
+            }
+            "--lang" => {
+                parse_discovery_lang_arg(&mut args, &mut target, &mut seen_lang)?;
+            }
+            "--source" => {
+                if seen_source {
+                    return Err(CliError::usage(
+                        "--source cannot be provided multiple times".to_string(),
+                    ));
+                }
+                seen_source = true;
+                source_id = Some(next_arg_value(&mut args, "--source")?);
+            }
+            "--apply" => {
+                if seen_apply {
+                    return Err(CliError::usage(
+                        "--apply cannot be provided multiple times".to_string(),
+                    ));
+                }
+                seen_apply = true;
+                apply = true;
+            }
+            "--data-dir" => {
+                if seen_data_dir {
+                    return Err(CliError::usage(
+                        "--data-dir cannot be provided multiple times".to_string(),
+                    ));
+                }
+                seen_data_dir = true;
+                data_dir = Some(next_arg_value(&mut args, "--data-dir")?);
+            }
+            _ => {
+                return Err(CliError::usage(format!(
+                    "unknown data clean argument: {arg}"
+                )));
+            }
+        }
+    }
+
+    Ok(Some(Command::Data(DataCommand::Clean(DataCleanOptions {
+        format,
+        target,
+        source_id,
+        apply,
+        data_dir,
+    }))))
 }
 
 fn parse_data_pin_command(
@@ -1402,6 +1469,10 @@ pub(crate) fn write_usage(mut writer: impl Write) -> std::io::Result<()> {
     )?;
     writeln!(
         writer,
+        "       lsteg data clean [--lang fa|en] [--source <id>] [--apply] [--data-dir <path>] [--format text|json]"
+    )?;
+    writeln!(
+        writer,
         "       lsteg data pin [--lang fa|en] [--source <id>] [--checksum <sha256>] [--data-dir <path>] [--format text|json]"
     )?;
     writeln!(
@@ -1803,6 +1874,35 @@ mod tests {
         assert_eq!(options.source_id.as_deref(), Some("en-wordlist-wordnik"));
         assert!(options.fix);
         assert_eq!(options.data_dir.as_deref(), Some("/tmp/lsteg-doctor"));
+        assert!(matches!(options.format, OutputFormat::Json));
+    }
+
+    #[test]
+    fn parse_data_clean_command_sets_apply_and_source() {
+        let command = parse_command(vec![
+            "data".to_string(),
+            "clean".to_string(),
+            "--lang".to_string(),
+            "en".to_string(),
+            "--source".to_string(),
+            "en-wordlist-wordnik".to_string(),
+            "--apply".to_string(),
+            "--data-dir".to_string(),
+            "/tmp/lsteg-clean".to_string(),
+            "--format".to_string(),
+            "json".to_string(),
+        ])
+        .expect("parse should succeed")
+        .expect("command should exist");
+
+        let Command::Data(DataCommand::Clean(options)) = command else {
+            panic!("expected data clean command");
+        };
+
+        assert_eq!(options.target, Some(ProtoTarget::English));
+        assert_eq!(options.source_id.as_deref(), Some("en-wordlist-wordnik"));
+        assert!(options.apply);
+        assert_eq!(options.data_dir.as_deref(), Some("/tmp/lsteg-clean"));
         assert!(matches!(options.format, OutputFormat::Json));
     }
 

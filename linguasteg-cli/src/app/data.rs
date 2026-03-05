@@ -7,9 +7,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use serde::{Deserialize, Serialize};
 
 use super::types::{
-    CliError, DataCommand, DataDoctorOptions, DataExportManifestOptions, DataImportManifestOptions,
-    DataInstallOptions, DataListOptions, DataPinOptions, DataStatusOptions, DataVerifyOptions,
-    OutputFormat, ProtoTarget,
+    CliError, DataCleanOptions, DataCommand, DataDoctorOptions, DataExportManifestOptions,
+    DataImportManifestOptions, DataInstallOptions, DataListOptions, DataPinOptions,
+    DataStatusOptions, DataVerifyOptions, OutputFormat, ProtoTarget,
 };
 
 const DATA_STATE_FILE: &str = "state.json";
@@ -167,6 +167,24 @@ struct DataDoctorResponse {
 }
 
 #[derive(Debug, Clone, Serialize)]
+struct DataCleanItem {
+    language: String,
+    source_id: String,
+    status: &'static str,
+    path: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct DataCleanResponse {
+    mode: &'static str,
+    data_dir: String,
+    apply: bool,
+    removed: usize,
+    state_removed: usize,
+    items: Vec<DataCleanItem>,
+}
+
+#[derive(Debug, Clone, Serialize)]
 struct DataPinItem {
     language: String,
     source_id: String,
@@ -256,6 +274,7 @@ pub(crate) fn run_data_command(command: DataCommand) -> Result<(), CliError> {
         DataCommand::Status(options) => run_data_status(options),
         DataCommand::Verify(options) => run_data_verify(options),
         DataCommand::Doctor(options) => run_data_doctor(options),
+        DataCommand::Clean(options) => run_data_clean(options),
         DataCommand::Pin(options) => run_data_pin(options),
         DataCommand::ExportManifest(options) => run_data_export_manifest(options),
         DataCommand::ImportManifest(options) => run_data_import_manifest(options),
@@ -843,6 +862,134 @@ fn run_data_doctor(options: DataDoctorOptions) -> Result<(), CliError> {
             "data doctor found {unresolved} unresolved issue(s)"
         )))
     }
+}
+
+fn run_data_clean(options: DataCleanOptions) -> Result<(), CliError> {
+    let data_dir = resolve_data_dir(options.data_dir.as_deref());
+    let mut state = load_data_state(&data_dir)?;
+
+    if let Some(source_id) = options.source_id.as_deref() {
+        let has_source = state.installs.iter().any(|record| {
+            record.source_id == source_id
+                && options
+                    .target
+                    .is_none_or(|target| record.language == target.as_str())
+        });
+        if !has_source {
+            return Err(CliError::config(format!(
+                "installed source '{}' was not found in data state",
+                source_id
+            )));
+        }
+    }
+
+    let selected = state
+        .installs
+        .iter()
+        .filter(|record| {
+            options
+                .target
+                .is_none_or(|target| record.language == target.as_str())
+                && options
+                    .source_id
+                    .as_deref()
+                    .is_none_or(|source_id| source_id == record.source_id)
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+    if selected.is_empty() {
+        return Err(CliError::config(
+            "no installed sources matched the selected filters".to_string(),
+        ));
+    }
+
+    let mut items = Vec::with_capacity(selected.len());
+    let selected_keys = selected
+        .iter()
+        .map(|record| (record.language.clone(), record.source_id.clone()))
+        .collect::<HashSet<_>>();
+    let mut removed = 0_usize;
+    for record in &selected {
+        let source_dir = data_dir.join(&record.language).join(&record.source_id);
+        let status = if options.apply {
+            if source_dir.exists() {
+                fs::remove_dir_all(&source_dir).map_err(|error| {
+                    CliError::io(
+                        "failed to remove source data directory",
+                        Some(&source_dir.to_string_lossy()),
+                        error,
+                    )
+                })?;
+                removed += 1;
+                "removed"
+            } else {
+                "removed-state-only"
+            }
+        } else if source_dir.exists() {
+            "would-remove"
+        } else {
+            "would-remove-missing-dir"
+        };
+        items.push(DataCleanItem {
+            language: record.language.clone(),
+            source_id: record.source_id.clone(),
+            status,
+            path: source_dir.to_string_lossy().to_string(),
+        });
+    }
+
+    let state_removed = if options.apply {
+        let before_len = state.installs.len();
+        state.installs.retain(|record| {
+            !selected_keys.contains(&(record.language.clone(), record.source_id.clone()))
+        });
+        let removed_count = before_len.saturating_sub(state.installs.len());
+        if removed_count > 0 {
+            save_data_state(&data_dir, &state)?;
+        }
+        removed_count
+    } else {
+        0
+    };
+
+    items.sort_by(|left, right| {
+        left.language
+            .cmp(&right.language)
+            .then(left.source_id.cmp(&right.source_id))
+    });
+
+    if matches!(options.format, OutputFormat::Json) {
+        let payload = DataCleanResponse {
+            mode: "data-clean",
+            data_dir: data_dir.to_string_lossy().to_string(),
+            apply: options.apply,
+            removed,
+            state_removed,
+            items,
+        };
+        let output = serde_json::to_string(&payload).map_err(|error| {
+            CliError::internal(format!("failed to serialize data clean: {error}"))
+        })?;
+        println!("{output}");
+        return Ok(());
+    }
+
+    println!("data clean:");
+    println!("data dir: {}", data_dir.to_string_lossy());
+    println!(
+        "summary: apply:{} removed:{} state_removed:{}",
+        if options.apply { "yes" } else { "no" },
+        removed,
+        state_removed
+    );
+    for item in items {
+        println!(
+            "- {}/{} status:{} path:{}",
+            item.language, item.source_id, item.status, item.path
+        );
+    }
+
+    Ok(())
 }
 
 fn run_data_pin(options: DataPinOptions) -> Result<(), CliError> {

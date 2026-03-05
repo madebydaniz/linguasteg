@@ -1522,6 +1522,141 @@ fn data_doctor_fix_imports_orphan_manifest_into_state() {
 }
 
 #[test]
+fn data_clean_preview_keeps_state_and_files() {
+    let data_dir = TempDataDir::create();
+    let install_output = run_lsteg_with_env(
+        &[
+            "data",
+            "install",
+            "--lang",
+            "en",
+            "--source",
+            "en-wordlist-wordnik",
+            "--format",
+            "json",
+            "--data-dir",
+            data_dir.as_str(),
+        ],
+        &[],
+    );
+    assert!(install_output.status.success());
+
+    let source_dir = std::path::Path::new(data_dir.as_str())
+        .join("en")
+        .join("en-wordlist-wordnik");
+    assert!(source_dir.exists());
+
+    let clean_output = run_lsteg_with_env(
+        &[
+            "data",
+            "clean",
+            "--lang",
+            "en",
+            "--source",
+            "en-wordlist-wordnik",
+            "--format",
+            "json",
+            "--data-dir",
+            data_dir.as_str(),
+        ],
+        &[],
+    );
+    assert!(clean_output.status.success());
+    let clean_stdout = stdout_string(&clean_output);
+    assert!(clean_stdout.contains("\"mode\":\"data-clean\""));
+    assert!(clean_stdout.contains("\"apply\":false"));
+    assert!(clean_stdout.contains("\"status\":\"would-remove\""));
+
+    assert!(source_dir.exists());
+
+    let status_output = run_lsteg_with_env(
+        &[
+            "data",
+            "status",
+            "--lang",
+            "en",
+            "--format",
+            "json",
+            "--data-dir",
+            data_dir.as_str(),
+        ],
+        &[],
+    );
+    assert!(status_output.status.success());
+    let status_stdout = stdout_string(&status_output);
+    assert!(status_stdout.contains("\"source_id\":\"en-wordlist-wordnik\""));
+}
+
+#[test]
+fn data_clean_apply_removes_state_and_source_directory() {
+    let data_dir = TempDataDir::create();
+    let install_output = run_lsteg_with_env(
+        &[
+            "data",
+            "install",
+            "--lang",
+            "en",
+            "--source",
+            "en-wordlist-wordnik",
+            "--format",
+            "json",
+            "--data-dir",
+            data_dir.as_str(),
+        ],
+        &[],
+    );
+    assert!(install_output.status.success());
+
+    let source_dir = std::path::Path::new(data_dir.as_str())
+        .join("en")
+        .join("en-wordlist-wordnik");
+    assert!(source_dir.exists());
+
+    let clean_output = run_lsteg_with_env(
+        &[
+            "data",
+            "clean",
+            "--lang",
+            "en",
+            "--source",
+            "en-wordlist-wordnik",
+            "--apply",
+            "--format",
+            "json",
+            "--data-dir",
+            data_dir.as_str(),
+        ],
+        &[],
+    );
+    assert!(clean_output.status.success());
+    let clean_stdout = stdout_string(&clean_output);
+    assert!(clean_stdout.contains("\"mode\":\"data-clean\""));
+    assert!(clean_stdout.contains("\"apply\":true"));
+    assert!(clean_stdout.contains("\"status\":\"removed\""));
+    assert!(clean_stdout.contains("\"removed\":1"));
+    assert!(clean_stdout.contains("\"state_removed\":1"));
+
+    assert!(!source_dir.exists());
+
+    let status_output = run_lsteg_with_env(
+        &[
+            "data",
+            "status",
+            "--lang",
+            "en",
+            "--format",
+            "json",
+            "--data-dir",
+            data_dir.as_str(),
+        ],
+        &[],
+    );
+    assert!(status_output.status.success());
+    let status_stdout = stdout_string(&status_output);
+    assert!(status_stdout.contains("\"items\":[]"));
+}
+
+#[test]
 fn validate_json_reports_integrity_ok() {
     let encode_output = run_lsteg(&["encode", "--message", "salam", "--emit-trace"]);
     assert!(encode_output.status.success());
