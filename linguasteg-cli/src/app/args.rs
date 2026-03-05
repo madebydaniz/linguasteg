@@ -2,8 +2,9 @@ use std::io::Write;
 
 use super::types::{
     AnalyzeOptions, CatalogQueryOptions, CliError, Command, DataCommand, DataInstallOptions,
-    DataListOptions, DecodeInputMode, DecodeOptions, DemoTarget, EncodeOptions, OutputFormat,
-    ProfileQueryOptions, ProtoTarget, SchemaQueryOptions, TemplateQueryOptions, ValidateOptions,
+    DataListOptions, DataStatusOptions, DecodeInputMode, DecodeOptions, DemoTarget, EncodeOptions,
+    OutputFormat, ProfileQueryOptions, ProtoTarget, SchemaQueryOptions, TemplateQueryOptions,
+    ValidateOptions,
 };
 
 pub(crate) fn parse_command(args: Vec<String>) -> Result<Option<Command>, CliError> {
@@ -408,7 +409,7 @@ fn parse_schemas_command(args: impl Iterator<Item = String>) -> Result<Option<Co
 fn parse_data_command(mut args: impl Iterator<Item = String>) -> Result<Option<Command>, CliError> {
     let Some(subcommand) = args.next() else {
         return Err(CliError::usage(
-            "data subcommand is required (supported: list, install, update)".to_string(),
+            "data subcommand is required (supported: list, status, install, update)".to_string(),
         ));
     };
     if subcommand == "--help" || subcommand == "-h" {
@@ -417,10 +418,11 @@ fn parse_data_command(mut args: impl Iterator<Item = String>) -> Result<Option<C
 
     match subcommand.as_str() {
         "list" => parse_data_list_command(args),
+        "status" => parse_data_status_command(args),
         "install" => parse_data_install_command(args, false),
         "update" => parse_data_install_command(args, true),
         _ => Err(CliError::usage(format!(
-            "unknown data subcommand: {subcommand} (supported: list, install, update)"
+            "unknown data subcommand: {subcommand} (supported: list, status, install, update)"
         ))),
     }
 }
@@ -465,6 +467,50 @@ fn parse_data_list_command(
         target,
         data_dir,
     }))))
+}
+
+fn parse_data_status_command(
+    mut args: impl Iterator<Item = String>,
+) -> Result<Option<Command>, CliError> {
+    let mut format = env_output_format("LSTEG_FORMAT")?.unwrap_or(OutputFormat::Text);
+    let mut target = None;
+    let mut seen_lang = false;
+    let mut data_dir = env_optional("LSTEG_DATA_DIR");
+    let mut seen_data_dir = false;
+
+    while let Some(arg) = args.next() {
+        match arg.as_str() {
+            "--help" | "-h" => return Ok(None),
+            "--format" => {
+                parse_output_format_arg(&mut args, &mut format)?;
+            }
+            "--lang" => {
+                parse_discovery_lang_arg(&mut args, &mut target, &mut seen_lang)?;
+            }
+            "--data-dir" => {
+                if seen_data_dir {
+                    return Err(CliError::usage(
+                        "--data-dir cannot be provided multiple times".to_string(),
+                    ));
+                }
+                seen_data_dir = true;
+                data_dir = Some(next_arg_value(&mut args, "--data-dir")?);
+            }
+            _ => {
+                return Err(CliError::usage(format!(
+                    "unknown data status argument: {arg}"
+                )));
+            }
+        }
+    }
+
+    Ok(Some(Command::Data(DataCommand::Status(
+        DataStatusOptions {
+            format,
+            target,
+            data_dir,
+        },
+    ))))
 }
 
 fn parse_data_install_command(
@@ -1007,6 +1053,10 @@ pub(crate) fn write_usage(mut writer: impl Write) -> std::io::Result<()> {
     )?;
     writeln!(
         writer,
+        "       lsteg data status [--lang fa|en] [--data-dir <path>] [--format text|json]"
+    )?;
+    writeln!(
+        writer,
         "       lsteg data install --lang <fa|en|fa,en> [--source <id>] [--artifact-url <url>] [--data-dir <path>] [--format text|json]"
     )?;
     writeln!(
@@ -1316,6 +1366,30 @@ mod tests {
 
         assert_eq!(options.target, Some(ProtoTarget::English));
         assert_eq!(options.data_dir.as_deref(), Some("/tmp/lsteg-data"));
+        assert!(matches!(options.format, OutputFormat::Json));
+    }
+
+    #[test]
+    fn parse_data_status_command_sets_filter_and_data_dir() {
+        let command = parse_command(vec![
+            "data".to_string(),
+            "status".to_string(),
+            "--lang".to_string(),
+            "fa".to_string(),
+            "--data-dir".to_string(),
+            "/tmp/lsteg-status".to_string(),
+            "--format".to_string(),
+            "json".to_string(),
+        ])
+        .expect("parse should succeed")
+        .expect("command should exist");
+
+        let Command::Data(DataCommand::Status(options)) = command else {
+            panic!("expected data status command");
+        };
+
+        assert_eq!(options.target, Some(ProtoTarget::Farsi));
+        assert_eq!(options.data_dir.as_deref(), Some("/tmp/lsteg-status"));
         assert!(matches!(options.format, OutputFormat::Json));
     }
 

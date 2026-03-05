@@ -7,7 +7,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use serde::{Deserialize, Serialize};
 
 use super::types::{
-    CliError, DataCommand, DataInstallOptions, DataListOptions, OutputFormat, ProtoTarget,
+    CliError, DataCommand, DataInstallOptions, DataListOptions, DataStatusOptions, OutputFormat,
+    ProtoTarget,
 };
 
 const DATA_STATE_FILE: &str = "state.json";
@@ -96,6 +97,30 @@ struct DataInstallResponse {
 }
 
 #[derive(Debug, Clone, Serialize)]
+struct DataStatusItem {
+    language: String,
+    source_id: String,
+    version: String,
+    installed_at_epoch_sec: u64,
+    source_url: Option<String>,
+    license: Option<String>,
+    manifest_path: String,
+    manifest_exists: bool,
+    status: &'static str,
+    artifact_path: Option<String>,
+    artifact_exists: Option<bool>,
+    artifact_sha256: Option<String>,
+    manifest_error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct DataStatusResponse {
+    mode: &'static str,
+    data_dir: String,
+    items: Vec<DataStatusItem>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct InstalledSourceManifest {
     schema_version: u8,
     language: String,
@@ -114,6 +139,7 @@ struct InstalledSourceManifest {
 pub(crate) fn run_data_command(command: DataCommand) -> Result<(), CliError> {
     match command {
         DataCommand::List(options) => run_data_list(options),
+        DataCommand::Status(options) => run_data_status(options),
         DataCommand::Install(options) => run_data_install(options, false),
         DataCommand::Update(options) => run_data_install(options, true),
     }
@@ -279,6 +305,68 @@ fn run_data_install(options: DataInstallOptions, force_refresh: bool) -> Result<
     Ok(())
 }
 
+fn run_data_status(options: DataStatusOptions) -> Result<(), CliError> {
+    let sources = load_data_sources()?;
+    let data_dir = resolve_data_dir(options.data_dir.as_deref());
+    let state = load_data_state(&data_dir)?;
+    let mut items = state
+        .installs
+        .iter()
+        .filter(|record| {
+            options
+                .target
+                .is_none_or(|target| record.language == target.as_str())
+        })
+        .map(|record| {
+            let source = sources.iter().find(|item| {
+                item.id == record.source_id && item.language.as_str() == record.language
+            });
+            build_status_item(&data_dir, record, source)
+        })
+        .collect::<Vec<_>>();
+    items.sort_by(|left, right| {
+        left.language
+            .cmp(&right.language)
+            .then(left.source_id.cmp(&right.source_id))
+    });
+
+    if matches!(options.format, OutputFormat::Json) {
+        let payload = DataStatusResponse {
+            mode: "data-status",
+            data_dir: data_dir.to_string_lossy().to_string(),
+            items,
+        };
+        let output = serde_json::to_string(&payload).map_err(|error| {
+            CliError::internal(format!("failed to serialize data status: {error}"))
+        })?;
+        println!("{output}");
+        return Ok(());
+    }
+
+    println!("data status:");
+    println!("data dir: {}", data_dir.to_string_lossy());
+    for item in items {
+        let artifact_path = item.artifact_path.as_ref().map_or("-", String::as_str);
+        let artifact_exists = item
+            .artifact_exists
+            .map_or("-", |value| if value { "yes" } else { "no" });
+        println!(
+            "- {}/{} version:{} status:{} manifest:{} artifact:{} artifact_exists:{}",
+            item.language,
+            item.source_id,
+            item.version,
+            item.status,
+            item.manifest_path,
+            artifact_path,
+            artifact_exists
+        );
+        if let Some(error) = &item.manifest_error {
+            println!("  manifest_error: {error}");
+        }
+    }
+    Ok(())
+}
+
 fn load_data_sources() -> Result<Vec<DataSource>, CliError> {
     let raw: DataSourceCatalogRaw =
         serde_json::from_str(DATA_SOURCES_MANIFEST).map_err(|error| {
@@ -345,6 +433,106 @@ fn load_data_sources() -> Result<Vec<DataSource>, CliError> {
     }
 
     Ok(sources)
+}
+
+fn build_status_item(
+    data_dir: &Path,
+    record: &InstallRecord,
+    source: Option<&DataSource>,
+) -> DataStatusItem {
+    let manifest_path = data_dir
+        .join(&record.language)
+        .join(&record.source_id)
+        .join("manifest.json");
+    if !manifest_path.exists() {
+        return DataStatusItem {
+            language: record.language.clone(),
+            source_id: record.source_id.clone(),
+            version: record.version.clone(),
+            installed_at_epoch_sec: record.installed_at_epoch_sec,
+            source_url: source.map(|item| item.source_url.clone()),
+            license: source.map(|item| item.license.clone()),
+            manifest_path: manifest_path.to_string_lossy().to_string(),
+            manifest_exists: false,
+            status: "missing-manifest",
+            artifact_path: None,
+            artifact_exists: None,
+            artifact_sha256: None,
+            manifest_error: None,
+        };
+    }
+
+    let raw = match fs::read_to_string(&manifest_path) {
+        Ok(value) => value,
+        Err(error) => {
+            return DataStatusItem {
+                language: record.language.clone(),
+                source_id: record.source_id.clone(),
+                version: record.version.clone(),
+                installed_at_epoch_sec: record.installed_at_epoch_sec,
+                source_url: source.map(|item| item.source_url.clone()),
+                license: source.map(|item| item.license.clone()),
+                manifest_path: manifest_path.to_string_lossy().to_string(),
+                manifest_exists: true,
+                status: "invalid-manifest",
+                artifact_path: None,
+                artifact_exists: None,
+                artifact_sha256: None,
+                manifest_error: Some(error.to_string()),
+            };
+        }
+    };
+
+    let manifest: InstalledSourceManifest = match serde_json::from_str(&raw) {
+        Ok(value) => value,
+        Err(error) => {
+            return DataStatusItem {
+                language: record.language.clone(),
+                source_id: record.source_id.clone(),
+                version: record.version.clone(),
+                installed_at_epoch_sec: record.installed_at_epoch_sec,
+                source_url: source.map(|item| item.source_url.clone()),
+                license: source.map(|item| item.license.clone()),
+                manifest_path: manifest_path.to_string_lossy().to_string(),
+                manifest_exists: true,
+                status: "invalid-manifest",
+                artifact_path: None,
+                artifact_exists: None,
+                artifact_sha256: None,
+                manifest_error: Some(error.to_string()),
+            };
+        }
+    };
+
+    let artifact_exists = manifest
+        .artifact_path
+        .as_ref()
+        .map(|path| Path::new(path).exists());
+    let status = if manifest
+        .artifact_path
+        .as_ref()
+        .is_some_and(|_| artifact_exists == Some(false))
+    {
+        "missing-artifact"
+    } else {
+        "ok"
+    };
+
+    DataStatusItem {
+        language: record.language.clone(),
+        source_id: record.source_id.clone(),
+        version: record.version.clone(),
+        installed_at_epoch_sec: record.installed_at_epoch_sec,
+        source_url: source.map(|item| item.source_url.clone()),
+        license: source.map(|item| item.license.clone()),
+        manifest_path: manifest_path.to_string_lossy().to_string(),
+        manifest_exists: true,
+        status,
+        artifact_path: manifest.artifact_path,
+        artifact_exists,
+        artifact_sha256: manifest.artifact_sha256,
+        manifest_error: None,
+    }
 }
 
 fn parse_data_language(value: &str) -> Result<ProtoTarget, CliError> {

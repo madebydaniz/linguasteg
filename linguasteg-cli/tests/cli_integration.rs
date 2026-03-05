@@ -718,6 +718,95 @@ fn data_install_rejects_artifact_url_with_multi_language_target() {
 }
 
 #[test]
+fn data_status_reports_installed_manifest_state() {
+    let data_dir = TempDataDir::create();
+    let install_output = run_lsteg_with_env(
+        &[
+            "data",
+            "install",
+            "--lang",
+            "en",
+            "--format",
+            "json",
+            "--data-dir",
+            data_dir.as_str(),
+        ],
+        &[],
+    );
+    assert!(install_output.status.success());
+
+    let status_output = run_lsteg_with_env(
+        &[
+            "data",
+            "status",
+            "--lang",
+            "en",
+            "--format",
+            "json",
+            "--data-dir",
+            data_dir.as_str(),
+        ],
+        &[],
+    );
+    assert!(status_output.status.success());
+    let stdout = stdout_string(&status_output);
+    assert!(stdout.contains("\"mode\":\"data-status\""));
+    assert!(stdout.contains("\"source_id\":\"en-wordnet-princeton\""));
+    assert!(stdout.contains("\"manifest_exists\":true"));
+    assert!(stdout.contains("\"status\":\"ok\""));
+}
+
+#[test]
+fn data_status_reports_missing_artifact_when_removed() {
+    let data_dir = TempDataDir::create();
+    let artifact = TempArtifactFile::create(b"linguasteg-dataset");
+    let artifact_url = artifact.as_file_url();
+    let install_output = run_lsteg_with_env(
+        &[
+            "data",
+            "install",
+            "--lang",
+            "en",
+            "--source",
+            "en-wordlist-wordnik",
+            "--artifact-url",
+            &artifact_url,
+            "--format",
+            "json",
+            "--data-dir",
+            data_dir.as_str(),
+        ],
+        &[],
+    );
+    assert!(install_output.status.success());
+
+    let artifact_path = std::path::Path::new(data_dir.as_str())
+        .join("en")
+        .join("en-wordlist-wordnik")
+        .join("artifact.bin");
+    std::fs::remove_file(&artifact_path).expect("artifact file should be removable");
+
+    let status_output = run_lsteg_with_env(
+        &[
+            "data",
+            "status",
+            "--lang",
+            "en",
+            "--format",
+            "json",
+            "--data-dir",
+            data_dir.as_str(),
+        ],
+        &[],
+    );
+    assert!(status_output.status.success());
+    let stdout = stdout_string(&status_output);
+    assert!(stdout.contains("\"source_id\":\"en-wordlist-wordnik\""));
+    assert!(stdout.contains("\"artifact_exists\":false"));
+    assert!(stdout.contains("\"status\":\"missing-artifact\""));
+}
+
+#[test]
 fn validate_json_reports_integrity_ok() {
     let encode_output = run_lsteg(&["encode", "--message", "salam", "--emit-trace"]);
     assert!(encode_output.status.success());
