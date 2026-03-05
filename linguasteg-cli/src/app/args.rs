@@ -1,9 +1,9 @@
 use std::io::Write;
 
 use super::types::{
-    AnalyzeOptions, CatalogQueryOptions, CliError, Command, DecodeInputMode, DecodeOptions,
-    DemoTarget, EncodeOptions, OutputFormat, ProfileQueryOptions, ProtoTarget, SchemaQueryOptions,
-    TemplateQueryOptions, ValidateOptions,
+    AnalyzeOptions, CatalogQueryOptions, CliError, Command, DataCommand, DataInstallOptions,
+    DataListOptions, DecodeInputMode, DecodeOptions, DemoTarget, EncodeOptions, OutputFormat,
+    ProfileQueryOptions, ProtoTarget, SchemaQueryOptions, TemplateQueryOptions, ValidateOptions,
 };
 
 pub(crate) fn parse_command(args: Vec<String>) -> Result<Option<Command>, CliError> {
@@ -28,6 +28,7 @@ pub(crate) fn parse_command(args: Vec<String>) -> Result<Option<Command>, CliErr
         "templates" => parse_templates_command(args),
         "profiles" => parse_profiles_command(args),
         "schemas" => parse_schemas_command(args),
+        "data" => parse_data_command(args),
         "demo" => parse_demo_command(args),
         "proto-encode" => parse_proto_encode_command(args),
         "proto-decode" => parse_proto_decode_command(args),
@@ -402,6 +403,155 @@ fn parse_schemas_command(args: impl Iterator<Item = String>) -> Result<Option<Co
         format: parsed.format,
         target: parsed.target,
     })))
+}
+
+fn parse_data_command(mut args: impl Iterator<Item = String>) -> Result<Option<Command>, CliError> {
+    let Some(subcommand) = args.next() else {
+        return Err(CliError::usage(
+            "data subcommand is required (supported: list, install, update)".to_string(),
+        ));
+    };
+    if subcommand == "--help" || subcommand == "-h" {
+        return Ok(None);
+    }
+
+    match subcommand.as_str() {
+        "list" => parse_data_list_command(args),
+        "install" => parse_data_install_command(args, false),
+        "update" => parse_data_install_command(args, true),
+        _ => Err(CliError::usage(format!(
+            "unknown data subcommand: {subcommand} (supported: list, install, update)"
+        ))),
+    }
+}
+
+fn parse_data_list_command(
+    mut args: impl Iterator<Item = String>,
+) -> Result<Option<Command>, CliError> {
+    let mut format = env_output_format("LSTEG_FORMAT")?.unwrap_or(OutputFormat::Text);
+    let mut target = None;
+    let mut seen_lang = false;
+    let mut data_dir = env_optional("LSTEG_DATA_DIR");
+    let mut seen_data_dir = false;
+
+    while let Some(arg) = args.next() {
+        match arg.as_str() {
+            "--help" | "-h" => return Ok(None),
+            "--format" => {
+                parse_output_format_arg(&mut args, &mut format)?;
+            }
+            "--lang" => {
+                parse_discovery_lang_arg(&mut args, &mut target, &mut seen_lang)?;
+            }
+            "--data-dir" => {
+                if seen_data_dir {
+                    return Err(CliError::usage(
+                        "--data-dir cannot be provided multiple times".to_string(),
+                    ));
+                }
+                seen_data_dir = true;
+                data_dir = Some(next_arg_value(&mut args, "--data-dir")?);
+            }
+            _ => {
+                return Err(CliError::usage(format!(
+                    "unknown data list argument: {arg}"
+                )));
+            }
+        }
+    }
+
+    Ok(Some(Command::Data(DataCommand::List(DataListOptions {
+        format,
+        target,
+        data_dir,
+    }))))
+}
+
+fn parse_data_install_command(
+    mut args: impl Iterator<Item = String>,
+    update: bool,
+) -> Result<Option<Command>, CliError> {
+    let mut format = env_output_format("LSTEG_FORMAT")?.unwrap_or(OutputFormat::Text);
+    let mut targets: Option<Vec<ProtoTarget>> = None;
+    let mut seen_lang = false;
+    let mut data_dir = env_optional("LSTEG_DATA_DIR");
+    let mut seen_data_dir = false;
+
+    while let Some(arg) = args.next() {
+        match arg.as_str() {
+            "--help" | "-h" => return Ok(None),
+            "--format" => {
+                parse_output_format_arg(&mut args, &mut format)?;
+            }
+            "--lang" => {
+                if seen_lang {
+                    return Err(CliError::usage(
+                        "--lang cannot be provided multiple times".to_string(),
+                    ));
+                }
+                seen_lang = true;
+                let value = next_arg_value(&mut args, "--lang")?;
+                targets = Some(parse_data_lang_targets(&value)?);
+            }
+            "--data-dir" => {
+                if seen_data_dir {
+                    return Err(CliError::usage(
+                        "--data-dir cannot be provided multiple times".to_string(),
+                    ));
+                }
+                seen_data_dir = true;
+                data_dir = Some(next_arg_value(&mut args, "--data-dir")?);
+            }
+            _ => {
+                let operation = if update { "update" } else { "install" };
+                return Err(CliError::usage(format!(
+                    "unknown data {operation} argument: {arg}"
+                )));
+            }
+        }
+    }
+
+    let Some(targets) = targets else {
+        let operation = if update { "update" } else { "install" };
+        return Err(CliError::usage(format!(
+            "data {operation} requires --lang <fa|en|fa,en>"
+        )));
+    };
+
+    let options = DataInstallOptions {
+        format,
+        targets,
+        data_dir,
+    };
+    let command = if update {
+        DataCommand::Update(options)
+    } else {
+        DataCommand::Install(options)
+    };
+
+    Ok(Some(Command::Data(command)))
+}
+
+fn parse_data_lang_targets(value: &str) -> Result<Vec<ProtoTarget>, CliError> {
+    let mut targets = Vec::new();
+    for chunk in value.split(',') {
+        let lang = chunk.trim();
+        if lang.is_empty() {
+            continue;
+        }
+        let target = parse_proto_target(lang)?;
+        if !targets.contains(&target) {
+            targets.push(target);
+        }
+    }
+
+    if targets.is_empty() {
+        return Err(CliError::usage(
+            "--lang requires at least one language (supported: fa, en)".to_string(),
+        ));
+    }
+
+    Ok(targets)
 }
 
 struct ParsedDiscoveryCommand {
@@ -790,7 +940,7 @@ pub(crate) fn write_usage(mut writer: impl Write) -> std::io::Result<()> {
     writeln!(writer, "LinguaSteg CLI (scaffold)")?;
     writeln!(
         writer,
-        "Usage: lsteg <encode|decode|analyze|validate|languages|strategies|models|catalog|templates|profiles|schemas|demo|proto-encode|proto-decode>"
+        "Usage: lsteg <encode|decode|analyze|validate|languages|strategies|models|catalog|templates|profiles|schemas|data|demo|proto-encode|proto-decode>"
     )?;
     writeln!(
         writer,
@@ -827,6 +977,18 @@ pub(crate) fn write_usage(mut writer: impl Write) -> std::io::Result<()> {
         writer,
         "       lsteg schemas [--lang fa|en] [--format text|json]"
     )?;
+    writeln!(
+        writer,
+        "       lsteg data list [--lang fa|en] [--data-dir <path>] [--format text|json]"
+    )?;
+    writeln!(
+        writer,
+        "       lsteg data install --lang <fa|en|fa,en> [--data-dir <path>] [--format text|json]"
+    )?;
+    writeln!(
+        writer,
+        "       lsteg data update --lang <fa|en|fa,en> [--data-dir <path>] [--format text|json]"
+    )?;
     writeln!(writer, "       lsteg demo <fa|en>")?;
     writeln!(
         writer,
@@ -842,7 +1004,7 @@ pub(crate) fn write_usage(mut writer: impl Write) -> std::io::Result<()> {
     )?;
     writeln!(
         writer,
-        "Env defaults: LSTEG_LANG (decode/analyze/validate accepts auto), LSTEG_FORMAT, LSTEG_INPUT, LSTEG_OUTPUT, LSTEG_ENCODE_MESSAGE, LSTEG_PROFILE, LSTEG_TRACE, LSTEG_SECRET, LSTEG_SECRET_FILE"
+        "Env defaults: LSTEG_LANG (decode/analyze/validate accepts auto), LSTEG_FORMAT, LSTEG_INPUT, LSTEG_OUTPUT, LSTEG_ENCODE_MESSAGE, LSTEG_PROFILE, LSTEG_TRACE, LSTEG_SECRET, LSTEG_SECRET_FILE, LSTEG_DATA_DIR"
     )?;
     Ok(())
 }
@@ -1072,5 +1234,63 @@ mod tests {
         };
 
         assert!(matches!(options.input_mode, DecodeInputMode::Trace));
+    }
+
+    #[test]
+    fn parse_data_install_command_accepts_lang_list() {
+        let command = parse_command(vec![
+            "data".to_string(),
+            "install".to_string(),
+            "--lang".to_string(),
+            "fa,en".to_string(),
+        ])
+        .expect("parse should succeed")
+        .expect("command should exist");
+
+        let Command::Data(DataCommand::Install(options)) = command else {
+            panic!("expected data install command");
+        };
+
+        assert_eq!(options.targets.len(), 2);
+        assert_eq!(options.targets[0], ProtoTarget::Farsi);
+        assert_eq!(options.targets[1], ProtoTarget::English);
+    }
+
+    #[test]
+    fn parse_data_install_command_requires_lang() {
+        let result = parse_command(vec!["data".to_string(), "install".to_string()]);
+        let error = match result {
+            Ok(_) => panic!("data install without lang should fail"),
+            Err(error) => error,
+        };
+
+        assert_eq!(
+            error.message(),
+            "data install requires --lang <fa|en|fa,en>"
+        );
+    }
+
+    #[test]
+    fn parse_data_list_command_sets_filter_and_data_dir() {
+        let command = parse_command(vec![
+            "data".to_string(),
+            "list".to_string(),
+            "--lang".to_string(),
+            "en".to_string(),
+            "--data-dir".to_string(),
+            "/tmp/lsteg-data".to_string(),
+            "--format".to_string(),
+            "json".to_string(),
+        ])
+        .expect("parse should succeed")
+        .expect("command should exist");
+
+        let Command::Data(DataCommand::List(options)) = command else {
+            panic!("expected data list command");
+        };
+
+        assert_eq!(options.target, Some(ProtoTarget::English));
+        assert_eq!(options.data_dir.as_deref(), Some("/tmp/lsteg-data"));
+        assert!(matches!(options.format, OutputFormat::Json));
     }
 }

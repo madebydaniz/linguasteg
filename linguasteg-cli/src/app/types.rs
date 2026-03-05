@@ -12,9 +12,28 @@ pub(crate) enum Command {
     Templates(TemplateQueryOptions),
     Profiles(ProfileQueryOptions),
     Schemas(SchemaQueryOptions),
+    Data(DataCommand),
     Demo(DemoTarget),
     ProtoEncode(ProtoTarget, String, bool),
     ProtoDecode(ProtoTarget, Option<String>, bool),
+}
+
+pub(crate) enum DataCommand {
+    List(DataListOptions),
+    Install(DataInstallOptions),
+    Update(DataInstallOptions),
+}
+
+pub(crate) struct DataListOptions {
+    pub(crate) format: OutputFormat,
+    pub(crate) target: Option<ProtoTarget>,
+    pub(crate) data_dir: Option<String>,
+}
+
+pub(crate) struct DataInstallOptions {
+    pub(crate) format: OutputFormat,
+    pub(crate) targets: Vec<ProtoTarget>,
+    pub(crate) data_dir: Option<String>,
 }
 
 pub(crate) struct EncodeOptions {

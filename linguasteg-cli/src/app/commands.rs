@@ -2,17 +2,18 @@ use std::fmt::Display;
 use std::io::Read;
 
 use linguasteg_core::{
-    inspect_envelope, open_payload, seal_payload, CryptoEnvelopeInspection, DecodeRequest,
-    EncodeRequest, FixedWidthPlanningOptions, LanguageTag, RealizationPlan, SlotAssignment, SlotId,
-    StyleInspiration, StyleProfileId, StyleProfileRegistry, StyleStrength, SymbolicFramePlan,
-    SymbolicFrameSchema, TemplateId, TemplateRegistry, WritingRegister,
+    CryptoEnvelopeInspection, DecodeRequest, EncodeRequest, FixedWidthPlanningOptions, LanguageTag,
+    RealizationPlan, SlotAssignment, SlotId, StyleInspiration, StyleProfileId,
+    StyleProfileRegistry, StyleStrength, SymbolicFramePlan, SymbolicFrameSchema, TemplateId,
+    TemplateRegistry, WritingRegister, inspect_envelope, open_payload, seal_payload,
 };
 
 use super::analysis::{analyze_trace_summary, render_trace_analysis_output};
+use super::data::run_data_command;
 use super::formatters::{build_proto_decode_json, build_proto_encode_json, json_escape};
 use super::language::resolve_trace_target;
 use super::runtime::{
-    supported_languages, supported_models, supported_strategies, PrototypeRuntime,
+    PrototypeRuntime, supported_languages, supported_models, supported_strategies,
 };
 use super::symbol_mix::apply_secret_symbolic_mix;
 use super::trace::{frame_sequence_error, parse_frames_from_trace, schema_for_template};
@@ -35,6 +36,7 @@ pub(crate) fn execute(command: Command) -> Result<(), CliError> {
         Command::Templates(options) => run_templates(options)?,
         Command::Profiles(options) => run_profiles(options)?,
         Command::Schemas(options) => run_schemas(options)?,
+        Command::Data(command) => run_data_command(command)?,
         Command::Demo(DemoTarget::Farsi) => run_demo(ProtoTarget::Farsi)?,
         Command::Demo(DemoTarget::English) => run_demo(ProtoTarget::English)?,
         Command::ProtoEncode(target, payload_text, json) => {
@@ -1264,14 +1266,18 @@ fn render_proto_decode_output(
                 Err(primary_error) => {
                     let mut unmixed_frames = frames.clone();
                     apply_secret_symbolic_mix(&mut unmixed_frames, secret);
-                    let (unmixed_payload, unmixed_gateway_response) = decode_raw_payload_from_frames(
-                        &runtime,
-                        trace_text,
-                        &unmixed_frames,
-                        &ordered_schemas,
-                    )?;
-                    match decrypt_payload_with_secret(&unmixed_payload, secret, used_extractor_frames)
-                    {
+                    let (unmixed_payload, unmixed_gateway_response) =
+                        decode_raw_payload_from_frames(
+                            &runtime,
+                            trace_text,
+                            &unmixed_frames,
+                            &ordered_schemas,
+                        )?;
+                    match decrypt_payload_with_secret(
+                        &unmixed_payload,
+                        secret,
+                        used_extractor_frames,
+                    ) {
                         Ok(payload) => {
                             gateway_response = unmixed_gateway_response;
                             payload

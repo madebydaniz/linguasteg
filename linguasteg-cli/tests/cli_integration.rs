@@ -6,7 +6,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use serde_json::Value;
 
 const TEST_SECRET: &str = "linguasteg-test-secret";
-const ENV_KEYS: [&str; 9] = [
+const ENV_KEYS: [&str; 10] = [
     "LSTEG_LANG",
     "LSTEG_FORMAT",
     "LSTEG_INPUT",
@@ -16,6 +16,7 @@ const ENV_KEYS: [&str; 9] = [
     "LSTEG_TRACE",
     "LSTEG_SECRET",
     "LSTEG_SECRET_FILE",
+    "LSTEG_DATA_DIR",
 ];
 
 fn base_lsteg_command() -> Command {
@@ -119,6 +120,35 @@ impl TempSecretFile {
 impl Drop for TempSecretFile {
     fn drop(&mut self) {
         let _ = std::fs::remove_file(&self.path);
+    }
+}
+
+struct TempDataDir {
+    path: PathBuf,
+}
+
+impl TempDataDir {
+    fn create() -> Self {
+        let mut path = std::env::temp_dir();
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock should be after unix epoch")
+            .as_nanos();
+        path.push(format!("linguasteg-data-{nanos}"));
+        std::fs::create_dir_all(&path).expect("failed to create temp data dir");
+        Self { path }
+    }
+
+    fn as_str(&self) -> &str {
+        self.path
+            .to_str()
+            .expect("temp data dir path must be valid utf8")
+    }
+}
+
+impl Drop for TempDataDir {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.path);
     }
 }
 
@@ -475,6 +505,93 @@ fn schemas_lang_filter_limits_output() {
     assert!(stdout.contains("\"language\":\"en\""));
     assert!(stdout.contains("\"template_id\":\"en-basic-svo\""));
     assert!(!stdout.contains("\"template_id\":\"fa-basic-sov\""));
+}
+
+#[test]
+fn data_list_json_exposes_sources() {
+    let output = run_lsteg(&["data", "list", "--format", "json"]);
+    assert!(output.status.success());
+
+    let stdout = stdout_string(&output);
+    assert!(stdout.contains("\"mode\":\"data-list\""));
+    assert!(stdout.contains("\"language\":\"en\""));
+    assert!(stdout.contains("\"language\":\"fa\""));
+    assert!(stdout.contains("\"source_id\":\"en-wordnet-princeton\""));
+    assert!(stdout.contains("\"source_id\":\"fa-wordlist-cc0\""));
+}
+
+#[test]
+fn data_install_creates_state_and_source_manifest() {
+    let data_dir = TempDataDir::create();
+    let output = run_lsteg_with_env(
+        &[
+            "data",
+            "install",
+            "--lang",
+            "en,fa",
+            "--format",
+            "json",
+            "--data-dir",
+            data_dir.as_str(),
+        ],
+        &[],
+    );
+    assert!(output.status.success());
+
+    let stdout = stdout_string(&output);
+    assert!(stdout.contains("\"mode\":\"data-install\""));
+    assert!(stdout.contains("\"status\":\"installed\""));
+
+    let state_path = std::path::Path::new(data_dir.as_str()).join("state.json");
+    let en_manifest_path = std::path::Path::new(data_dir.as_str())
+        .join("en")
+        .join("en-wordnet-princeton")
+        .join("manifest.json");
+    let fa_manifest_path = std::path::Path::new(data_dir.as_str())
+        .join("fa")
+        .join("fa-wordlist-cc0")
+        .join("manifest.json");
+
+    assert!(state_path.exists());
+    assert!(en_manifest_path.exists());
+    assert!(fa_manifest_path.exists());
+}
+
+#[test]
+fn data_update_marks_existing_install_as_updated() {
+    let data_dir = TempDataDir::create();
+    let install_output = run_lsteg_with_env(
+        &[
+            "data",
+            "install",
+            "--lang",
+            "en",
+            "--format",
+            "json",
+            "--data-dir",
+            data_dir.as_str(),
+        ],
+        &[],
+    );
+    assert!(install_output.status.success());
+
+    let update_output = run_lsteg_with_env(
+        &[
+            "data",
+            "update",
+            "--lang",
+            "en",
+            "--format",
+            "json",
+            "--data-dir",
+            data_dir.as_str(),
+        ],
+        &[],
+    );
+    assert!(update_output.status.success());
+    let stdout = stdout_string(&update_output);
+    assert!(stdout.contains("\"mode\":\"data-update\""));
+    assert!(stdout.contains("\"status\":\"updated\""));
 }
 
 #[test]
