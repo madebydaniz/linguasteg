@@ -155,7 +155,7 @@ mod tests {
     #[test]
     fn farsi_extractor_reads_final_text_section_from_report() {
         let extractor = FarsiPrototypeTextExtractor;
-        let report = "Farsi prototype encode\nframes: 2\n\nfinal prototype text:\nمرد کتاب زیبا را نوشت. دانشجو امروز در خانه نامه را خرید.\ngateway response: stub:encode";
+        let report = "Farsi prototype encode\nframes: 2\n\nfinal prototype text:\nمرد کتاب زیبا را نوشت. دانشجو امروز در خانه نامه را خرید.";
 
         let plans = extractor
             .extract_plans(report)
@@ -181,7 +181,7 @@ mod tests {
     #[test]
     fn english_extractor_reads_final_text_section_from_report() {
         let extractor = EnglishPrototypeTextExtractor;
-        let report = "English prototype encode\nframes: 2\n\nfinal prototype text:\nthe manager labels clear report. the architect in winter at the office, records manual.\ngateway response: stub:encode";
+        let report = "English prototype encode\nframes: 2\n\nfinal prototype text:\nthe manager labels clear report. the architect in winter at the office, records manual.";
 
         let plans = extractor
             .extract_plans(report)

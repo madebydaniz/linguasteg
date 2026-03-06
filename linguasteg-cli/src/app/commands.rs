@@ -1055,8 +1055,6 @@ fn render_proto_encode_output(
     }
 
     let final_text = format!("{}.", sentences.join(". "));
-    let gateway_response = orchestration.gateway_response.map(|item| item.content);
-
     if matches!(format, OutputFormat::Json) {
         return Ok(build_proto_encode_json(
             runtime.language_code,
@@ -1068,7 +1066,7 @@ fn render_proto_encode_output(
             &payload_plan.frames,
             &sentences,
             &final_text,
-            gateway_response.as_deref(),
+            None,
         ));
     }
 
@@ -1096,10 +1094,6 @@ fn render_proto_encode_output(
     report_lines.push(String::new());
     report_lines.push("final prototype text:".to_string());
     report_lines.push(final_text);
-
-    if let Some(gateway_response) = gateway_response {
-        report_lines.push(format!("gateway response: {gateway_response}"));
-    }
 
     Ok(report_lines.join("\n"))
 }
@@ -1238,7 +1232,7 @@ fn render_proto_decode_output(
         .collect::<Result<Vec<_>, String>>()
         .map_err(|error| CliError::trace(format!("failed to resolve trace schemas: {error}")))?;
 
-    let (raw_payload, mut gateway_response) =
+    let raw_payload =
         match decode_raw_payload_from_frames(&runtime, trace_text, &frames, &ordered_schemas) {
             Ok(result) => result,
             Err(primary_error) => {
@@ -1266,22 +1260,18 @@ fn render_proto_decode_output(
                 Err(primary_error) => {
                     let mut unmixed_frames = frames.clone();
                     apply_secret_symbolic_mix(&mut unmixed_frames, secret);
-                    let (unmixed_payload, unmixed_gateway_response) =
-                        decode_raw_payload_from_frames(
-                            &runtime,
-                            trace_text,
-                            &unmixed_frames,
-                            &ordered_schemas,
-                        )?;
+                    let unmixed_payload = decode_raw_payload_from_frames(
+                        &runtime,
+                        trace_text,
+                        &unmixed_frames,
+                        &ordered_schemas,
+                    )?;
                     match decrypt_payload_with_secret(
                         &unmixed_payload,
                         secret,
                         used_extractor_frames,
                     ) {
-                        Ok(payload) => {
-                            gateway_response = unmixed_gateway_response;
-                            payload
-                        }
+                        Ok(payload) => payload,
                         Err(_) => return Err(primary_error),
                     }
                 }
@@ -1302,7 +1292,7 @@ fn render_proto_decode_output(
             payload.len(),
             &hex_payload,
             utf8_text.as_deref(),
-            gateway_response.as_deref(),
+            None,
         ));
     }
 
@@ -1314,9 +1304,6 @@ fn render_proto_decode_output(
         Some(text) => report_lines.push(format!("payload utf8: {text}")),
         None => report_lines.push("payload utf8: <invalid utf8>".to_string()),
     }
-    if let Some(gateway_response) = gateway_response {
-        report_lines.push(format!("gateway response: {gateway_response}"));
-    }
 
     Ok(report_lines.join("\n"))
 }
@@ -1326,7 +1313,7 @@ fn decode_raw_payload_from_frames(
     trace_text: &str,
     frames: &[SymbolicFramePlan],
     ordered_schemas: &[SymbolicFrameSchema],
-) -> Result<(Vec<u8>, Option<String>), CliError> {
+) -> Result<Vec<u8>, CliError> {
     let options = runtime
         .pipeline_options()
         .map_err(|error| CliError::config(format!("invalid pipeline options: {error}")))?;
@@ -1344,10 +1331,7 @@ fn decode_raw_payload_from_frames(
             ),
         "decode orchestration failed",
     )?;
-    Ok((
-        orchestration.payload,
-        orchestration.gateway_response.map(|item| item.content),
-    ))
+    Ok(orchestration.payload)
 }
 
 fn decrypt_payload_with_secret(

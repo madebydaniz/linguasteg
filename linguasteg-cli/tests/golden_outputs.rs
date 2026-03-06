@@ -57,7 +57,7 @@ fn encode_text_contains_expected_sections() {
     assert!(stdout.contains("Farsi prototype encode"));
     assert!(stdout.contains("input text: salam"));
     assert!(stdout.contains("payload bytes: 5"));
-    assert!(stdout.contains("gateway response: stub:encode:fa:symbolic-stub:salam"));
+    assert!(!stdout.contains("gateway response:"));
 }
 
 #[test]
