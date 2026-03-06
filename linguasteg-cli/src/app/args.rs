@@ -1010,7 +1010,7 @@ fn parse_data_install_command(
     let Some(targets) = targets else {
         let operation = if update { "update" } else { "install" };
         return Err(CliError::usage(format!(
-            "data {operation} requires --lang <fa|en|fa,en>"
+            "data {operation} requires --lang <code[,code...]>"
         )));
     };
 
@@ -1045,7 +1045,7 @@ fn parse_data_lang_targets(value: &str) -> Result<Vec<ProtoTarget>, CliError> {
 
     if targets.is_empty() {
         return Err(CliError::usage(
-            "--lang requires at least one language (supported: fa, en)".to_string(),
+            "--lang requires at least one language code".to_string(),
         ));
     }
 
@@ -1363,13 +1363,8 @@ fn parse_discovery_lang_arg(
 }
 
 fn parse_proto_target(value: &str) -> Result<ProtoTarget, CliError> {
-    match value {
-        "fa" => Ok(ProtoTarget::Farsi),
-        "en" => Ok(ProtoTarget::English),
-        _ => Err(CliError::config(format!(
-            "unsupported language '{value}' (supported: fa, en)"
-        ))),
-    }
+    let normalized = normalize_language_code(value)?;
+    Ok(ProtoTarget::from_language_code(&normalized))
 }
 
 fn parse_output_format(value: &str) -> Result<OutputFormat, CliError> {
@@ -1408,10 +1403,31 @@ fn parse_trace_proto_target(value: &str) -> Result<(ProtoTarget, bool), CliError
         "fa" => Ok((ProtoTarget::Farsi, false)),
         "en" => Ok((ProtoTarget::English, false)),
         "auto" => Ok((ProtoTarget::Farsi, true)),
-        _ => Err(CliError::config(format!(
-            "unsupported language '{value}' (supported: auto, fa, en)"
-        ))),
+        _ => Ok((parse_proto_target(value)?, false)),
     }
+}
+
+fn normalize_language_code(value: &str) -> Result<String, CliError> {
+    let normalized = value.trim().to_ascii_lowercase();
+    if normalized.is_empty() {
+        return Err(CliError::config(
+            "language code must not be empty".to_string(),
+        ));
+    }
+    if normalized.starts_with('-') || normalized.ends_with('-') || normalized.contains("--") {
+        return Err(CliError::config(format!(
+            "invalid language code '{value}' (expected lowercase language code like 'fa', 'en', or 'de')"
+        )));
+    }
+    if !normalized
+        .bytes()
+        .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
+    {
+        return Err(CliError::config(format!(
+            "invalid language code '{value}' (expected lowercase language code like 'fa', 'en', or 'de')"
+        )));
+    }
+    Ok(normalized)
 }
 
 fn env_output_format(key: &str) -> Result<Option<OutputFormat>, CliError> {
@@ -1442,78 +1458,78 @@ pub(crate) fn write_usage(mut writer: impl Write) -> std::io::Result<()> {
     )?;
     writeln!(
         writer,
-        "       lsteg encode [--lang fa|en] (--message <text> | --input <file>) [--source <id>] [--data-dir <path>] [--emit-trace] [--profile <id>] [--secret <value> | --secret-file <file>] [--format text|json] [--output <file>]"
+        "       lsteg encode [--lang <code>] (--message <text> | --input <file>) [--source <id>] [--data-dir <path>] [--emit-trace] [--profile <id>] [--secret <value> | --secret-file <file>] [--format text|json] [--output <file>]"
     )?;
     writeln!(
         writer,
-        "       lsteg decode [--lang auto|fa|en] [--trace-input|--text-input] [--trace <text> | --input <file>] [--secret <value> | --secret-file <file>] [--format text|json] [--output <file>]"
+        "       lsteg decode [--lang auto|<code>] [--trace-input|--text-input] [--trace <text> | --input <file>] [--secret <value> | --secret-file <file>] [--format text|json] [--output <file>]"
     )?;
     writeln!(
         writer,
-        "       lsteg analyze [--lang auto|fa|en] [--trace-input|--text-input] [--trace <text> | --input <file>] [--secret <value> | --secret-file <file>] [--format text|json] [--output <file>]"
+        "       lsteg analyze [--lang auto|<code>] [--trace-input|--text-input] [--trace <text> | --input <file>] [--secret <value> | --secret-file <file>] [--format text|json] [--output <file>]"
     )?;
     writeln!(
         writer,
-        "       lsteg validate [--lang auto|fa|en] [--trace-input|--text-input] [--trace <text> | --input <file>] [--secret <value> | --secret-file <file>] [--format text|json] [--output <file>]"
+        "       lsteg validate [--lang auto|<code>] [--trace-input|--text-input] [--trace <text> | --input <file>] [--secret <value> | --secret-file <file>] [--format text|json] [--output <file>]"
     )?;
     writeln!(writer, "       lsteg languages [--format text|json]")?;
     writeln!(writer, "       lsteg strategies [--format text|json]")?;
     writeln!(writer, "       lsteg models [--format text|json]")?;
     writeln!(
         writer,
-        "       lsteg catalog [--lang fa|en] [--format text|json]"
+        "       lsteg catalog [--lang <code>] [--format text|json]"
     )?;
     writeln!(
         writer,
-        "       lsteg templates [--lang fa|en] [--format text|json]"
+        "       lsteg templates [--lang <code>] [--format text|json]"
     )?;
     writeln!(
         writer,
-        "       lsteg profiles [--lang fa|en] [--format text|json]"
+        "       lsteg profiles [--lang <code>] [--format text|json]"
     )?;
     writeln!(
         writer,
-        "       lsteg schemas [--lang fa|en] [--format text|json]"
+        "       lsteg schemas [--lang <code>] [--format text|json]"
     )?;
     writeln!(
         writer,
-        "       lsteg data list [--lang fa|en] [--data-dir <path>] [--format text|json]"
+        "       lsteg data list [--lang <code>] [--data-dir <path>] [--format text|json]"
     )?;
     writeln!(
         writer,
-        "       lsteg data status [--lang fa|en] [--data-dir <path>] [--format text|json]"
+        "       lsteg data status [--lang <code>] [--data-dir <path>] [--format text|json]"
     )?;
     writeln!(
         writer,
-        "       lsteg data verify [--lang fa|en] [--source <id>] [--data-dir <path>] [--format text|json]"
+        "       lsteg data verify [--lang <code>] [--source <id>] [--data-dir <path>] [--format text|json]"
     )?;
     writeln!(
         writer,
-        "       lsteg data doctor [--lang fa|en] [--source <id>] [--fix] [--data-dir <path>] [--format text|json]"
+        "       lsteg data doctor [--lang <code>] [--source <id>] [--fix] [--data-dir <path>] [--format text|json]"
     )?;
     writeln!(
         writer,
-        "       lsteg data clean [--lang fa|en] [--source <id>] [--apply] [--data-dir <path>] [--format text|json]"
+        "       lsteg data clean [--lang <code>] [--source <id>] [--apply] [--data-dir <path>] [--format text|json]"
     )?;
     writeln!(
         writer,
-        "       lsteg data pin [--lang fa|en] [--source <id>] [--checksum <sha256>] [--data-dir <path>] [--format text|json]"
+        "       lsteg data pin [--lang <code>] [--source <id>] [--checksum <sha256>] [--data-dir <path>] [--format text|json]"
     )?;
     writeln!(
         writer,
-        "       lsteg data export-manifest [--lang fa|en] [--source <id>] [--output <file>] [--data-dir <path>] [--format text|json]"
+        "       lsteg data export-manifest [--lang <code>] [--source <id>] [--output <file>] [--data-dir <path>] [--format text|json]"
     )?;
     writeln!(
         writer,
-        "       lsteg data import-manifest --input <file> [--lang fa|en] [--source <id>] [--data-dir <path>] [--format text|json]"
+        "       lsteg data import-manifest --input <file> [--lang <code>] [--source <id>] [--data-dir <path>] [--format text|json]"
     )?;
     writeln!(
         writer,
-        "       lsteg data install --lang <fa|en|fa,en> [--source <id>] [--artifact-url <url>] [--data-dir <path>] [--format text|json]"
+        "       lsteg data install --lang <code[,code...]> [--source <id>] [--artifact-url <url>] [--data-dir <path>] [--format text|json]"
     )?;
     writeln!(
         writer,
-        "       lsteg data update --lang <fa|en|fa,en> [--source <id>] [--artifact-url <url>] [--data-dir <path>] [--format text|json]"
+        "       lsteg data update --lang <code[,code...]> [--source <id>] [--artifact-url <url>] [--data-dir <path>] [--format text|json]"
     )?;
     writeln!(writer, "       lsteg demo <fa|en>")?;
     writeln!(
@@ -1557,6 +1573,16 @@ mod tests {
         parse_proto_lang_arg(&mut args, &mut target).expect("lang parse should succeed");
 
         assert_eq!(target, ProtoTarget::English);
+    }
+
+    #[test]
+    fn parse_proto_lang_arg_accepts_custom_language_code() {
+        let mut args = vec!["de".to_string()].into_iter();
+        let mut target = ProtoTarget::Farsi;
+
+        parse_proto_lang_arg(&mut args, &mut target).expect("lang parse should succeed");
+
+        assert_eq!(target, ProtoTarget::Other("de".to_string()));
     }
 
     #[test]
@@ -1817,8 +1843,28 @@ mod tests {
 
         assert_eq!(
             error.message(),
-            "data install requires --lang <fa|en|fa,en>"
+            "data install requires --lang <code[,code...]>"
         );
+    }
+
+    #[test]
+    fn parse_data_install_command_accepts_custom_language_code() {
+        let command = parse_command(vec![
+            "data".to_string(),
+            "install".to_string(),
+            "--lang".to_string(),
+            "de,en".to_string(),
+        ])
+        .expect("parse should succeed")
+        .expect("command should exist");
+
+        let Command::Data(DataCommand::Install(options)) = command else {
+            panic!("expected data install command");
+        };
+
+        assert_eq!(options.targets.len(), 2);
+        assert_eq!(options.targets[0], ProtoTarget::Other("de".to_string()));
+        assert_eq!(options.targets[1], ProtoTarget::English);
     }
 
     #[test]

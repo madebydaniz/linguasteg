@@ -1,6 +1,6 @@
 use linguasteg_core::{
-    decode_payload_from_symbolic_frames, inspect_envelope, open_payload, CryptoEnvelopeInspection,
-    FixedWidthPlanningOptions, SymbolicFramePlan, SymbolicFrameSchema,
+    CryptoEnvelopeInspection, FixedWidthPlanningOptions, SymbolicFramePlan, SymbolicFrameSchema,
+    decode_payload_from_symbolic_frames, inspect_envelope, open_payload,
 };
 
 use super::formatters::{build_trace_analysis_json, build_trace_analysis_text};
@@ -46,8 +46,8 @@ pub(crate) fn analyze_trace_summary(
     }
 
     let target = resolve_trace_target(target, auto_detect_target, trace_text)?;
-    let mut runtime = PrototypeRuntime::new(target).map_err(|error| {
-        CliError::internal(format!(
+    let mut runtime = PrototypeRuntime::new(target.clone()).map_err(|error| {
+        CliError::config(format!(
             "failed to initialize {} runtime: {error}",
             target.as_str()
         ))
@@ -158,7 +158,8 @@ fn analyze_trace(
                 let decryptable_candidate = matches!(
                     inspect_envelope(&candidate_payload),
                     CryptoEnvelopeInspection::Metadata(_)
-                ) && open_payload(&candidate_payload, secret_bytes).is_ok();
+                ) && open_payload(&candidate_payload, secret_bytes)
+                    .is_ok();
 
                 if !decryptable_candidate {
                     let mut unmixed_frames = frames.to_vec();
@@ -171,7 +172,8 @@ fn analyze_trace(
                         let decryptable_unmixed = matches!(
                             inspect_envelope(&unmixed_payload),
                             CryptoEnvelopeInspection::Metadata(_)
-                        ) && open_payload(&unmixed_payload, secret_bytes).is_ok();
+                        ) && open_payload(&unmixed_payload, secret_bytes)
+                            .is_ok();
                         if decryptable_unmixed {
                             candidate_payload = unmixed_payload;
                         }
@@ -311,8 +313,8 @@ fn resolve_text_frames_with_auto_fallback(
 
     if auto_detect_target {
         let fallback_target = alternate_target(target);
-        let fallback_runtime = PrototypeRuntime::new(fallback_target).map_err(|error| {
-            CliError::internal(format!(
+        let fallback_runtime = PrototypeRuntime::new(fallback_target.clone()).map_err(|error| {
+            CliError::config(format!(
                 "failed to initialize {} runtime: {error}",
                 fallback_target.as_str()
             ))
@@ -350,5 +352,6 @@ fn alternate_target(target: ProtoTarget) -> ProtoTarget {
     match target {
         ProtoTarget::Farsi => ProtoTarget::English,
         ProtoTarget::English => ProtoTarget::Farsi,
+        ProtoTarget::Other(code) => ProtoTarget::Other(code),
     }
 }

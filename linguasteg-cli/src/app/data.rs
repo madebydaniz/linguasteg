@@ -366,7 +366,8 @@ fn run_data_list(options: DataListOptions) -> Result<(), CliError> {
         .filter(|source| {
             options
                 .target
-                .is_none_or(|target| source.language == target)
+                .as_ref()
+                .is_none_or(|target| source.language.as_str() == target.as_str())
         })
         .map(|source| {
             let installed = state.installs.iter().any(|record| {
@@ -441,7 +442,8 @@ fn run_data_install(options: DataInstallOptions, force_refresh: bool) -> Result<
     let mut items = Vec::with_capacity(options.targets.len());
 
     for target in &options.targets {
-        let source = resolve_source_for_target(&sources, *target, options.source_id.as_deref())?;
+        let source =
+            resolve_source_for_target(&sources, target.clone(), options.source_id.as_deref())?;
         let status = upsert_install_state(&mut state, source, now, force_refresh);
         let artifact = options
             .artifact_url
@@ -527,6 +529,7 @@ fn run_data_status(options: DataStatusOptions) -> Result<(), CliError> {
         .filter(|record| {
             options
                 .target
+                .as_ref()
                 .is_none_or(|target| record.language == target.as_str())
         })
         .map(|record| {
@@ -589,6 +592,7 @@ fn run_data_verify(options: DataVerifyOptions) -> Result<(), CliError> {
             record.source_id == source_id
                 && options
                     .target
+                    .as_ref()
                     .is_none_or(|target| record.language == target.as_str())
         });
         if !has_source {
@@ -605,6 +609,7 @@ fn run_data_verify(options: DataVerifyOptions) -> Result<(), CliError> {
         .filter(|record| {
             options
                 .target
+                .as_ref()
                 .is_none_or(|target| record.language == target.as_str())
                 && options
                     .source_id
@@ -702,6 +707,7 @@ fn run_data_doctor(options: DataDoctorOptions) -> Result<(), CliError> {
     for record in &state.installs {
         if options
             .target
+            .as_ref()
             .is_some_and(|target| record.language != target.as_str())
         {
             continue;
@@ -947,6 +953,7 @@ fn run_data_clean(options: DataCleanOptions) -> Result<(), CliError> {
             record.source_id == source_id
                 && options
                     .target
+                    .as_ref()
                     .is_none_or(|target| record.language == target.as_str())
         });
         if !has_source {
@@ -963,6 +970,7 @@ fn run_data_clean(options: DataCleanOptions) -> Result<(), CliError> {
         .filter(|record| {
             options
                 .target
+                .as_ref()
                 .is_none_or(|target| record.language == target.as_str())
                 && options
                     .source_id
@@ -1075,6 +1083,7 @@ fn run_data_pin(options: DataPinOptions) -> Result<(), CliError> {
             record.source_id == source_id
                 && options
                     .target
+                    .as_ref()
                     .is_none_or(|target| record.language == target.as_str())
         });
         if !has_source {
@@ -1091,6 +1100,7 @@ fn run_data_pin(options: DataPinOptions) -> Result<(), CliError> {
         .filter(|record| {
             options
                 .target
+                .as_ref()
                 .is_none_or(|target| record.language == target.as_str())
                 && options
                     .source_id
@@ -1182,6 +1192,7 @@ fn run_data_export_manifest(options: DataExportManifestOptions) -> Result<(), Cl
             record.source_id == source_id
                 && options
                     .target
+                    .as_ref()
                     .is_none_or(|target| record.language == target.as_str())
         });
         if !has_source {
@@ -1198,6 +1209,7 @@ fn run_data_export_manifest(options: DataExportManifestOptions) -> Result<(), Cl
         .filter(|record| {
             options
                 .target
+                .as_ref()
                 .is_none_or(|target| record.language == target.as_str())
                 && options
                     .source_id
@@ -1300,6 +1312,7 @@ fn run_data_import_manifest(options: DataImportManifestOptions) -> Result<(), Cl
     for entry in snapshot.entries {
         if options
             .target
+            .as_ref()
             .is_some_and(|target| entry.language != target.as_str())
         {
             continue;
@@ -2082,13 +2095,21 @@ fn sha256_file_limited(path: &Path) -> Result<String, String> {
 }
 
 fn parse_data_language(value: &str) -> Result<ProtoTarget, CliError> {
-    match value {
-        "fa" => Ok(ProtoTarget::Farsi),
-        "en" => Ok(ProtoTarget::English),
-        _ => Err(CliError::config(format!(
-            "unsupported language '{value}' in data sources manifest"
-        ))),
+    let normalized = value.trim().to_ascii_lowercase();
+    if normalized.is_empty() {
+        return Err(CliError::config(
+            "data sources manifest contains an empty language code".to_string(),
+        ));
     }
+    if !normalized
+        .bytes()
+        .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
+    {
+        return Err(CliError::config(format!(
+            "invalid language code '{value}' in data sources manifest"
+        )));
+    }
+    Ok(ProtoTarget::from_language_code(&normalized))
 }
 
 fn resolve_source_for_target<'a>(

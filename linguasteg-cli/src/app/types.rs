@@ -200,10 +200,11 @@ pub(crate) enum DemoTarget {
     English,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum ProtoTarget {
     Farsi,
     English,
+    Other(String),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -214,10 +215,19 @@ pub(crate) enum DecodeInputMode {
 }
 
 impl ProtoTarget {
-    pub(crate) fn as_str(self) -> &'static str {
+    pub(crate) fn as_str(&self) -> &str {
         match self {
             Self::Farsi => "fa",
             Self::English => "en",
+            Self::Other(code) => code.as_str(),
+        }
+    }
+
+    pub(crate) fn from_language_code(value: &str) -> Self {
+        match value {
+            "fa" => Self::Farsi,
+            "en" => Self::English,
+            _ => Self::Other(value.to_string()),
         }
     }
 }

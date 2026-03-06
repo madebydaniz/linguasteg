@@ -1,7 +1,7 @@
 use super::trace_contract::parse_proto_encode_trace_json;
 use super::types::{CliError, ProtoTarget};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 enum TraceLanguageState {
     Undetected,
     Single(ProtoTarget),

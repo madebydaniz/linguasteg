@@ -51,7 +51,7 @@ pub(crate) fn execute(command: Command) -> Result<(), CliError> {
 }
 
 fn run_catalog(options: CatalogQueryOptions) -> Result<(), CliError> {
-    let language_filter = options.target.map(ProtoTarget::as_str);
+    let language_filter = options.target.as_ref().map(ProtoTarget::as_str);
     let all_languages = supported_languages();
     let languages = all_languages
         .iter()
@@ -65,8 +65,8 @@ fn run_catalog(options: CatalogQueryOptions) -> Result<(), CliError> {
                 .is_none_or(|code| item.languages.iter().any(|language| *language == code))
         })
         .collect::<Vec<_>>();
-    let template_items = collect_template_items(options.target)?;
-    let profile_items = collect_profile_items(options.target)?;
+    let template_items = collect_template_items(options.target.clone())?;
+    let profile_items = collect_profile_items(options.target.clone())?;
     let schema_items = collect_schema_items(options.target)?;
 
     if matches!(options.format, OutputFormat::Json) {
@@ -343,7 +343,10 @@ struct SchemaCatalogItem {
 fn selected_targets(target: Option<ProtoTarget>) -> Vec<ProtoTarget> {
     match target {
         Some(value) => vec![value],
-        None => vec![ProtoTarget::Farsi, ProtoTarget::English],
+        None => supported_languages()
+            .iter()
+            .map(|item| ProtoTarget::from_language_code(item.code))
+            .collect(),
     }
 }
 
@@ -705,7 +708,7 @@ fn run_encode(options: EncodeOptions) -> Result<(), CliError> {
         "encode",
     )?;
     let active_data_source = resolve_active_data_source_selection(
-        options.target,
+        options.target.clone(),
         options.source_id.as_deref(),
         options.data_dir.as_deref(),
     )?;
@@ -824,7 +827,7 @@ fn render_validate_output(
 }
 
 fn run_demo(target: ProtoTarget) -> Result<(), CliError> {
-    let runtime = runtime_for_target(target)?;
+    let runtime = runtime_for_target(target.clone())?;
     let language = map_domain(
         LanguageTag::new(runtime.language_code),
         "invalid language tag",
@@ -844,7 +847,7 @@ fn run_demo(target: ProtoTarget) -> Result<(), CliError> {
     }
 
     let template_id = map_domain(
-        TemplateId::new(time_location_template_id(target)),
+        TemplateId::new(time_location_template_id(&target)?),
         "invalid template identifier",
     )?;
     let template = runtime
@@ -854,7 +857,7 @@ fn run_demo(target: ProtoTarget) -> Result<(), CliError> {
 
     let valid_plan = RealizationPlan {
         template_id: template_id.clone(),
-        assignments: demo_assignments(target, true)?
+        assignments: demo_assignments(&target, true)?
             .into_iter()
             .map(|(slot, surface)| assignment(slot, surface))
             .collect::<Result<Vec<_>, _>>()?,
@@ -874,7 +877,7 @@ fn run_demo(target: ProtoTarget) -> Result<(), CliError> {
 
     let invalid_plan = RealizationPlan {
         template_id,
-        assignments: demo_assignments(target, false)?
+        assignments: demo_assignments(&target, false)?
             .into_iter()
             .map(|(slot, surface)| assignment(slot, surface))
             .collect::<Result<Vec<_>, _>>()?,
@@ -891,7 +894,7 @@ fn run_demo(target: ProtoTarget) -> Result<(), CliError> {
 }
 
 fn demo_assignments(
-    target: ProtoTarget,
+    target: &ProtoTarget,
     valid: bool,
 ) -> Result<Vec<(&'static str, &'static str)>, CliError> {
     let data = match (target, valid) {
@@ -923,14 +926,22 @@ fn demo_assignments(
             ("verb", "writes"),
             ("object", "letter"),
         ],
+        (ProtoTarget::Other(_), _) => {
+            return Err(CliError::config(
+                "demo supports only built-in targets: fa, en".to_string(),
+            ));
+        }
     };
     Ok(data)
 }
 
-fn time_location_template_id(target: ProtoTarget) -> &'static str {
+fn time_location_template_id(target: &ProtoTarget) -> Result<&'static str, CliError> {
     match target {
-        ProtoTarget::Farsi => "fa-time-location-sov",
-        ProtoTarget::English => "en-time-location-svo",
+        ProtoTarget::Farsi => Ok("fa-time-location-sov"),
+        ProtoTarget::English => Ok("en-time-location-svo"),
+        ProtoTarget::Other(code) => Err(CliError::config(format!(
+            "no demo template is registered for language '{code}'"
+        ))),
     }
 }
 
@@ -1303,7 +1314,7 @@ fn render_proto_decode_output(
     }
 
     let target = resolve_trace_target(target, auto_detect_target, trace_text)?;
-    let mut runtime = runtime_for_target(target)?;
+    let mut runtime = runtime_for_target(target.clone())?;
     let schemas = runtime.mapper.frame_schemas();
     let parsed_trace_frames = parse_frames_from_trace(trace_text, &schemas)
         .map_err(|error| CliError::trace(format!("failed to parse trace frames: {error}")))?;
@@ -1569,6 +1580,7 @@ fn alternate_target(target: ProtoTarget) -> ProtoTarget {
     match target {
         ProtoTarget::Farsi => ProtoTarget::English,
         ProtoTarget::English => ProtoTarget::Farsi,
+        ProtoTarget::Other(code) => ProtoTarget::Other(code),
     }
 }
 
@@ -1694,8 +1706,8 @@ fn write_output(output: &str, output_path: Option<&str>) -> Result<(), CliError>
 }
 
 fn runtime_for_target(target: ProtoTarget) -> Result<PrototypeRuntime, CliError> {
-    PrototypeRuntime::new(target).map_err(|error| {
-        CliError::internal(format!(
+    PrototypeRuntime::new(target.clone()).map_err(|error| {
+        CliError::config(format!(
             "failed to initialize {} runtime: {error}",
             target.as_str()
         ))
