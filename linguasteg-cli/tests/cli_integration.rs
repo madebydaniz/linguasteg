@@ -360,6 +360,57 @@ fn encode_english_first_frame_sentence_varies_across_secrets() {
 }
 
 #[test]
+fn encode_farsi_first_frame_sentence_varies_across_secrets() {
+    let output_a = run_lsteg_with_env(
+        &[
+            "encode",
+            "--lang",
+            "fa",
+            "--message",
+            "hello world",
+            "--format",
+            "json",
+        ],
+        &[("LSTEG_SECRET", "1234")],
+    );
+    assert!(output_a.status.success());
+    let json_a: Value =
+        serde_json::from_str(&stdout_string(&output_a)).expect("json output should parse");
+    let first_sentence_a = json_a
+        .get("frames")
+        .and_then(Value::as_array)
+        .and_then(|frames| frames.first())
+        .and_then(|frame| frame.get("sentence"))
+        .and_then(Value::as_str)
+        .expect("first frame sentence should exist");
+
+    let output_b = run_lsteg_with_env(
+        &[
+            "encode",
+            "--lang",
+            "fa",
+            "--message",
+            "hello world",
+            "--format",
+            "json",
+        ],
+        &[("LSTEG_SECRET", "12345")],
+    );
+    assert!(output_b.status.success());
+    let json_b: Value =
+        serde_json::from_str(&stdout_string(&output_b)).expect("json output should parse");
+    let first_sentence_b = json_b
+        .get("frames")
+        .and_then(Value::as_array)
+        .and_then(|frames| frames.first())
+        .and_then(|frame| frame.get("sentence"))
+        .and_then(Value::as_str)
+        .expect("first frame sentence should exist");
+
+    assert_ne!(first_sentence_a, first_sentence_b);
+}
+
+#[test]
 fn languages_text_lists_supported_languages() {
     let output = run_lsteg(&["languages"]);
     assert!(output.status.success());

@@ -1122,6 +1122,7 @@ fn apply_secret_surface_variants(
                     slot,
                     assignment.surface.as_str(),
                     intro_seed,
+                    secret_bytes.len(),
                 ) {
                     assignment.surface = variant.to_string();
                     continue;
@@ -1144,6 +1145,7 @@ fn secret_intro_surface_variant(
     slot: &str,
     surface: &str,
     intro_seed: u64,
+    secret_len: usize,
 ) -> Option<&'static str> {
     let selector = intro_seed
         ^ fnv1a64(slot.as_bytes()).rotate_left(19)
@@ -1163,6 +1165,56 @@ fn secret_intro_surface_variant(
             "writes"
         } else {
             "composes"
+        }),
+        ("fa", "object", "نامه") => Some(if (secret_len & 1) == 0 {
+            "نامه"
+        } else {
+            "مکتوب"
+        }),
+        ("fa", "object", "پیام") => Some(if (secret_len & 1) == 0 {
+            "پیام"
+        } else {
+            "پیغام"
+        }),
+        ("fa", "object", "داستان") => Some(if (secret_len & 1) == 0 {
+            "داستان"
+        } else {
+            "حکایت"
+        }),
+        ("fa", "object", "غذا") => Some(if (secret_len & 1) == 0 {
+            "غذا"
+        } else {
+            "طعام"
+        }),
+        ("fa", "adjective", "زیبا") => Some(if (selector & 1) == 0 {
+            "زیبا"
+        } else {
+            "خوش"
+        }),
+        ("fa", "adjective", "قدیمی") => Some(if (selector & 1) == 0 {
+            "قدیمی"
+        } else {
+            "کهن"
+        }),
+        ("fa", "adjective", "تازه") => Some(if (selector & 1) == 0 {
+            "تازه"
+        } else {
+            "نو"
+        }),
+        ("fa", "verb", "نوشت") => Some(if (selector & 1) == 0 {
+            "نوشت"
+        } else {
+            "نگاشت"
+        }),
+        ("fa", "verb", "دید") => Some(if (selector & 1) == 0 {
+            "دید"
+        } else {
+            "نگریست"
+        }),
+        ("fa", "verb", "گفت") => Some(if (selector & 1) == 0 {
+            "گفت"
+        } else {
+            "فرمود"
         }),
         _ => None,
     }
