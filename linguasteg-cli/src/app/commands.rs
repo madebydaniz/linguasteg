@@ -1111,9 +1111,22 @@ fn apply_secret_surface_variants(
     }
 
     let seed = fnv1a64(secret_bytes);
+    let secret_len = u64::try_from(secret_bytes.len()).unwrap_or(u64::MAX);
+    let intro_seed = seed ^ secret_len.wrapping_mul(0xA24B_AED4_963E_E407) ^ 0xC6A4_A793_5BD1_E995;
     for (frame_index, plan) in plans.iter_mut().enumerate() {
         for assignment in &mut plan.assignments {
             let slot = assignment.slot.as_str();
+            if frame_index == 0 {
+                if let Some(variant) = secret_intro_surface_variant(
+                    language_code,
+                    slot,
+                    assignment.surface.as_str(),
+                    intro_seed,
+                ) {
+                    assignment.surface = variant.to_string();
+                    continue;
+                }
+            }
             if !should_use_secret_variant(seed, frame_index, slot, &assignment.surface) {
                 continue;
             }
@@ -1123,6 +1136,35 @@ fn apply_secret_surface_variants(
                 assignment.surface = variant.to_string();
             }
         }
+    }
+}
+
+fn secret_intro_surface_variant(
+    language_code: &str,
+    slot: &str,
+    surface: &str,
+    intro_seed: u64,
+) -> Option<&'static str> {
+    let selector = intro_seed
+        ^ fnv1a64(slot.as_bytes()).rotate_left(19)
+        ^ fnv1a64(surface.as_bytes()).rotate_left(7);
+    match (language_code, slot, surface) {
+        ("en", "object", "letter") => Some(match selector % 3 {
+            0 => "letter",
+            1 => "missive",
+            _ => "epistle",
+        }),
+        ("en", "adjective", "quiet") => Some(if (selector & 1) == 0 {
+            "quiet"
+        } else {
+            "concise"
+        }),
+        ("en", "verb", "writes") => Some(if (selector & 1) == 0 {
+            "writes"
+        } else {
+            "composes"
+        }),
+        _ => None,
     }
 }
 
