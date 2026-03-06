@@ -5,7 +5,7 @@ use linguasteg_core::{
 
 use super::formatters::{build_trace_analysis_json, build_trace_analysis_text};
 use super::language::resolve_trace_target;
-use super::runtime::PrototypeRuntime;
+use super::runtime::{PrototypeRuntime, initialize_runtime};
 use super::symbol_mix::apply_secret_symbolic_mix;
 use super::trace::{frame_sequence_error, parse_frames_from_trace, schema_for_template};
 use super::types::{CliError, DecodeInputMode, OutputFormat, ProtoTarget, TraceAnalysisSummary};
@@ -46,12 +46,7 @@ pub(crate) fn analyze_trace_summary(
     }
 
     let target = resolve_trace_target(target, auto_detect_target, trace_text)?;
-    let mut runtime = PrototypeRuntime::new(target.clone()).map_err(|error| {
-        CliError::config(format!(
-            "failed to initialize {} runtime: {error}",
-            target.as_str()
-        ))
-    })?;
+    let mut runtime = initialize_runtime(target.clone())?;
     let schemas = runtime.mapper.frame_schemas();
     let parsed_trace_frames = parse_frames_from_trace(trace_text, &schemas)
         .map_err(|error| CliError::trace(format!("failed to parse trace frames: {error}")))?;
@@ -313,12 +308,7 @@ fn resolve_text_frames_with_auto_fallback(
 
     if auto_detect_target {
         let fallback_target = alternate_target(target);
-        let fallback_runtime = PrototypeRuntime::new(fallback_target.clone()).map_err(|error| {
-            CliError::config(format!(
-                "failed to initialize {} runtime: {error}",
-                fallback_target.as_str()
-            ))
-        })?;
+        let fallback_runtime = initialize_runtime(fallback_target.clone())?;
         if fallback_runtime.text_decode_lossless {
             if let Some(frames) = extract_text_frames(&fallback_runtime, trace_text) {
                 *runtime = fallback_runtime;

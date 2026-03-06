@@ -2295,6 +2295,17 @@ fn runtime_errors_return_exit_code_one() {
 }
 
 #[test]
+fn encode_unknown_runtime_language_reports_supported_list() {
+    let output = run_lsteg(&["encode", "--lang", "de", "--message", "hello world"]);
+    assert_eq!(output.status.code(), Some(1));
+
+    let stderr = stderr_string(&output);
+    assert!(stderr.contains("LSTEG-CLI-CFG-001"));
+    assert!(stderr.contains("language 'de' is not supported by runtime providers"));
+    assert!(stderr.contains("supported: fa, en"));
+}
+
+#[test]
 fn decode_rejects_non_canonical_plain_text_with_input_error() {
     let decode_output =
         run_lsteg_with_stdin(&["decode", "--format", "json"], "this is not stego text");

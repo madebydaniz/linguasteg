@@ -13,7 +13,7 @@ use linguasteg_models::{
     FarsiPrototypeTextExtractor, InMemoryGatewayRegistry,
 };
 
-use super::types::ProtoTarget;
+use super::types::{CliError, ProtoTarget};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct SupportedLanguageInfo {
@@ -45,6 +45,36 @@ pub(crate) fn supported_languages() -> Vec<SupportedLanguageInfo> {
             direction: provider.direction(),
         })
         .collect()
+}
+
+pub(crate) fn runtime_supports_language_code(language_code: &str) -> bool {
+    runtime_provider_for_code(language_code).is_some()
+}
+
+pub(crate) fn supported_language_codes_csv() -> String {
+    runtime_providers()
+        .iter()
+        .map(|provider| provider.language_code())
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+pub(crate) fn initialize_runtime(target: ProtoTarget) -> Result<PrototypeRuntime, CliError> {
+    let language_code = target.as_str().to_string();
+    if !runtime_supports_language_code(&language_code) {
+        return Err(CliError::config(format!(
+            "language '{}' is not supported by runtime providers (supported: {})",
+            language_code,
+            supported_language_codes_csv()
+        )));
+    }
+
+    PrototypeRuntime::new(target).map_err(|error| {
+        CliError::config(format!(
+            "failed to initialize '{}' runtime: {error}",
+            language_code
+        ))
+    })
 }
 
 const SUPPORTED_STRATEGIES: [SupportedStrategyInfo; 1] = [SupportedStrategyInfo {
@@ -364,7 +394,10 @@ impl PrototypeRuntime {
 
 #[cfg(test)]
 mod tests {
-    use super::{PrototypeRuntime, supported_languages};
+    use super::{
+        PrototypeRuntime, initialize_runtime, supported_language_codes_csv, supported_languages,
+    };
+    use crate::app::types::ProtoTarget;
 
     #[test]
     fn supported_languages_are_provided_by_runtime_registry() {
@@ -391,5 +424,27 @@ mod tests {
             Err(error) => error,
         };
         assert!(error.to_string().contains("language is not supported: de"));
+    }
+
+    #[test]
+    fn initialize_runtime_reports_supported_language_codes_for_unknown_target() {
+        let error = match initialize_runtime(ProtoTarget::Other("de".to_string())) {
+            Ok(_) => panic!("unknown runtime should fail"),
+            Err(error) => error,
+        };
+        assert_eq!(error.code(), "LSTEG-CLI-CFG-001");
+        assert!(
+            error
+                .message()
+                .contains("language 'de' is not supported by runtime providers")
+        );
+        assert!(error.message().contains("supported: fa, en"));
+    }
+
+    #[test]
+    fn supported_language_codes_csv_lists_registered_providers() {
+        let csv = supported_language_codes_csv();
+        assert!(csv.contains("fa"));
+        assert!(csv.contains("en"));
     }
 }

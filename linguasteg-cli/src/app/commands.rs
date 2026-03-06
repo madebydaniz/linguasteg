@@ -13,7 +13,8 @@ use super::data::{resolve_active_data_source_selection, run_data_command};
 use super::formatters::{build_proto_decode_json, build_proto_encode_json, json_escape};
 use super::language::resolve_trace_target;
 use super::runtime::{
-    PrototypeRuntime, supported_languages, supported_models, supported_strategies,
+    PrototypeRuntime, initialize_runtime, supported_languages, supported_models,
+    supported_strategies,
 };
 use super::symbol_mix::apply_secret_symbolic_mix;
 use super::trace::{frame_sequence_error, parse_frames_from_trace, schema_for_template};
@@ -1706,12 +1707,7 @@ fn write_output(output: &str, output_path: Option<&str>) -> Result<(), CliError>
 }
 
 fn runtime_for_target(target: ProtoTarget) -> Result<PrototypeRuntime, CliError> {
-    PrototypeRuntime::new(target.clone()).map_err(|error| {
-        CliError::config(format!(
-            "failed to initialize {} runtime: {error}",
-            target.as_str()
-        ))
-    })
+    initialize_runtime(target)
 }
 
 fn map_domain<T, E>(result: Result<T, E>, context: &str) -> Result<T, CliError>
