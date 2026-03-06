@@ -1089,20 +1089,12 @@ fn parse_proto_encode_command(
     args: impl Iterator<Item = String>,
 ) -> Result<Option<Command>, CliError> {
     let mut args = args.collect::<Vec<_>>();
-    let target = match args.first().map(String::as_str) {
-        Some("fa") => ProtoTarget::Farsi,
-        Some("en") => ProtoTarget::English,
-        _ => {
-            return Err(CliError::usage(
-                "proto-encode target is required (supported: fa, en)".to_string(),
-            ));
-        }
-    };
     if args.is_empty() {
         return Err(CliError::usage(
-            "proto-encode target is required (supported: fa, en)".to_string(),
+            "proto-encode target is required (use language code like: fa, en, de)".to_string(),
         ));
     }
+    let target = parse_proto_target(args[0].as_str())?;
 
     args.remove(0);
     let json = take_flag(&mut args, "--json");
@@ -1120,20 +1112,12 @@ fn parse_proto_decode_command(
     args: impl Iterator<Item = String>,
 ) -> Result<Option<Command>, CliError> {
     let mut args = args.collect::<Vec<_>>();
-    let target = match args.first().map(String::as_str) {
-        Some("fa") => ProtoTarget::Farsi,
-        Some("en") => ProtoTarget::English,
-        _ => {
-            return Err(CliError::usage(
-                "proto-decode target is required (supported: fa, en)".to_string(),
-            ));
-        }
-    };
     if args.is_empty() {
         return Err(CliError::usage(
-            "proto-decode target is required (supported: fa, en)".to_string(),
+            "proto-decode target is required (use language code like: fa, en, de)".to_string(),
         ));
     }
+    let target = parse_proto_target(args[0].as_str())?;
 
     args.remove(0);
     let json = take_flag(&mut args, "--json");
@@ -1534,15 +1518,15 @@ pub(crate) fn write_usage(mut writer: impl Write) -> std::io::Result<()> {
     writeln!(writer, "       lsteg demo <fa|en>")?;
     writeln!(
         writer,
-        "       lsteg proto-encode <fa|en> [message] [--json]"
+        "       lsteg proto-encode <code> [message] [--json]"
     )?;
     writeln!(
         writer,
-        "       lsteg proto-encode <fa|en> [message] | lsteg proto-decode <fa|en> [--json]"
+        "       lsteg proto-encode <code> [message] | lsteg proto-decode <code> [--json]"
     )?;
     writeln!(
         writer,
-        "       lsteg proto-decode <fa|en> \"<frame trace lines>\" [--json]"
+        "       lsteg proto-decode <code> \"<frame trace lines>\" [--json]"
     )?;
     writeln!(
         writer,
@@ -1810,6 +1794,47 @@ mod tests {
         };
 
         assert!(matches!(options.input_mode, DecodeInputMode::Trace));
+    }
+
+    #[test]
+    fn parse_proto_encode_command_accepts_custom_language_code() {
+        let command = parse_command(vec![
+            "proto-encode".to_string(),
+            "de".to_string(),
+            "hallo".to_string(),
+        ])
+        .expect("parse should succeed")
+        .expect("command should exist");
+
+        let Command::ProtoEncode(target, payload, json) = command else {
+            panic!("expected proto encode command");
+        };
+
+        assert_eq!(target, ProtoTarget::Other("de".to_string()));
+        assert_eq!(payload, "hallo".to_string());
+        assert!(!json);
+    }
+
+    #[test]
+    fn parse_proto_decode_command_accepts_custom_language_code() {
+        let command = parse_command(vec![
+            "proto-decode".to_string(),
+            "de".to_string(),
+            "frame 01 [de-basic] bits=0..1 values=x:0 => x".to_string(),
+        ])
+        .expect("parse should succeed")
+        .expect("command should exist");
+
+        let Command::ProtoDecode(target, trace, json) = command else {
+            panic!("expected proto decode command");
+        };
+
+        assert_eq!(target, ProtoTarget::Other("de".to_string()));
+        assert_eq!(
+            trace.as_deref(),
+            Some("frame 01 [de-basic] bits=0..1 values=x:0 => x")
+        );
+        assert!(!json);
     }
 
     #[test]
