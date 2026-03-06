@@ -9,7 +9,7 @@ use linguasteg_core::{
 };
 
 use super::analysis::{analyze_trace_summary, render_trace_analysis_output};
-use super::data::run_data_command;
+use super::data::{resolve_active_data_source_selection, run_data_command};
 use super::formatters::{build_proto_decode_json, build_proto_encode_json, json_escape};
 use super::language::resolve_trace_target;
 use super::runtime::{
@@ -704,6 +704,11 @@ fn run_encode(options: EncodeOptions) -> Result<(), CliError> {
         options.secret_file.as_deref(),
         "encode",
     )?;
+    let active_data_source = resolve_active_data_source_selection(
+        options.target,
+        options.source_id.as_deref(),
+        options.data_dir.as_deref(),
+    )?;
     let output = render_proto_encode_output(
         options.target,
         &payload_text,
@@ -711,6 +716,9 @@ fn run_encode(options: EncodeOptions) -> Result<(), CliError> {
         Some(&secret),
         options.emit_trace,
         options.profile.as_deref(),
+        active_data_source
+            .as_ref()
+            .map(|source| source.source_id.as_str()),
     )?;
     write_output(&output, options.output_path.as_deref())
 }
@@ -940,7 +948,7 @@ fn run_proto_encode(target: ProtoTarget, payload_text: &str, json: bool) -> Resu
     } else {
         OutputFormat::Text
     };
-    let output = render_proto_encode_output(target, payload_text, format, None, true, None)?;
+    let output = render_proto_encode_output(target, payload_text, format, None, true, None, None)?;
     println!("{output}");
     Ok(())
 }
@@ -985,6 +993,7 @@ fn render_proto_encode_output(
     secret: Option<&[u8]>,
     emit_trace: bool,
     profile: Option<&str>,
+    data_source_id: Option<&str>,
 ) -> Result<String, CliError> {
     let payload = payload_text.as_bytes();
     let symbolic_payload = match secret {
@@ -1018,7 +1027,12 @@ fn render_proto_encode_output(
             .map_payload_to_plans_with_profile(&payload_plan, profile_id.as_ref()),
         "failed to map payload to realization plans",
     )?;
-    apply_secret_surface_variants(runtime.language_code, &mut realization_plans, secret);
+    apply_secret_surface_variants(
+        runtime.language_code,
+        &mut realization_plans,
+        secret,
+        data_source_id,
+    );
 
     let mut sentences = Vec::with_capacity(realization_plans.len());
     let mut frame_lines = Vec::with_capacity(realization_plans.len());
@@ -1102,6 +1116,7 @@ fn apply_secret_surface_variants(
     language_code: &str,
     plans: &mut [RealizationPlan],
     secret: Option<&[u8]>,
+    data_source_id: Option<&str>,
 ) {
     let Some(secret_bytes) = secret else {
         return;
@@ -1110,9 +1125,16 @@ fn apply_secret_surface_variants(
         return;
     }
 
-    let seed = fnv1a64(secret_bytes);
+    let data_source_mix = data_source_id
+        .map(|source_id| fnv1a64(source_id.as_bytes()))
+        .unwrap_or(0);
+    let data_source_len = data_source_id.map_or(0, str::len);
+    let seed = fnv1a64(secret_bytes) ^ data_source_mix.rotate_left(11);
     let secret_len = u64::try_from(secret_bytes.len()).unwrap_or(u64::MAX);
-    let intro_seed = seed ^ secret_len.wrapping_mul(0xA24B_AED4_963E_E407) ^ 0xC6A4_A793_5BD1_E995;
+    let intro_seed = seed
+        ^ secret_len.wrapping_mul(0xA24B_AED4_963E_E407)
+        ^ 0xC6A4_A793_5BD1_E995
+        ^ data_source_mix.rotate_right(9);
     for (frame_index, plan) in plans.iter_mut().enumerate() {
         for assignment in &mut plan.assignments {
             let slot = assignment.slot.as_str();
@@ -1123,6 +1145,7 @@ fn apply_secret_surface_variants(
                     assignment.surface.as_str(),
                     intro_seed,
                     secret_bytes.len(),
+                    data_source_len,
                 ) {
                     assignment.surface = variant.to_string();
                     continue;
@@ -1146,15 +1169,24 @@ fn secret_intro_surface_variant(
     surface: &str,
     intro_seed: u64,
     secret_len: usize,
+    data_source_len: usize,
 ) -> Option<&'static str> {
     let selector = intro_seed
         ^ fnv1a64(slot.as_bytes()).rotate_left(19)
         ^ fnv1a64(surface.as_bytes()).rotate_left(7);
     match (language_code, slot, surface) {
-        ("en", "object", "letter") => Some(match selector % 3 {
-            0 => "letter",
-            1 => "missive",
-            _ => "epistle",
+        ("en", "object", "letter") => Some(if data_source_len > 0 {
+            if (((selector & 1) as usize) ^ (data_source_len & 1)) == 0 {
+                "letter"
+            } else {
+                "missive"
+            }
+        } else {
+            match selector % 3 {
+                0 => "letter",
+                1 => "missive",
+                _ => "epistle",
+            }
         }),
         ("en", "adjective", "quiet") => Some(if (selector & 1) == 0 {
             "quiet"

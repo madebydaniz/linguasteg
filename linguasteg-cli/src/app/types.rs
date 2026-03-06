@@ -103,6 +103,8 @@ pub(crate) struct EncodeOptions {
     pub(crate) message: Option<String>,
     pub(crate) input_path: Option<String>,
     pub(crate) output_path: Option<String>,
+    pub(crate) source_id: Option<String>,
+    pub(crate) data_dir: Option<String>,
     pub(crate) emit_trace: bool,
     pub(crate) profile: Option<String>,
     pub(crate) secret: Option<String>,

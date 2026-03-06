@@ -309,6 +309,108 @@ fn encode_english_varies_output_across_secrets() {
 }
 
 #[test]
+fn encode_english_varies_output_across_selected_data_sources() {
+    let data_dir = TempDataDir::create();
+    let install_recommended = run_lsteg_with_env(
+        &[
+            "data",
+            "install",
+            "--lang",
+            "en",
+            "--format",
+            "json",
+            "--data-dir",
+            data_dir.as_str(),
+        ],
+        &[],
+    );
+    assert!(install_recommended.status.success());
+    let install_wordnik = run_lsteg_with_env(
+        &[
+            "data",
+            "install",
+            "--lang",
+            "en",
+            "--source",
+            "en-wordlist-wordnik",
+            "--format",
+            "json",
+            "--data-dir",
+            data_dir.as_str(),
+        ],
+        &[],
+    );
+    assert!(install_wordnik.status.success());
+
+    let output_a = run_lsteg_with_env(
+        &[
+            "encode",
+            "--lang",
+            "en",
+            "--message",
+            "hello world",
+            "--source",
+            "en-wordnet-princeton",
+            "--data-dir",
+            data_dir.as_str(),
+            "--format",
+            "json",
+        ],
+        &[("LSTEG_SECRET", "1234")],
+    );
+    assert!(output_a.status.success());
+    let json_a: Value =
+        serde_json::from_str(&stdout_string(&output_a)).expect("json output should parse");
+
+    let output_b = run_lsteg_with_env(
+        &[
+            "encode",
+            "--lang",
+            "en",
+            "--message",
+            "hello world",
+            "--source",
+            "en-wordlist-wordnik",
+            "--data-dir",
+            data_dir.as_str(),
+            "--format",
+            "json",
+        ],
+        &[("LSTEG_SECRET", "1234")],
+    );
+    assert!(output_b.status.success());
+    let json_b: Value =
+        serde_json::from_str(&stdout_string(&output_b)).expect("json output should parse");
+
+    assert_ne!(json_a["final_text"], json_b["final_text"]);
+
+    let stego_a = json_a
+        .get("final_text")
+        .and_then(Value::as_str)
+        .expect("encoded final_text should exist");
+    let decode_a = run_lsteg_with_env(
+        &[
+            "decode",
+            "--lang",
+            "en",
+            "--text-input",
+            "--trace",
+            stego_a,
+            "--format",
+            "json",
+        ],
+        &[("LSTEG_SECRET", "1234")],
+    );
+    assert!(decode_a.status.success());
+    let json_decode_a: Value =
+        serde_json::from_str(&stdout_string(&decode_a)).expect("decode json should parse");
+    assert_eq!(
+        json_decode_a["payload_utf8"],
+        Value::String("hello world".to_string())
+    );
+}
+
+#[test]
 fn encode_english_first_frame_sentence_varies_across_secrets() {
     let output_a = run_lsteg_with_env(
         &[

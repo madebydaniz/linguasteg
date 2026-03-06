@@ -43,8 +43,12 @@ fn parse_encode_command(
 ) -> Result<Option<Command>, CliError> {
     let mut lang = env_proto_target("LSTEG_LANG")?.unwrap_or(ProtoTarget::Farsi);
     let mut format = env_output_format("LSTEG_FORMAT")?.unwrap_or(OutputFormat::Text);
+    let mut data_dir = env_optional("LSTEG_DATA_DIR");
+    let mut source_id = None;
     let mut emit_trace = false;
     let mut profile = env_optional("LSTEG_PROFILE");
+    let mut seen_source = false;
+    let mut seen_data_dir = false;
     let mut seen_profile = false;
     let mut payload = EncodePayloadArgs::from_env();
     let mut secrets = SecretArgs::from_env();
@@ -60,6 +64,24 @@ fn parse_encode_command(
             }
             "--emit-trace" => {
                 emit_trace = true;
+            }
+            "--source" => {
+                if seen_source {
+                    return Err(CliError::usage(
+                        "--source cannot be provided multiple times".to_string(),
+                    ));
+                }
+                seen_source = true;
+                source_id = Some(next_arg_value(&mut args, "--source")?);
+            }
+            "--data-dir" => {
+                if seen_data_dir {
+                    return Err(CliError::usage(
+                        "--data-dir cannot be provided multiple times".to_string(),
+                    ));
+                }
+                seen_data_dir = true;
+                data_dir = Some(next_arg_value(&mut args, "--data-dir")?);
             }
             "--profile" => {
                 if seen_profile {
@@ -92,6 +114,8 @@ fn parse_encode_command(
         message,
         input_path,
         output_path,
+        source_id,
+        data_dir,
         emit_trace,
         profile,
         secret,
@@ -1418,7 +1442,7 @@ pub(crate) fn write_usage(mut writer: impl Write) -> std::io::Result<()> {
     )?;
     writeln!(
         writer,
-        "       lsteg encode [--lang fa|en] (--message <text> | --input <file>) [--emit-trace] [--profile <id>] [--secret <value> | --secret-file <file>] [--format text|json] [--output <file>]"
+        "       lsteg encode [--lang fa|en] (--message <text> | --input <file>) [--source <id>] [--data-dir <path>] [--emit-trace] [--profile <id>] [--secret <value> | --secret-file <file>] [--format text|json] [--output <file>]"
     )?;
     writeln!(
         writer,
@@ -1638,6 +1662,30 @@ mod tests {
         };
 
         assert_eq!(options.profile.as_deref(), Some("fa-saadi-inspired-light"));
+    }
+
+    #[test]
+    fn parse_encode_command_sets_source_and_data_dir() {
+        let command = parse_command(vec![
+            "encode".to_string(),
+            "--lang".to_string(),
+            "en".to_string(),
+            "--message".to_string(),
+            "hello".to_string(),
+            "--source".to_string(),
+            "en-wordlist-wordnik".to_string(),
+            "--data-dir".to_string(),
+            "/tmp/lsteg-data".to_string(),
+        ])
+        .expect("parse should succeed")
+        .expect("command should exist");
+
+        let Command::Encode(options) = command else {
+            panic!("expected encode command");
+        };
+
+        assert_eq!(options.source_id.as_deref(), Some("en-wordlist-wordnik"));
+        assert_eq!(options.data_dir.as_deref(), Some("/tmp/lsteg-data"));
     }
 
     #[test]

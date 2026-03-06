@@ -268,6 +268,80 @@ struct InstalledSourceManifest {
     installed_at_epoch_sec: u64,
 }
 
+#[derive(Debug, Clone)]
+pub(crate) struct ActiveDataSourceSelection {
+    pub(crate) source_id: String,
+}
+
+pub(crate) fn resolve_active_data_source_selection(
+    target: ProtoTarget,
+    source_id: Option<&str>,
+    data_dir: Option<&str>,
+) -> Result<Option<ActiveDataSourceSelection>, CliError> {
+    let data_dir = resolve_data_dir(data_dir);
+    let state = load_data_state(&data_dir)?;
+    let mut installs = state
+        .installs
+        .iter()
+        .filter(|record| record.language == target.as_str())
+        .collect::<Vec<_>>();
+
+    if let Some(requested_source_id) = source_id {
+        let record = installs
+            .iter()
+            .find(|record| record.source_id == requested_source_id)
+            .copied()
+            .ok_or_else(|| {
+                CliError::config(format!(
+                    "data source '{}' is not installed for language '{}' (run 'lsteg data install --lang {} --source {}')",
+                    requested_source_id,
+                    target.as_str(),
+                    target.as_str(),
+                    requested_source_id
+                ))
+            })?;
+        return Ok(Some(ActiveDataSourceSelection {
+            source_id: record.source_id.clone(),
+        }));
+    }
+
+    if installs.is_empty() {
+        return Ok(None);
+    }
+    if installs.len() == 1 {
+        let record = installs[0];
+        return Ok(Some(ActiveDataSourceSelection {
+            source_id: record.source_id.clone(),
+        }));
+    }
+
+    let recommended_source_id = load_data_sources()?
+        .into_iter()
+        .find(|source| source.language == target && source.recommended)
+        .map(|source| source.id);
+    if let Some(recommended_source_id) = recommended_source_id {
+        if let Some(record) = installs
+            .iter()
+            .find(|record| record.source_id == recommended_source_id)
+        {
+            return Ok(Some(ActiveDataSourceSelection {
+                source_id: record.source_id.clone(),
+            }));
+        }
+    }
+
+    installs.sort_by(|left, right| {
+        right
+            .installed_at_epoch_sec
+            .cmp(&left.installed_at_epoch_sec)
+            .then_with(|| left.source_id.cmp(&right.source_id))
+    });
+    let record = installs[0];
+    Ok(Some(ActiveDataSourceSelection {
+        source_id: record.source_id.clone(),
+    }))
+}
+
 pub(crate) fn run_data_command(command: DataCommand) -> Result<(), CliError> {
     match command {
         DataCommand::List(options) => run_data_list(options),
