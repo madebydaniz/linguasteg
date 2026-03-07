@@ -4,7 +4,8 @@ members = [
     "linguasteg-core",
     "linguasteg-cli",
     "linguasteg-models",
-    "linguasteg-eval"
+    "linguasteg-eval",
+    "xtask"
 ]
 default-members = ["linguasteg", "linguasteg-cli"]
 resolver = "2"
