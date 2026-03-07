@@ -138,6 +138,7 @@ fn parse_decode_command(args: impl Iterator<Item = String>) -> Result<Option<Com
         trace: parsed.trace,
         input_path: parsed.input_path,
         output_path: parsed.output_path,
+        data_dir: parsed.data_dir,
         secret: parsed.secret,
         secret_file: parsed.secret_file,
         format: parsed.format,
@@ -157,6 +158,7 @@ fn parse_analyze_command(args: impl Iterator<Item = String>) -> Result<Option<Co
         trace: parsed.trace,
         input_path: parsed.input_path,
         output_path: parsed.output_path,
+        data_dir: parsed.data_dir,
         secret: parsed.secret,
         secret_file: parsed.secret_file,
         format: parsed.format,
@@ -176,6 +178,7 @@ fn parse_validate_command(args: impl Iterator<Item = String>) -> Result<Option<C
         trace: parsed.trace,
         input_path: parsed.input_path,
         output_path: parsed.output_path,
+        data_dir: parsed.data_dir,
         secret: parsed.secret,
         secret_file: parsed.secret_file,
         format: parsed.format,
@@ -189,6 +192,7 @@ struct ParsedTraceLikeCommand {
     trace: Option<String>,
     input_path: Option<String>,
     output_path: Option<String>,
+    data_dir: Option<String>,
     secret: Option<String>,
     secret_file: Option<String>,
     format: OutputFormat,
@@ -205,12 +209,14 @@ fn parse_trace_like_command_args(
     let mut trace = env_optional("LSTEG_TRACE");
     let mut input_path = env_optional("LSTEG_INPUT");
     let mut output_path = env_optional("LSTEG_OUTPUT");
+    let mut data_dir = env_optional("LSTEG_DATA_DIR");
     let mut decode_input_mode = DecodeInputMode::Auto;
     let mut secrets = SecretArgs::from_env();
 
     let mut seen_trace = false;
     let mut seen_input = false;
     let mut seen_output = false;
+    let mut seen_data_dir = false;
     let mut seen_trace_input = false;
     let mut seen_text_input = false;
 
@@ -249,6 +255,15 @@ fn parse_trace_like_command_args(
                 }
                 seen_output = true;
                 output_path = Some(next_arg_value(&mut args, "--output")?);
+            }
+            "--data-dir" => {
+                if seen_data_dir {
+                    return Err(CliError::usage(
+                        "--data-dir cannot be provided multiple times".to_string(),
+                    ));
+                }
+                seen_data_dir = true;
+                data_dir = Some(next_arg_value(&mut args, "--data-dir")?);
             }
             "--trace-input" if supports_input_mode => {
                 if seen_trace_input {
@@ -304,6 +319,7 @@ fn parse_trace_like_command_args(
         trace,
         input_path,
         output_path,
+        data_dir,
         secret,
         secret_file,
         format,
@@ -1523,15 +1539,15 @@ pub(crate) fn write_usage(mut writer: impl Write) -> std::io::Result<()> {
     )?;
     writeln!(
         writer,
-        "       lsteg decode [--lang auto|<code>] [--trace-input|--text-input] [--trace <text> | --input <file>] [--secret <value> | --secret-file <file>] [--format text|json] [--output <file>]"
+        "       lsteg decode [--lang auto|<code>] [--trace-input|--text-input] [--trace <text> | --input <file>] [--data-dir <path>] [--secret <value> | --secret-file <file>] [--format text|json] [--output <file>]"
     )?;
     writeln!(
         writer,
-        "       lsteg analyze [--lang auto|<code>] [--trace-input|--text-input] [--trace <text> | --input <file>] [--secret <value> | --secret-file <file>] [--format text|json] [--output <file>]"
+        "       lsteg analyze [--lang auto|<code>] [--trace-input|--text-input] [--trace <text> | --input <file>] [--data-dir <path>] [--secret <value> | --secret-file <file>] [--format text|json] [--output <file>]"
     )?;
     writeln!(
         writer,
-        "       lsteg validate [--lang auto|<code>] [--trace-input|--text-input] [--trace <text> | --input <file>] [--secret <value> | --secret-file <file>] [--format text|json] [--output <file>]"
+        "       lsteg validate [--lang auto|<code>] [--trace-input|--text-input] [--trace <text> | --input <file>] [--data-dir <path>] [--secret <value> | --secret-file <file>] [--format text|json] [--output <file>]"
     )?;
     writeln!(writer, "       lsteg languages [--format text|json]")?;
     writeln!(writer, "       lsteg strategies [--format text|json]")?;
@@ -1818,6 +1834,27 @@ mod tests {
 
         assert!(matches!(options.input_mode, DecodeInputMode::Text));
         assert!(options.trace.is_some());
+    }
+
+    #[test]
+    fn parse_decode_command_sets_data_dir() {
+        let command = parse_command(vec![
+            "decode".to_string(),
+            "--trace-input".to_string(),
+            "--trace".to_string(),
+            "frame 01 [fa-basic-sov] bits=0..18 values=subject:0,object:0,adjective:0,verb:21 => x"
+                .to_string(),
+            "--data-dir".to_string(),
+            "/tmp/lsteg-data".to_string(),
+        ])
+        .expect("parse should succeed")
+        .expect("command should exist");
+
+        let Command::Decode(options) = command else {
+            panic!("expected decode command");
+        };
+
+        assert_eq!(options.data_dir.as_deref(), Some("/tmp/lsteg-data"));
     }
 
     #[test]

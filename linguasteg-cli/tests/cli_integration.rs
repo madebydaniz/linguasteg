@@ -70,6 +70,67 @@ fn stderr_string(output: &Output) -> String {
     String::from_utf8(output.stderr.clone()).expect("stderr must be valid utf8")
 }
 
+fn prepare_encoded_english_text_with_dataset_variant() -> (TempDataDir, TempDataDir, String) {
+    let data_dir = TempDataDir::create();
+    let env_data_dir = TempDataDir::create();
+    let artifact = TempArtifactFile::create(
+        br#"{
+            "kind":"linguasteg-lexicon-v1",
+            "schema_version":1,
+            "language":"en",
+            "entries":[{"slot":"object","canonical":"letter","variants":["epistle"]}]
+        }"#,
+    );
+    let artifact_url = artifact.as_file_url();
+
+    let install_output = run_lsteg_with_env(
+        &[
+            "data",
+            "install",
+            "--lang",
+            "en",
+            "--source",
+            "en-wordlist-wordnik",
+            "--artifact-url",
+            &artifact_url,
+            "--format",
+            "json",
+            "--data-dir",
+            data_dir.as_str(),
+        ],
+        &[],
+    );
+    assert!(install_output.status.success());
+
+    let encode_output = run_lsteg_with_env(
+        &[
+            "encode",
+            "--lang",
+            "en",
+            "--message",
+            "hello world",
+            "--source",
+            "en-wordlist-wordnik",
+            "--data-dir",
+            data_dir.as_str(),
+            "--format",
+            "json",
+        ],
+        &[("LSTEG_SECRET", "1234")],
+    );
+    assert!(encode_output.status.success());
+    let encoded_json: Value =
+        serde_json::from_str(&stdout_string(&encode_output)).expect("encode output should be json");
+    let final_text = encoded_json
+        .get("final_text")
+        .and_then(Value::as_str)
+        .expect("final_text should be present")
+        .to_string();
+    assert!(final_text.contains("epistle"));
+
+    (data_dir, env_data_dir, final_text)
+}
+
 fn as_legacy_proto_encode_json(trace_json: &str) -> String {
     let mut value: Value =
         serde_json::from_str(trace_json).expect("proto-encode json should be valid");
@@ -1102,6 +1163,89 @@ fn encode_uses_dataset_variants_from_selected_source_artifact() {
         decoded_json["payload_utf8"],
         Value::String("hello world".to_string())
     );
+}
+
+#[test]
+fn decode_data_dir_flag_overrides_env_for_text_input() {
+    let (data_dir, env_data_dir, final_text) = prepare_encoded_english_text_with_dataset_variant();
+    let output = run_lsteg_with_env(
+        &[
+            "decode",
+            "--lang",
+            "en",
+            "--text-input",
+            "--trace",
+            final_text.as_str(),
+            "--data-dir",
+            data_dir.as_str(),
+            "--format",
+            "json",
+        ],
+        &[
+            ("LSTEG_SECRET", "1234"),
+            ("LSTEG_DATA_DIR", env_data_dir.as_str()),
+        ],
+    );
+    assert!(output.status.success());
+    let decoded_json: Value =
+        serde_json::from_str(&stdout_string(&output)).expect("decode output should be json");
+    assert_eq!(
+        decoded_json["payload_utf8"],
+        Value::String("hello world".to_string())
+    );
+}
+
+#[test]
+fn analyze_data_dir_flag_overrides_env_for_text_input() {
+    let (data_dir, env_data_dir, final_text) = prepare_encoded_english_text_with_dataset_variant();
+    let output = run_lsteg_with_env(
+        &[
+            "analyze",
+            "--lang",
+            "en",
+            "--text-input",
+            "--trace",
+            final_text.as_str(),
+            "--data-dir",
+            data_dir.as_str(),
+            "--format",
+            "json",
+        ],
+        &[
+            ("LSTEG_SECRET", "1234"),
+            ("LSTEG_DATA_DIR", env_data_dir.as_str()),
+        ],
+    );
+    assert!(output.status.success());
+    let analysis_json = stdout_string(&output);
+    assert!(analysis_json.contains("\"integrity_ok\":true"));
+    assert!(analysis_json.contains("\"payload_utf8\":\"hello world\""));
+}
+
+#[test]
+fn validate_data_dir_flag_overrides_env_for_text_input() {
+    let (data_dir, env_data_dir, final_text) = prepare_encoded_english_text_with_dataset_variant();
+    let output = run_lsteg_with_env(
+        &[
+            "validate",
+            "--lang",
+            "en",
+            "--text-input",
+            "--trace",
+            final_text.as_str(),
+            "--data-dir",
+            data_dir.as_str(),
+            "--format",
+            "json",
+        ],
+        &[
+            ("LSTEG_SECRET", "1234"),
+            ("LSTEG_DATA_DIR", env_data_dir.as_str()),
+        ],
+    );
+    assert!(output.status.success());
+    let validate_json = stdout_string(&output);
+    assert!(validate_json.contains("\"integrity_ok\":true"));
 }
 
 #[test]

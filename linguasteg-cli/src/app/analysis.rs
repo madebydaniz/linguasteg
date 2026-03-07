@@ -21,6 +21,7 @@ pub(crate) fn render_trace_analysis_output(
     trace_text: &str,
     format: OutputFormat,
     secret: Option<&[u8]>,
+    data_dir: Option<&str>,
 ) -> Result<String, CliError> {
     let summary = analyze_trace_summary(
         "analyze",
@@ -29,6 +30,7 @@ pub(crate) fn render_trace_analysis_output(
         input_mode,
         trace_text,
         secret,
+        data_dir,
     )?;
     if matches!(format, OutputFormat::Json) {
         return Ok(build_trace_analysis_json(&summary));
@@ -44,6 +46,7 @@ pub(crate) fn analyze_trace_summary(
     input_mode: DecodeInputMode,
     trace_text: &str,
     secret: Option<&[u8]>,
+    data_dir: Option<&str>,
 ) -> Result<TraceAnalysisSummary, CliError> {
     if trace_text.trim().is_empty() {
         return Err(operation_requires_trace_or_text_input_error(operation));
@@ -68,6 +71,7 @@ pub(crate) fn analyze_trace_summary(
             trace_text,
             operation,
             operation_text_mode_requires_canonical_text_error,
+            data_dir,
         )?,
         DecodeInputMode::Auto => {
             if parsed_trace_frames.is_empty() {
@@ -78,6 +82,7 @@ pub(crate) fn analyze_trace_summary(
                     trace_text,
                     operation,
                     operation_auto_requires_trace_or_text_error,
+                    data_dir,
                 )?
             } else {
                 parsed_trace_frames
@@ -298,8 +303,9 @@ fn resolve_text_frames_with_auto_fallback(
     trace_text: &str,
     operation: &str,
     missing_input_error: fn(&str) -> CliError,
+    data_dir: Option<&str>,
 ) -> Result<Vec<SymbolicFramePlan>, CliError> {
-    let variant_catalog = resolve_variant_catalog_for_target(&target)?;
+    let variant_catalog = resolve_variant_catalog_for_target(&target, data_dir)?;
     if runtime.text_decode_lossless {
         if let Some(frames) = extract_text_frames(runtime, trace_text, variant_catalog.as_ref()) {
             return Ok(frames);
@@ -313,7 +319,7 @@ fn resolve_text_frames_with_auto_fallback(
 
     if auto_detect_target {
         let fallback_target = alternate_target(target);
-        let fallback_catalog = resolve_variant_catalog_for_target(&fallback_target)?;
+        let fallback_catalog = resolve_variant_catalog_for_target(&fallback_target, data_dir)?;
         let fallback_runtime = initialize_runtime(fallback_target.clone())?;
         if fallback_runtime.text_decode_lossless {
             if let Some(frames) =
@@ -351,12 +357,13 @@ fn extract_text_frames(
 
 fn resolve_variant_catalog_for_target(
     target: &ProtoTarget,
+    data_dir: Option<&str>,
 ) -> Result<Option<LexiconVariantCatalog>, CliError> {
-    let active_source = resolve_active_data_source_selection(target.clone(), None, None)?;
+    let active_source = resolve_active_data_source_selection(target.clone(), None, data_dir)?;
     resolve_active_data_source_variant_catalog(
         target.clone(),
         active_source.as_ref().map(|item| item.source_id.as_str()),
-        None,
+        data_dir,
     )
 }
 
