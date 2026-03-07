@@ -3,6 +3,10 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process;
 
+use sigstore_verify::trust_root::TrustedRoot;
+use sigstore_verify::types::Bundle;
+use sigstore_verify::{VerificationPolicy, verify};
+
 #[derive(Debug)]
 struct AddLangOptions {
     code: String,
@@ -10,6 +14,20 @@ struct AddLangOptions {
     dry_run: bool,
     force: bool,
 }
+
+#[derive(Debug)]
+struct VerifyReleaseOptions {
+    artifact_path: PathBuf,
+    bundle_path: PathBuf,
+    tag: String,
+    repo: String,
+    workflow_path: String,
+    issuer: String,
+}
+
+const DEFAULT_REPOSITORY: &str = "madebydaniz/linguasteg";
+const DEFAULT_WORKFLOW_PATH: &str = ".github/workflows/release-binaries.yml";
+const DEFAULT_OIDC_ISSUER: &str = "https://token.actions.githubusercontent.com";
 
 fn main() {
     if let Err(error) = run() {
@@ -23,6 +41,7 @@ fn run() -> Result<(), String> {
     let command = args.next();
     match command.as_deref() {
         Some("add-lang") => run_add_lang(parse_add_lang_options(args)?),
+        Some("verify-release") => run_verify_release(parse_verify_release_options(args)?),
         Some("--help") | Some("-h") | None => {
             print_usage();
             Ok(())
@@ -59,6 +78,50 @@ fn parse_add_lang_options(
         name,
         dry_run,
         force,
+    })
+}
+
+fn parse_verify_release_options(
+    mut args: impl Iterator<Item = String>,
+) -> Result<VerifyReleaseOptions, String> {
+    let mut artifact_path = None;
+    let mut bundle_path = None;
+    let mut tag = None;
+    let mut repo = DEFAULT_REPOSITORY.to_string();
+    let mut workflow_path = DEFAULT_WORKFLOW_PATH.to_string();
+    let mut issuer = DEFAULT_OIDC_ISSUER.to_string();
+
+    while let Some(arg) = args.next() {
+        match arg.as_str() {
+            "--artifact" => {
+                artifact_path = Some(PathBuf::from(next_value(&mut args, "--artifact")?))
+            }
+            "--bundle" => bundle_path = Some(PathBuf::from(next_value(&mut args, "--bundle")?)),
+            "--tag" => tag = Some(next_value(&mut args, "--tag")?),
+            "--repo" => repo = next_value(&mut args, "--repo")?,
+            "--workflow-path" => workflow_path = next_value(&mut args, "--workflow-path")?,
+            "--issuer" => issuer = next_value(&mut args, "--issuer")?,
+            "--help" | "-h" => {
+                print_verify_release_usage();
+                process::exit(0);
+            }
+            _ => return Err(format!("unknown verify-release argument: {arg}")),
+        }
+    }
+
+    let artifact_path =
+        artifact_path.ok_or_else(|| "verify-release requires --artifact <path>".to_string())?;
+    let bundle_path =
+        bundle_path.ok_or_else(|| "verify-release requires --bundle <path>".to_string())?;
+    let tag = tag.ok_or_else(|| "verify-release requires --tag <vX.Y.Z>".to_string())?;
+
+    Ok(VerifyReleaseOptions {
+        artifact_path,
+        bundle_path,
+        tag,
+        repo,
+        workflow_path,
+        issuer,
     })
 }
 
@@ -163,6 +226,78 @@ fn run_add_lang(options: AddLangOptions) -> Result<(), String> {
     println!("- updated: {}", facade_lib_path.to_string_lossy());
     print_manual_followup(&code, &pascal_name);
     Ok(())
+}
+
+fn run_verify_release(options: VerifyReleaseOptions) -> Result<(), String> {
+    if !options.artifact_path.exists() {
+        return Err(format!(
+            "artifact file does not exist: {}",
+            options.artifact_path.to_string_lossy()
+        ));
+    }
+    if !options.bundle_path.exists() {
+        return Err(format!(
+            "bundle file does not exist: {}",
+            options.bundle_path.to_string_lossy()
+        ));
+    }
+
+    let artifact = fs::read(&options.artifact_path).map_err(|error| {
+        format!(
+            "failed to read artifact '{}': {error}",
+            options.artifact_path.to_string_lossy()
+        )
+    })?;
+    let bundle_raw = fs::read_to_string(&options.bundle_path).map_err(|error| {
+        format!(
+            "failed to read bundle '{}': {error}",
+            options.bundle_path.to_string_lossy()
+        )
+    })?;
+    let bundle = Bundle::from_json(&bundle_raw).map_err(|error| {
+        format!(
+            "failed to parse bundle '{}': {error}",
+            options.bundle_path.to_string_lossy()
+        )
+    })?;
+
+    let expected_identity = build_workflow_identity(
+        &options.repo,
+        &options.workflow_path,
+        &normalize_tag(&options.tag),
+    );
+    let policy = VerificationPolicy::default()
+        .require_issuer(options.issuer.clone())
+        .require_identity(expected_identity.clone());
+    let trusted_root = TrustedRoot::production()
+        .map_err(|error| format!("failed to load trusted root: {error}"))?;
+
+    let result = verify(&artifact, &bundle, &policy, &trusted_root)
+        .map_err(|error| format!("sigstore verification failed: {error}"))?;
+    if !result.success {
+        return Err("sigstore verification returned unsuccessful result".to_string());
+    }
+
+    println!("release verification passed");
+    println!("- artifact: {}", options.artifact_path.to_string_lossy());
+    println!("- bundle: {}", options.bundle_path.to_string_lossy());
+    println!("- expected issuer: {}", options.issuer);
+    println!("- expected identity: {expected_identity}");
+    Ok(())
+}
+
+fn normalize_tag(tag: &str) -> String {
+    let trimmed = tag.trim();
+    if trimmed.starts_with('v') {
+        trimmed.to_string()
+    } else {
+        format!("v{trimmed}")
+    }
+}
+
+fn build_workflow_identity(repo: &str, workflow_path: &str, tag: &str) -> String {
+    let normalized_workflow = workflow_path.trim_start_matches('/');
+    format!("https://github.com/{repo}/{normalized_workflow}@refs/tags/{tag}")
 }
 
 fn patch_models_lib(
@@ -387,10 +522,19 @@ fn print_usage() {
     println!("Usage: cargo xtask <command> [options]");
     println!("Commands:");
     println!("  add-lang --code <lang-code> [--name <display-name>] [--dry-run] [--force]");
+    println!(
+        "  verify-release --artifact <path> --bundle <path> --tag <vX.Y.Z> [--repo <owner/repo>] [--workflow-path <path>] [--issuer <url>]"
+    );
 }
 
 fn print_add_lang_usage() {
     println!(
         "Usage: cargo xtask add-lang --code <lang-code> [--name <display-name>] [--dry-run] [--force]"
+    );
+}
+
+fn print_verify_release_usage() {
+    println!(
+        "Usage: cargo xtask verify-release --artifact <path> --bundle <path> --tag <vX.Y.Z> [--repo <owner/repo>] [--workflow-path <path>] [--issuer <url>]"
     );
 }

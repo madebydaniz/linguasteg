@@ -10,3 +10,6 @@ description = "Workspace automation tasks for LinguaSteg"
 
 [lints]
 workspace = true
+
+[dependencies]
+sigstore-verify = "0.6.1"
