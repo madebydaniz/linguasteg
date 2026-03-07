@@ -1,4 +1,3 @@
-use std::fmt::Display;
 use std::io::Read;
 
 use linguasteg_core::{
@@ -1863,9 +1862,6 @@ fn runtime_for_target(target: ProtoTarget) -> Result<PrototypeRuntime, CliError>
     initialize_runtime(target)
 }
 
-fn map_domain<T, E>(result: Result<T, E>, context: &str) -> Result<T, CliError>
-where
-    E: Display,
-{
-    result.map_err(|error| CliError::domain(format!("{context}: {error}")))
+fn map_domain<T, E>(result: Result<T, E>, context: &str) -> Result<T, CliError> {
+    result.map_err(|_| CliError::domain(context.to_string()))
 }
