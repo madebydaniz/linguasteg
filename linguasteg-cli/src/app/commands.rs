@@ -54,12 +54,13 @@ pub(crate) fn execute(command: Command) -> Result<(), CliError> {
 fn run_catalog(options: CatalogQueryOptions) -> Result<(), CliError> {
     let language_filter = options.target.as_ref().map(ProtoTarget::as_str);
     let all_languages = supported_languages();
+    let all_models = supported_models();
     let languages = all_languages
         .iter()
         .filter(|item| language_filter.is_none_or(|code| item.code == code))
         .collect::<Vec<_>>();
     let strategies = supported_strategies();
-    let models = supported_models()
+    let models = all_models
         .iter()
         .filter(|item| {
             language_filter

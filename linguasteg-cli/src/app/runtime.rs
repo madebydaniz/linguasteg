@@ -32,8 +32,8 @@ pub(crate) struct SupportedModelInfo {
     pub(crate) provider: &'static str,
     pub(crate) id: &'static str,
     pub(crate) display: &'static str,
-    pub(crate) languages: &'static [&'static str],
-    pub(crate) capabilities: &'static [&'static str],
+    pub(crate) languages: Vec<&'static str>,
+    pub(crate) capabilities: Vec<&'static str>,
 }
 
 pub(crate) fn supported_languages() -> Vec<SupportedLanguageInfo> {
@@ -47,16 +47,19 @@ pub(crate) fn supported_languages() -> Vec<SupportedLanguageInfo> {
         .collect()
 }
 
+fn runtime_language_codes() -> Vec<&'static str> {
+    runtime_providers()
+        .iter()
+        .map(|provider| provider.language_code())
+        .collect()
+}
+
 pub(crate) fn runtime_supports_language_code(language_code: &str) -> bool {
     runtime_provider_for_code(language_code).is_some()
 }
 
 pub(crate) fn supported_language_codes_csv() -> String {
-    runtime_providers()
-        .iter()
-        .map(|provider| provider.language_code())
-        .collect::<Vec<_>>()
-        .join(", ")
+    runtime_language_codes().join(", ")
 }
 
 pub(crate) fn initialize_runtime(target: ProtoTarget) -> Result<PrototypeRuntime, CliError> {
@@ -87,16 +90,14 @@ pub(crate) fn supported_strategies() -> &'static [SupportedStrategyInfo] {
     &SUPPORTED_STRATEGIES
 }
 
-const SUPPORTED_MODELS: [SupportedModelInfo; 1] = [SupportedModelInfo {
-    provider: "stub",
-    id: "stub-local",
-    display: "Stub Local",
-    languages: &["fa", "en"],
-    capabilities: &["deterministic-seed"],
-}];
-
-pub(crate) fn supported_models() -> &'static [SupportedModelInfo] {
-    &SUPPORTED_MODELS
+pub(crate) fn supported_models() -> Vec<SupportedModelInfo> {
+    vec![SupportedModelInfo {
+        provider: "stub",
+        id: "stub-local",
+        display: "Stub Local",
+        languages: runtime_language_codes(),
+        capabilities: vec!["deterministic-seed"],
+    }]
 }
 
 struct InMemoryStrategyRegistry {
@@ -396,6 +397,7 @@ impl PrototypeRuntime {
 mod tests {
     use super::{
         PrototypeRuntime, initialize_runtime, supported_language_codes_csv, supported_languages,
+        supported_models,
     };
     use crate::app::types::ProtoTarget;
 
@@ -446,5 +448,21 @@ mod tests {
         let csv = supported_language_codes_csv();
         assert!(csv.contains("fa"));
         assert!(csv.contains("en"));
+    }
+
+    #[test]
+    fn supported_models_follow_runtime_provider_languages() {
+        let expected_codes = supported_languages()
+            .iter()
+            .map(|language| language.code)
+            .collect::<Vec<_>>();
+
+        let models = supported_models();
+        let stub_model = models
+            .iter()
+            .find(|model| model.id == "stub-local")
+            .expect("stub-local model should exist");
+
+        assert_eq!(stub_model.languages, expected_codes);
     }
 }
