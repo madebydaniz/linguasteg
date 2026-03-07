@@ -1588,8 +1588,9 @@ fn resolve_text_frames_with_auto_fallback(
     operation: &str,
     missing_input_error: fn(&str) -> CliError,
 ) -> Result<Vec<SymbolicFramePlan>, CliError> {
+    let variant_catalog = resolve_variant_catalog_for_target(&target)?;
     if runtime.text_decode_lossless {
-        if let Some(frames) = extract_text_frames(runtime, trace_text) {
+        if let Some(frames) = extract_text_frames(runtime, trace_text, variant_catalog.as_ref()) {
             return Ok(frames);
         }
     } else if !auto_detect_target {
@@ -1601,9 +1602,12 @@ fn resolve_text_frames_with_auto_fallback(
 
     if auto_detect_target {
         let fallback_target = alternate_target(target);
+        let fallback_catalog = resolve_variant_catalog_for_target(&fallback_target)?;
         let fallback_runtime = runtime_for_target(fallback_target)?;
         if fallback_runtime.text_decode_lossless {
-            if let Some(frames) = extract_text_frames(&fallback_runtime, trace_text) {
+            if let Some(frames) =
+                extract_text_frames(&fallback_runtime, trace_text, fallback_catalog.as_ref())
+            {
                 *runtime = fallback_runtime;
                 return Ok(frames);
             }
@@ -1623,12 +1627,26 @@ fn resolve_text_frames_with_auto_fallback(
 fn extract_text_frames(
     runtime: &PrototypeRuntime,
     trace_text: &str,
+    variant_catalog: Option<&LexiconVariantCatalog>,
 ) -> Option<Vec<SymbolicFramePlan>> {
+    let normalized_trace = variant_catalog.map(|catalog| catalog.normalize_text(trace_text));
+    let extraction_input = normalized_trace.as_deref().unwrap_or(trace_text);
     runtime
-        .extract_plans(trace_text)
+        .extract_plans(extraction_input)
         .ok()
         .filter(|plans| !plans.is_empty())
         .and_then(|plans| runtime.mapper.map_plans_to_frames(&plans).ok())
+}
+
+fn resolve_variant_catalog_for_target(
+    target: &ProtoTarget,
+) -> Result<Option<LexiconVariantCatalog>, CliError> {
+    let active_source = resolve_active_data_source_selection(target.clone(), None, None)?;
+    resolve_active_data_source_variant_catalog(
+        target.clone(),
+        active_source.as_ref().map(|item| item.source_id.as_str()),
+        None,
+    )
 }
 
 fn alternate_target(target: ProtoTarget) -> ProtoTarget {

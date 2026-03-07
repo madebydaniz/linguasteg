@@ -1078,6 +1078,30 @@ fn encode_uses_dataset_variants_from_selected_source_artifact() {
         .and_then(Value::as_str)
         .expect("final_text should be present");
     assert!(final_text.contains("epistle"));
+
+    let decode_output = run_lsteg_with_env(
+        &[
+            "decode",
+            "--lang",
+            "en",
+            "--text-input",
+            "--trace",
+            final_text,
+            "--format",
+            "json",
+        ],
+        &[
+            ("LSTEG_SECRET", "1234"),
+            ("LSTEG_DATA_DIR", data_dir.as_str()),
+        ],
+    );
+    assert!(decode_output.status.success());
+    let decoded_json: Value =
+        serde_json::from_str(&stdout_string(&decode_output)).expect("decode output should be json");
+    assert_eq!(
+        decoded_json["payload_utf8"],
+        Value::String("hello world".to_string())
+    );
 }
 
 #[test]

@@ -33,6 +33,7 @@ pub(crate) struct LexiconVariantEntry {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(crate) struct LexiconVariantCatalog {
     entries: HashMap<(String, String), Vec<String>>,
+    normalization_rules: Vec<(String, String)>,
 }
 
 impl LexiconDataset {
@@ -47,13 +48,21 @@ impl LexiconDataset {
 
     pub(crate) fn variant_catalog(&self) -> LexiconVariantCatalog {
         let mut entries = HashMap::new();
+        let mut normalization_rules = Vec::new();
         for entry in &self.entries {
             entries.insert(
                 (entry.slot.clone(), entry.canonical.clone()),
                 entry.variants.clone(),
             );
+            for variant in &entry.variants {
+                normalization_rules.push((variant.clone(), entry.canonical.clone()));
+            }
         }
-        LexiconVariantCatalog { entries }
+        normalization_rules.sort_by(|left, right| right.0.len().cmp(&left.0.len()));
+        LexiconVariantCatalog {
+            entries,
+            normalization_rules,
+        }
     }
 }
 
@@ -72,6 +81,54 @@ impl LexiconVariantCatalog {
         }
         let index = (selector as usize) % variants.len();
         variants.get(index).map(String::as_str)
+    }
+
+    pub(crate) fn normalize_text(&self, input: &str) -> String {
+        let mut normalized = input.to_string();
+        for (variant, canonical) in &self.normalization_rules {
+            normalized = replace_whole_surface(&normalized, variant, canonical);
+        }
+        normalized
+    }
+}
+
+fn replace_whole_surface(input: &str, variant: &str, canonical: &str) -> String {
+    if variant.is_empty() || variant == canonical {
+        return input.to_string();
+    }
+
+    let mut out = String::with_capacity(input.len());
+    let mut cursor = 0usize;
+    for (start, _) in input.match_indices(variant) {
+        let end = start + variant.len();
+        if !is_boundary(input, start, true) || !is_boundary(input, end, false) {
+            continue;
+        }
+        out.push_str(&input[cursor..start]);
+        out.push_str(canonical);
+        cursor = end;
+    }
+    out.push_str(&input[cursor..]);
+    out
+}
+
+fn is_boundary(input: &str, index: usize, before: bool) -> bool {
+    if before {
+        if index == 0 {
+            return true;
+        }
+        let Some(ch) = input[..index].chars().next_back() else {
+            return true;
+        };
+        !ch.is_alphanumeric()
+    } else {
+        if index >= input.len() {
+            return true;
+        }
+        let Some(ch) = input[index..].chars().next() else {
+            return true;
+        };
+        !ch.is_alphanumeric()
     }
 }
 
@@ -275,6 +332,30 @@ mod tests {
             dataset
                 .expect("plain text should be treated as opaque")
                 .is_none()
+        );
+    }
+
+    #[test]
+    fn lexicon_variant_catalog_normalizes_variants_to_canonical_surfaces() {
+        let payload = br#"{
+            "kind": "linguasteg-lexicon-v1",
+            "schema_version": 1,
+            "language": "en",
+            "entries": [
+                {"slot": "object", "canonical": "letter", "variants": ["missive", "epistle"]},
+                {"slot": "verb", "canonical": "writes", "variants": ["composes"]}
+            ]
+        }"#;
+        let dataset = load_lexicon_dataset_artifact("en", payload)
+            .expect("dataset should parse")
+            .expect("dataset should be detected");
+        let catalog = dataset.variant_catalog();
+        let text = "the writer composes quiet epistle. the writer composes quiet missive.";
+        let normalized = catalog.normalize_text(text);
+
+        assert_eq!(
+            normalized,
+            "the writer writes quiet letter. the writer writes quiet letter."
         );
     }
 }
