@@ -777,7 +777,7 @@ fn emit_dataset_hint_if_unavailable(
     }
 
     eprintln!(
-        "notice: no dataset source is installed for language '{}'. for better lexical variation run: lsteg data install --lang {}",
+        "notice: no dataset source is installed for language '{}'. for better lexical variation run: lsteg data install --lang {} --download",
         language_code, language_code
     );
 }

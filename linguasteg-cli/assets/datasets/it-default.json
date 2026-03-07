@@ -1,0 +1,22 @@
+{
+  "kind": "linguasteg-lexicon-v1",
+  "schema_version": 1,
+  "language": "it",
+  "entries": [
+    {
+      "slot": "object",
+      "canonical": "lettera",
+      "variants": ["missiva", "epistola"]
+    },
+    {
+      "slot": "adjective",
+      "canonical": "sobrio",
+      "variants": ["conciso"]
+    },
+    {
+      "slot": "verb",
+      "canonical": "scrive",
+      "variants": ["compone"]
+    }
+  ]
+}

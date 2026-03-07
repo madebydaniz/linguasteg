@@ -21,7 +21,9 @@ assert_file_exists() {
 }
 
 workspace_crates() {
-  cargo metadata --format-version 1 --no-deps | jq -r '.packages[].name' | sort -u
+  cargo metadata --format-version 1 --no-deps \
+    | jq -r '.packages[] | select((.publish == null) or ((.publish | type) == "array" and (.publish | length) > 0)) | .name' \
+    | sort -u
 }
 
 release_config_crates() {

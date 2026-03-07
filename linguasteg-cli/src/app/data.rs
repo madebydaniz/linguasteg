@@ -20,6 +20,10 @@ const DATA_SOURCES_MANIFEST: &str = include_str!("../../assets/data_sources.json
 const MANIFEST_SCHEMA_VERSION: u8 = 1;
 const MAX_ARTIFACT_BYTES: usize = 64 * 1024 * 1024;
 const STARTER_DATASET_FILE: &str = "dataset.json";
+const EMBEDDED_DATASET_EN: &[u8] = include_bytes!("../../assets/datasets/en-default.json");
+const EMBEDDED_DATASET_FA: &[u8] = include_bytes!("../../assets/datasets/fa-default.json");
+const EMBEDDED_DATASET_DE: &[u8] = include_bytes!("../../assets/datasets/de-default.json");
+const EMBEDDED_DATASET_IT: &[u8] = include_bytes!("../../assets/datasets/it-default.json");
 
 #[derive(Debug, Clone, Deserialize)]
 struct DataSourceCatalogRaw {
@@ -32,6 +36,7 @@ struct DataSourceRaw {
     id: String,
     language: String,
     source_url: String,
+    artifact_url: Option<String>,
     license: String,
     version: String,
     checksum_sha256: Option<String>,
@@ -43,6 +48,7 @@ struct DataSource {
     id: String,
     language: ProtoTarget,
     source_url: String,
+    artifact_url: Option<String>,
     license: String,
     version: String,
     checksum_sha256: Option<String>,
@@ -69,9 +75,11 @@ struct DataListItem {
     source_id: String,
     version: String,
     source_url: String,
+    artifact_url: Option<String>,
     license: String,
     checksum_sha256: Option<String>,
     recommended: bool,
+    downloadable: bool,
     installed: bool,
 }
 
@@ -83,6 +91,7 @@ struct DataInstallItem {
     status: String,
     manifest_path: String,
     starter_dataset_path: String,
+    artifact_url: Option<String>,
     artifact_path: Option<String>,
     artifact_sha256: Option<String>,
 }
@@ -544,9 +553,11 @@ fn run_data_list(options: DataListOptions) -> Result<(), CliError> {
                 source_id: source.id.clone(),
                 version: source.version.clone(),
                 source_url: source.source_url.clone(),
+                artifact_url: source.artifact_url.clone(),
                 license: source.license.clone(),
                 checksum_sha256: source.checksum_sha256.clone(),
                 recommended: source.recommended,
+                downloadable: source.artifact_url.is_some(),
                 installed,
             }
         })
@@ -569,14 +580,18 @@ fn run_data_list(options: DataListOptions) -> Result<(), CliError> {
     println!("data dir: {}", data_dir.to_string_lossy());
     for item in items {
         println!(
-            "- {}/{} version:{} license:{} recommended:{} installed:{}",
+            "- {}/{} version:{} license:{} recommended:{} downloadable:{} installed:{}",
             item.language,
             item.source_id,
             item.version,
             item.license,
             if item.recommended { "yes" } else { "no" },
+            if item.downloadable { "yes" } else { "no" },
             if item.installed { "yes" } else { "no" }
         );
+        if let Some(url) = &item.artifact_url {
+            println!("  artifact_url: {url}");
+        }
     }
     Ok(())
 }
@@ -588,6 +603,11 @@ fn run_data_install(options: DataInstallOptions, force_refresh: bool) -> Result<
                 "--source list can be used only with a single language in --lang".to_string(),
             ));
         }
+        if options.targets[0].as_str() == "all" {
+            return Err(CliError::usage(
+                "--source list does not support --lang all".to_string(),
+            ));
+        }
         return run_data_list(DataListOptions {
             format: options.format,
             target: Some(options.targets[0].clone()),
@@ -596,14 +616,20 @@ fn run_data_install(options: DataInstallOptions, force_refresh: bool) -> Result<
     }
 
     let sources = load_data_sources()?;
-    if options.source_id.is_some() && options.targets.len() != 1 {
+    let targets = expand_install_targets(&sources, &options.targets)?;
+    if options.source_id.is_some() && targets.len() != 1 {
         return Err(CliError::usage(
             "--source can be used only with a single language in --lang".to_string(),
         ));
     }
-    if options.artifact_url.is_some() && options.targets.len() != 1 {
+    if options.artifact_url.is_some() && targets.len() != 1 {
         return Err(CliError::usage(
             "--artifact-url can be used only with a single language in --lang".to_string(),
+        ));
+    }
+    if options.artifact_url.is_some() && options.download_artifact {
+        return Err(CliError::usage(
+            "--download cannot be used together with --artifact-url".to_string(),
         ));
     }
 
@@ -618,14 +644,26 @@ fn run_data_install(options: DataInstallOptions, force_refresh: bool) -> Result<
 
     let mut state = load_data_state(&data_dir)?;
     let now = unix_epoch_seconds()?;
-    let mut items = Vec::with_capacity(options.targets.len());
+    let mut items = Vec::with_capacity(targets.len());
 
-    for target in &options.targets {
+    for target in &targets {
         let source =
             resolve_source_for_target(&sources, target.clone(), options.source_id.as_deref())?;
         let status = upsert_install_state(&mut state, source, now, force_refresh);
         let starter_dataset_path = ensure_starter_dataset_template_exists(&data_dir, source)?;
-        let artifact = if let Some(url) = options.artifact_url.as_deref() {
+        let effective_artifact_url = if let Some(url) = options.artifact_url.as_deref() {
+            Some(url.to_string())
+        } else if options.download_artifact {
+            Some(source.artifact_url.clone().ok_or_else(|| {
+                CliError::config(format!(
+                    "source '{}' has no configured artifact url; use --artifact-url or remove --download",
+                    source.id
+                ))
+            })?)
+        } else {
+            None
+        };
+        let artifact = if let Some(url) = effective_artifact_url.as_deref() {
             Some(fetch_and_store_artifact(&data_dir, source, url)?)
         } else {
             load_local_dataset_artifact(source, &starter_dataset_path)?
@@ -634,7 +672,7 @@ fn run_data_install(options: DataInstallOptions, force_refresh: bool) -> Result<
             &data_dir,
             source,
             now,
-            options.artifact_url.as_deref(),
+            effective_artifact_url.as_deref(),
             artifact.as_ref(),
         )?;
         items.push(DataInstallItem {
@@ -644,6 +682,7 @@ fn run_data_install(options: DataInstallOptions, force_refresh: bool) -> Result<
             status: status.to_string(),
             manifest_path: manifest_path.to_string_lossy().to_string(),
             starter_dataset_path: starter_dataset_path.to_string_lossy().to_string(),
+            artifact_url: effective_artifact_url,
             artifact_path: artifact
                 .as_ref()
                 .map(|item| item.path.to_string_lossy().to_string()),
@@ -658,10 +697,29 @@ fn run_data_install(options: DataInstallOptions, force_refresh: bool) -> Result<
     } else {
         "data-install"
     };
-    let note = if force_refresh {
-        "metadata was refreshed; local starter dataset remains active unless replaced by explicit --artifact-url"
-    } else {
-        "metadata and starter dataset template were prepared; dataset is active immediately and can be edited locally"
+    let note = match (
+        force_refresh,
+        options.download_artifact,
+        options.artifact_url.is_some(),
+    ) {
+        (true, true, _) => {
+            "metadata was refreshed and dataset artifacts were downloaded from configured source artifact urls"
+        }
+        (false, true, _) => {
+            "metadata and source artifacts were prepared from configured artifact urls; dataset is active immediately"
+        }
+        (true, _, true) => {
+            "metadata was refreshed and dataset artifacts were replaced from explicit --artifact-url"
+        }
+        (false, _, true) => {
+            "metadata and dataset artifacts were prepared from explicit --artifact-url"
+        }
+        (true, _, false) => {
+            "metadata was refreshed; local starter dataset remains active unless replaced by explicit --artifact-url"
+        }
+        (false, _, false) => {
+            "metadata and starter dataset template were prepared; dataset is active immediately and can be edited locally"
+        }
     };
 
     if matches!(options.format, OutputFormat::Json) {
@@ -698,11 +756,42 @@ fn run_data_install(options: DataInstallOptions, force_refresh: bool) -> Result<
             item.starter_dataset_path,
             artifact_suffix
         );
+        if let Some(url) = &item.artifact_url {
+            println!("  artifact_url: {url}");
+        }
         if let Some(sha256) = &item.artifact_sha256 {
             println!("  sha256: {sha256}");
         }
     }
     Ok(())
+}
+
+fn expand_install_targets(
+    sources: &[DataSource],
+    targets: &[ProtoTarget],
+) -> Result<Vec<ProtoTarget>, CliError> {
+    if targets.is_empty() {
+        return Ok(Vec::new());
+    }
+    if targets.iter().any(|target| target.as_str() == "all") {
+        if targets.len() != 1 {
+            return Err(CliError::usage(
+                "--lang all cannot be combined with specific language codes".to_string(),
+            ));
+        }
+        let mut language_codes = sources
+            .iter()
+            .map(|source| source.language.as_str().to_string())
+            .collect::<Vec<_>>();
+        language_codes.sort();
+        language_codes.dedup();
+        return Ok(language_codes
+            .into_iter()
+            .map(|code| ProtoTarget::from_language_code(&code))
+            .collect());
+    }
+
+    Ok(targets.to_vec())
 }
 
 fn run_data_status(options: DataStatusOptions) -> Result<(), CliError> {
@@ -1755,6 +1844,18 @@ fn load_data_sources() -> Result<Vec<DataSource>, CliError> {
                 entry.id
             )));
         }
+        let artifact_url = entry
+            .artifact_url
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(ToString::to_string);
+        if entry.artifact_url.is_some() && artifact_url.is_none() {
+            return Err(CliError::config(format!(
+                "data sources manifest has empty artifact_url for source '{}'",
+                entry.id
+            )));
+        }
         let language = parse_data_language(&entry.language)?;
         *source_count_by_language
             .entry(entry.language.clone())
@@ -1768,6 +1869,7 @@ fn load_data_sources() -> Result<Vec<DataSource>, CliError> {
             id: entry.id,
             language,
             source_url: entry.source_url,
+            artifact_url,
             license: entry.license,
             version: entry.version,
             checksum_sha256: entry.checksum_sha256,
@@ -2800,6 +2902,9 @@ fn fetch_and_store_artifact(
 }
 
 fn read_artifact_bytes(url: &str) -> Result<Vec<u8>, CliError> {
+    if let Some(key) = url.strip_prefix("embedded://") {
+        return read_embedded_artifact_bytes(key);
+    }
     if let Some(path) = url.strip_prefix("file://") {
         return read_local_file_limited(Path::new(path));
     }
@@ -2813,8 +2918,23 @@ fn read_artifact_bytes(url: &str) -> Result<Vec<u8>, CliError> {
         return read_http_bytes(url);
     }
     Err(CliError::input(format!(
-        "unsupported artifact url '{url}' (supported: file://, path://, absolute path, http://, https://)"
+        "unsupported artifact url '{url}' (supported: embedded://, file://, path://, absolute path, http://, https://)"
     )))
+}
+
+fn read_embedded_artifact_bytes(key: &str) -> Result<Vec<u8>, CliError> {
+    let bytes = match key {
+        "en-default" => EMBEDDED_DATASET_EN,
+        "fa-default" => EMBEDDED_DATASET_FA,
+        "de-default" => EMBEDDED_DATASET_DE,
+        "it-default" => EMBEDDED_DATASET_IT,
+        _ => {
+            return Err(CliError::input(format!(
+                "unknown embedded artifact key '{key}'"
+            )));
+        }
+    };
+    Ok(bytes.to_vec())
 }
 
 fn read_local_file_limited(path: &Path) -> Result<Vec<u8>, CliError> {

@@ -102,6 +102,7 @@ pub(crate) struct DataInstallOptions {
     pub(crate) targets: Vec<ProtoTarget>,
     pub(crate) source_id: Option<String>,
     pub(crate) artifact_url: Option<String>,
+    pub(crate) download_artifact: bool,
     pub(crate) data_dir: Option<String>,
 }
 

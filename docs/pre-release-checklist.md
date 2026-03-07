@@ -1,17 +1,19 @@
 # Pre-Release Checklist
 
-## Phase Snapshot (2026-03-04)
+## Phase Snapshot (2026-03-07)
 
 Current status for release preparation:
 
-- Phase 1-5: complete (workspace foundation, runtime registry, encode/decode contracts, fa/en text decode, secure envelope flow)
+- Phase 1-5: complete (workspace foundation, runtime registry, encode/decode contracts, multilingual text decode, secure envelope flow)
 - Phase 6: complete (governance, release automation, release drill, readiness gates)
 - Phase 7.1: complete (`LSTEG_SECRET_FILE` support and precedence hardening)
 - Phase 7.2: complete (decode hardening for non-envelope/invalid-envelope payloads)
+- Phase 7.3: complete (dataset UX hardening: `--download`, `--lang all`, per-source artifact URLs, embedded default artifacts)
+- Phase 7.4: complete (runtime language parity for `fa`/`en`/`de`/`it` with dataset source coverage)
 
 Recommended next execution phase:
 
-- Phase 8: release candidate on `develop` and PR to `main`
+- Phase 8: release candidate sign-off on `develop` and PR to `main` after final manual product QA
 
 ## Local Readiness Commands
 

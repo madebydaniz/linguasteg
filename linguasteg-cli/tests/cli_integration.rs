@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::io::Write;
 use std::path::PathBuf;
 use std::process::{Command, Output, Stdio};
@@ -920,6 +921,53 @@ fn data_list_json_exposes_sources() {
 }
 
 #[test]
+fn data_list_covers_all_runtime_languages_with_downloadable_sources() {
+    let catalog_output = run_lsteg(&["catalog", "--format", "json"]);
+    assert!(catalog_output.status.success());
+    let catalog: Value = serde_json::from_str(&stdout_string(&catalog_output))
+        .expect("catalog output should be json");
+    let runtime_languages = catalog
+        .get("languages")
+        .and_then(Value::as_array)
+        .expect("catalog languages should be array")
+        .iter()
+        .filter_map(|item| {
+            item.get("code")
+                .and_then(Value::as_str)
+                .map(ToString::to_string)
+        })
+        .collect::<HashSet<_>>();
+    assert!(!runtime_languages.is_empty());
+
+    let data_output = run_lsteg(&["data", "list", "--format", "json"]);
+    assert!(data_output.status.success());
+    let data_list: Value = serde_json::from_str(&stdout_string(&data_output))
+        .expect("data list output should be json");
+    let downloadable_languages = data_list
+        .get("items")
+        .and_then(Value::as_array)
+        .expect("data list items should be array")
+        .iter()
+        .filter_map(|item| {
+            if item.get("downloadable").and_then(Value::as_bool) == Some(true) {
+                item.get("language")
+                    .and_then(Value::as_str)
+                    .map(ToString::to_string)
+            } else {
+                None
+            }
+        })
+        .collect::<HashSet<_>>();
+
+    for language in runtime_languages {
+        assert!(
+            downloadable_languages.contains(&language),
+            "missing downloadable data source for runtime language '{language}'"
+        );
+    }
+}
+
+#[test]
 fn data_install_creates_state_and_source_manifest() {
     let data_dir = TempDataDir::create();
     let output = run_lsteg_with_env(
@@ -1028,6 +1076,80 @@ fn data_install_accepts_explicit_source_for_single_language() {
 }
 
 #[test]
+fn data_install_download_uses_configured_artifact_url() {
+    let data_dir = TempDataDir::create();
+    let output = run_lsteg_with_env(
+        &[
+            "data",
+            "install",
+            "--lang",
+            "en",
+            "--download",
+            "--format",
+            "json",
+            "--data-dir",
+            data_dir.as_str(),
+        ],
+        &[],
+    );
+    assert!(output.status.success());
+    let stdout = stdout_string(&output);
+    assert!(stdout.contains("\"source_id\":\"en-wordnet-princeton\""));
+    assert!(stdout.contains("\"artifact_url\":\"embedded://en-default\""));
+    assert!(stdout.contains("\"artifact_path\":\""));
+    assert!(stdout.contains("\"artifact_sha256\":\""));
+
+    let artifact_path = std::path::Path::new(data_dir.as_str())
+        .join("en")
+        .join("en-wordnet-princeton")
+        .join("artifact.bin");
+    assert!(artifact_path.exists());
+}
+
+#[test]
+fn data_install_lang_all_installs_recommended_sources_for_all_languages() {
+    let data_dir = TempDataDir::create();
+    let install_output = run_lsteg_with_env(
+        &[
+            "data",
+            "install",
+            "--lang",
+            "all",
+            "--download",
+            "--format",
+            "json",
+            "--data-dir",
+            data_dir.as_str(),
+        ],
+        &[],
+    );
+    assert!(install_output.status.success());
+    let install_stdout = stdout_string(&install_output);
+    assert!(install_stdout.contains("\"source_id\":\"en-wordnet-princeton\""));
+    assert!(install_stdout.contains("\"source_id\":\"fa-wordlist-cc0\""));
+    assert!(install_stdout.contains("\"source_id\":\"de-kaikki-wiktionary\""));
+    assert!(install_stdout.contains("\"source_id\":\"it-kaikki-wiktionary\""));
+
+    let status_output = run_lsteg_with_env(
+        &[
+            "data",
+            "status",
+            "--format",
+            "json",
+            "--data-dir",
+            data_dir.as_str(),
+        ],
+        &[],
+    );
+    assert!(status_output.status.success());
+    let status_stdout = stdout_string(&status_output);
+    assert!(status_stdout.contains("\"language\":\"en\""));
+    assert!(status_stdout.contains("\"language\":\"fa\""));
+    assert!(status_stdout.contains("\"language\":\"de\""));
+    assert!(status_stdout.contains("\"language\":\"it\""));
+}
+
+#[test]
 fn data_install_rejects_source_with_multi_language_target() {
     let output = run_lsteg(&[
         "data",
@@ -1043,6 +1165,33 @@ fn data_install_rejects_source_with_multi_language_target() {
     let stderr = stderr_string(&output);
     assert!(stderr.contains("LSTEG-CLI-ARG-001"));
     assert!(stderr.contains("--source can be used only with a single language in --lang"));
+}
+
+#[test]
+fn data_install_rejects_download_with_artifact_url() {
+    let data_dir = TempDataDir::create();
+    let artifact = TempArtifactFile::create(b"linguasteg-dataset");
+    let artifact_url = artifact.as_file_url();
+    let output = run_lsteg_with_env(
+        &[
+            "data",
+            "install",
+            "--lang",
+            "en",
+            "--download",
+            "--artifact-url",
+            &artifact_url,
+            "--format",
+            "json",
+            "--data-dir",
+            data_dir.as_str(),
+        ],
+        &[],
+    );
+    assert_eq!(output.status.code(), Some(2));
+    let stderr = stderr_string(&output);
+    assert!(stderr.contains("LSTEG-CLI-ARG-001"));
+    assert!(stderr.contains("--download cannot be used together with --artifact-url"));
 }
 
 #[test]

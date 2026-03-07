@@ -1044,9 +1044,11 @@ fn parse_data_install_command(
     let mut targets: Option<Vec<ProtoTarget>> = None;
     let mut source_id = None;
     let mut artifact_url = None;
+    let mut download_artifact = false;
     let mut seen_lang = false;
     let mut seen_source = false;
     let mut seen_artifact_url = false;
+    let mut seen_download = false;
     let mut data_dir = env_optional("LSTEG_DATA_DIR");
     let mut seen_data_dir = false;
 
@@ -1084,6 +1086,15 @@ fn parse_data_install_command(
                 seen_artifact_url = true;
                 artifact_url = Some(next_arg_value(&mut args, "--artifact-url")?);
             }
+            "--download" => {
+                if seen_download {
+                    return Err(CliError::usage(
+                        "--download cannot be provided multiple times".to_string(),
+                    ));
+                }
+                seen_download = true;
+                download_artifact = true;
+            }
             "--data-dir" => {
                 if seen_data_dir {
                     return Err(CliError::usage(
@@ -1105,7 +1116,7 @@ fn parse_data_install_command(
     let Some(targets) = targets else {
         let operation = if update { "update" } else { "install" };
         return Err(CliError::usage(format!(
-            "data {operation} requires --lang <code[,code...]>"
+            "data {operation} requires --lang <code[,code...]|all>"
         )));
     };
 
@@ -1114,6 +1125,7 @@ fn parse_data_install_command(
         targets,
         source_id,
         artifact_url,
+        download_artifact,
         data_dir,
     };
     let command = if update {
@@ -1608,13 +1620,13 @@ pub(crate) fn write_usage(mut writer: impl Write) -> std::io::Result<()> {
     )?;
     writeln!(
         writer,
-        "       lsteg data install --lang <code[,code...]> [--source <id|list>] [--artifact-url <url>] [--data-dir <path>] [--format text|json]"
+        "       lsteg data install --lang <code[,code...]|all> [--source <id|list>] [--download | --artifact-url <url>] [--data-dir <path>] [--format text|json]"
     )?;
     writeln!(
         writer,
-        "       lsteg data update --lang <code[,code...]> [--source <id|list>] [--artifact-url <url>] [--data-dir <path>] [--format text|json]"
+        "       lsteg data update --lang <code[,code...]|all> [--source <id|list>] [--download | --artifact-url <url>] [--data-dir <path>] [--format text|json]"
     )?;
-    writeln!(writer, "       lsteg demo <fa|en|de>")?;
+    writeln!(writer, "       lsteg demo <fa|en|de|it>")?;
     writeln!(
         writer,
         "       lsteg proto-encode <code> [message] [--json]"
@@ -1976,6 +1988,7 @@ mod tests {
         assert_eq!(options.targets[0], ProtoTarget::Farsi);
         assert_eq!(options.targets[1], ProtoTarget::English);
         assert!(options.source_id.is_none());
+        assert!(!options.download_artifact);
     }
 
     #[test]
@@ -1988,7 +2001,7 @@ mod tests {
 
         assert_eq!(
             error.message(),
-            "data install requires --lang <code[,code...]>"
+            "data install requires --lang <code[,code...]|all>"
         );
     }
 
@@ -2010,6 +2023,27 @@ mod tests {
         assert_eq!(options.targets.len(), 2);
         assert_eq!(options.targets[0], ProtoTarget::Other("de".to_string()));
         assert_eq!(options.targets[1], ProtoTarget::English);
+    }
+
+    #[test]
+    fn parse_data_install_command_accepts_lang_all_and_download() {
+        let command = parse_command(vec![
+            "data".to_string(),
+            "install".to_string(),
+            "--lang".to_string(),
+            "all".to_string(),
+            "--download".to_string(),
+        ])
+        .expect("parse should succeed")
+        .expect("command should exist");
+
+        let Command::Data(DataCommand::Install(options)) = command else {
+            panic!("expected data install command");
+        };
+
+        assert_eq!(options.targets.len(), 1);
+        assert_eq!(options.targets[0], ProtoTarget::Other("all".to_string()));
+        assert!(options.download_artifact);
     }
 
     #[test]
