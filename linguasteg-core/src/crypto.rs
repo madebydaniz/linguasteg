@@ -121,13 +121,10 @@ pub fn seal_payload_with_config(
 ) -> CryptoEnvelopeResult<Vec<u8>> {
     require_secret(secret)?;
 
-    let mut salt = [0u8; SALT_LEN];
-    fill_random(&mut salt)?;
+    let kdf_salt = fill_random_bytes(SALT_LEN)?;
+    let aead_nonce = fill_random_bytes(NONCE_LEN)?;
 
-    let mut nonce = [0u8; NONCE_LEN];
-    fill_random(&mut nonce)?;
-
-    seal_payload_with_material(payload, secret, config, &salt, &nonce)
+    seal_payload_with_material(payload, secret, config, &kdf_salt, &aead_nonce)
 }
 
 pub fn open_payload(envelope: &[u8], secret: &[u8]) -> CryptoEnvelopeResult<Vec<u8>> {
@@ -183,16 +180,14 @@ pub fn open_payload_with_config(
     let salt_end = salt_start + SALT_LEN;
     let nonce_end = salt_end + NONCE_LEN;
 
-    let mut salt = [0u8; SALT_LEN];
-    salt.copy_from_slice(&envelope[salt_start..salt_end]);
-    let mut nonce = [0u8; NONCE_LEN];
-    nonce.copy_from_slice(&envelope[salt_end..nonce_end]);
+    let kdf_salt = &envelope[salt_start..salt_end];
+    let aead_nonce = &envelope[salt_end..nonce_end];
 
     let ciphertext = &envelope[nonce_end..];
-    let key = derive_key(secret, &salt, &config.kdf)?;
+    let key = derive_key(secret, kdf_salt, &config.kdf)?;
     let cipher = XChaCha20Poly1305::new(Key::from_slice(&key));
     let plaintext = cipher
-        .decrypt(XNonce::from_slice(&nonce), ciphertext)
+        .decrypt(XNonce::from_slice(aead_nonce), ciphertext)
         .map_err(|_| CryptoEnvelopeError::DecryptFailed)?;
 
     Ok(plaintext)
@@ -255,13 +250,14 @@ fn seal_payload_with_material(
     payload: &[u8],
     secret: &[u8],
     config: &CryptoEnvelopeConfig,
-    salt: &[u8; SALT_LEN],
-    nonce: &[u8; NONCE_LEN],
+    kdf_salt: &[u8],
+    aead_nonce: &[u8],
 ) -> CryptoEnvelopeResult<Vec<u8>> {
-    let key = derive_key(secret, salt, &config.kdf)?;
+    validate_material_lengths(kdf_salt, aead_nonce)?;
+    let key = derive_key(secret, kdf_salt, &config.kdf)?;
     let cipher = XChaCha20Poly1305::new(Key::from_slice(&key));
     let ciphertext = cipher
-        .encrypt(XNonce::from_slice(nonce), payload)
+        .encrypt(XNonce::from_slice(aead_nonce), payload)
         .map_err(|_| CryptoEnvelopeError::EncryptFailed)?;
     let ciphertext_len: u32 = ciphertext.len().try_into().map_err(|_| {
         CryptoEnvelopeError::InvalidEnvelope("ciphertext length exceeds u32::MAX".to_string())
@@ -275,8 +271,8 @@ fn seal_payload_with_material(
     envelope.push(SALT_LEN as u8);
     envelope.push(NONCE_LEN as u8);
     envelope.extend_from_slice(&ciphertext_len.to_be_bytes());
-    envelope.extend_from_slice(salt);
-    envelope.extend_from_slice(nonce);
+    envelope.extend_from_slice(kdf_salt);
+    envelope.extend_from_slice(aead_nonce);
     envelope.extend_from_slice(&ciphertext);
 
     Ok(envelope)
@@ -310,7 +306,7 @@ fn parse_header(envelope: &[u8]) -> CryptoEnvelopeResult<EnvelopeHeader> {
 
 fn derive_key(
     secret: &[u8],
-    salt: &[u8; SALT_LEN],
+    kdf_salt: &[u8],
     params: &KeyDerivationParams,
 ) -> CryptoEnvelopeResult<[u8; KEY_LEN]> {
     let argon_params = Params::new(
@@ -323,7 +319,7 @@ fn derive_key(
     let mut key = [0u8; KEY_LEN];
     let argon = Argon2::new(Algorithm::Argon2id, Version::V0x13, argon_params);
     argon
-        .hash_password_into(secret, salt, &mut key)
+        .hash_password_into(secret, kdf_salt, &mut key)
         .map_err(|error| CryptoEnvelopeError::KeyDerivationFailed(error.to_string()))?;
     Ok(key)
 }
@@ -331,6 +327,28 @@ fn derive_key(
 fn fill_random(buf: &mut [u8]) -> CryptoEnvelopeResult<()> {
     getrandom::getrandom(buf)
         .map_err(|error| CryptoEnvelopeError::RandomnessUnavailable(error.to_string()))
+}
+
+fn fill_random_bytes(length: usize) -> CryptoEnvelopeResult<Vec<u8>> {
+    let mut bytes = vec![0u8; length];
+    fill_random(&mut bytes)?;
+    Ok(bytes)
+}
+
+fn validate_material_lengths(kdf_salt: &[u8], aead_nonce: &[u8]) -> CryptoEnvelopeResult<()> {
+    if kdf_salt.len() != SALT_LEN {
+        return Err(CryptoEnvelopeError::InvalidEnvelope(format!(
+            "expected salt length {SALT_LEN}, got {}",
+            kdf_salt.len()
+        )));
+    }
+    if aead_nonce.len() != NONCE_LEN {
+        return Err(CryptoEnvelopeError::InvalidEnvelope(format!(
+            "expected nonce length {NONCE_LEN}, got {}",
+            aead_nonce.len()
+        )));
+    }
+    Ok(())
 }
 
 fn require_secret(secret: &[u8]) -> CryptoEnvelopeResult<()> {
@@ -344,7 +362,7 @@ fn require_secret(secret: &[u8]) -> CryptoEnvelopeResult<()> {
 mod tests {
     use super::{
         CryptoEnvelopeConfig, CryptoEnvelopeError, CryptoEnvelopeInspection, NONCE_LEN, SALT_LEN,
-        inspect_envelope, open_payload, parse_header, seal_payload, seal_payload_with_material,
+        inspect_envelope, open_payload, parse_header, seal_payload, seal_payload_with_config,
     };
 
     #[test]
@@ -403,10 +421,8 @@ mod tests {
     fn envelope_header_is_versioned_and_length_prefixed() {
         let payload = b"abc";
         let secret = b"secret";
-        let salt = [7u8; SALT_LEN];
-        let nonce = [11u8; NONCE_LEN];
         let config = CryptoEnvelopeConfig::default();
-        let envelope = seal_payload_with_material(payload, secret, &config, &salt, &nonce)
+        let envelope = seal_payload_with_config(payload, secret, &config)
             .expect("seal with material should succeed");
 
         let header = parse_header(&envelope).expect("header should parse");

@@ -1143,10 +1143,10 @@ fn author_adjective_variant(
     }
 }
 
-fn is_light_profile_variant(left: u32, right: usize, salt: u64) -> bool {
+fn is_light_profile_variant(left: u32, right: usize, profile_tweak: u64) -> bool {
     let mix = (u64::from(left)).wrapping_mul(0x9E37_79B9_7F4A_7C15)
         ^ (right as u64).wrapping_mul(0xD1B5_4A32_D192_ED03)
-        ^ salt;
+        ^ profile_tweak;
     (mix & 0b11) == 0
 }
 
