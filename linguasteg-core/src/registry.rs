@@ -1,13 +1,16 @@
 use crate::{
-    LanguageDescriptor, LanguageTag, ModelDescriptor, ModelId, ProviderId, StrategyDescriptor,
-    StrategyId, StyleProfileDescriptor, StyleProfileId, RealizationTemplateDescriptor, TemplateId,
+    LanguageDescriptor, LanguageTag, ModelDescriptor, ModelId, ProviderId,
+    RealizationTemplateDescriptor, StrategyDescriptor, StrategyId, StyleProfileDescriptor,
+    StyleProfileId, TemplateId,
 };
 
 pub trait LanguageRegistry: Send + Sync {
     fn all_languages(&self) -> &[LanguageDescriptor];
 
     fn language(&self, tag: &LanguageTag) -> Option<&LanguageDescriptor> {
-        self.all_languages().iter().find(|descriptor| &descriptor.tag == tag)
+        self.all_languages()
+            .iter()
+            .find(|descriptor| &descriptor.tag == tag)
     }
 }
 
@@ -57,7 +60,10 @@ pub trait TemplateRegistry: Send + Sync {
             .find(|descriptor| &descriptor.id == id)
     }
 
-    fn templates_for_language(&self, language: &LanguageTag) -> Vec<&RealizationTemplateDescriptor> {
+    fn templates_for_language(
+        &self,
+        language: &LanguageTag,
+    ) -> Vec<&RealizationTemplateDescriptor> {
         self.all_templates()
             .iter()
             .filter(|descriptor| &descriptor.language == language)
@@ -68,10 +74,11 @@ pub trait TemplateRegistry: Send + Sync {
 #[cfg(test)]
 mod tests {
     use crate::{
-        LanguageDescriptor, LanguageRegistry, LanguageTag, ModelCapability, StrategyDescriptor,
-        StrategyId, StrategyRegistry, StyleInspiration, StyleProfileDescriptor, StyleProfileId,
-        StyleProfileRegistry, StyleStrength, TextDirection, WritingRegister, RealizationTemplateDescriptor,
-        SlotId, SlotRole, TemplateId, TemplateRegistry, TemplateSlotDescriptor, TemplateToken,
+        LanguageDescriptor, LanguageRegistry, LanguageTag, ModelCapability,
+        RealizationTemplateDescriptor, SlotId, SlotRole, StrategyDescriptor, StrategyId,
+        StrategyRegistry, StyleInspiration, StyleProfileDescriptor, StyleProfileId,
+        StyleProfileRegistry, StyleStrength, TemplateId, TemplateRegistry, TemplateSlotDescriptor,
+        TemplateToken, TextDirection, WritingRegister,
     };
 
     struct InMemoryLanguageRegistry {
@@ -217,7 +224,9 @@ mod tests {
         };
 
         let template_id = TemplateId::new("fa-simple").expect("valid template id");
-        let template = registry.template(&template_id).expect("template should exist");
+        let template = registry
+            .template(&template_id)
+            .expect("template should exist");
         assert_eq!(template.display_name, "Simple Persian Template");
 
         let fa = LanguageTag::new("fa").expect("valid tag");

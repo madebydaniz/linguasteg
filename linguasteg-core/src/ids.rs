@@ -156,9 +156,7 @@ fn normalize_identifier(value: String) -> CoreResult<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        LanguageTag, ModelId, ProviderId, SlotId, StrategyId, StyleProfileId, TemplateId,
-    };
+    use super::{LanguageTag, ModelId, ProviderId, SlotId, StrategyId, StyleProfileId, TemplateId};
 
     #[test]
     fn language_tag_normalizes_ascii_input() {

@@ -5,7 +5,10 @@ pub enum CoreError {
     InvalidIdentifier(String),
     UnsupportedLanguage(String),
     UnsupportedStrategy(String),
-    UnsupportedModel { provider: String, model: String },
+    UnsupportedModel {
+        provider: String,
+        model: String,
+    },
     UnsupportedTemplate(String),
     StrategyRequiresModel(String),
     InvalidTemplate(String),

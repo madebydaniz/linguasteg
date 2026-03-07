@@ -1,6 +1,4 @@
-use crate::{
-    CoreError, CoreResult, RealizationTemplateDescriptor, SlotId, TemplateToken,
-};
+use crate::{CoreError, CoreResult, RealizationTemplateDescriptor, SlotId, TemplateToken};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SlotAssignment {
@@ -63,7 +61,9 @@ pub fn validate_realization_plan(
         }
 
         if seen_slots.contains(&&assignment.slot) {
-            return Err(CoreError::DuplicateSlotAssignment(assignment.slot.to_string()));
+            return Err(CoreError::DuplicateSlotAssignment(
+                assignment.slot.to_string(),
+            ));
         }
 
         seen_slots.push(&assignment.slot);
@@ -148,9 +148,9 @@ mod tests {
     #[test]
     fn template_validation_rejects_undefined_slot_reference() {
         let mut template = sample_template();
-        template
-            .tokens
-            .push(TemplateToken::Slot(SlotId::new("missing").expect("valid slot")));
+        template.tokens.push(TemplateToken::Slot(
+            SlotId::new("missing").expect("valid slot"),
+        ));
 
         let error = validate_template_descriptor(&template).expect_err("template should fail");
         assert!(error.to_string().contains("undefined slot"));

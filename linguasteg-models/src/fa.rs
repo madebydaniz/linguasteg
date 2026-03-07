@@ -1448,9 +1448,8 @@ mod tests {
     use linguasteg_core::{
         BitRange, FixedWidthBitPlanner, FixedWidthPlanningOptions, LanguageRealizer,
         LanguageRegistry, RealizationPlan, SlotAssignment, SlotId, StyleProfileId,
-        StyleProfileRegistry,
-        SymbolicFramePlan, SymbolicPayloadPlan, SymbolicPayloadPlanner, SymbolicSlotValue,
-        TemplateId, TemplateRegistry, decode_payload_from_symbolic_frames,
+        StyleProfileRegistry, SymbolicFramePlan, SymbolicPayloadPlan, SymbolicPayloadPlanner,
+        SymbolicSlotValue, TemplateId, TemplateRegistry, decode_payload_from_symbolic_frames,
     };
 
     use super::{
