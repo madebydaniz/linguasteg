@@ -32,7 +32,7 @@ pub(crate) struct LexiconVariantEntry {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(crate) struct LexiconVariantCatalog {
-    entries: HashMap<(String, String), Vec<String>>,
+    entries: HashMap<String, HashMap<String, Vec<String>>>,
     normalization_rules: Vec<(String, String)>,
 }
 
@@ -47,13 +47,13 @@ impl LexiconDataset {
     }
 
     pub(crate) fn variant_catalog(&self) -> LexiconVariantCatalog {
-        let mut entries = HashMap::new();
+        let mut entries: HashMap<String, HashMap<String, Vec<String>>> = HashMap::new();
         let mut normalization_rules = Vec::new();
         for entry in &self.entries {
-            entries.insert(
-                (entry.slot.clone(), entry.canonical.clone()),
-                entry.variants.clone(),
-            );
+            entries
+                .entry(entry.slot.clone())
+                .or_default()
+                .insert(entry.canonical.clone(), entry.variants.clone());
             for variant in &entry.variants {
                 normalization_rules.push((variant.clone(), entry.canonical.clone()));
             }
@@ -73,9 +73,7 @@ impl LexiconVariantCatalog {
         canonical: &str,
         selector: u64,
     ) -> Option<&str> {
-        let variants = self
-            .entries
-            .get(&(slot.to_string(), canonical.to_string()))?;
+        let variants = self.entries.get(slot)?.get(canonical)?;
         if variants.is_empty() {
             return None;
         }
@@ -100,6 +98,9 @@ fn replace_whole_surface(input: &str, variant: &str, canonical: &str) -> String 
     let mut out = String::with_capacity(input.len());
     let mut cursor = 0usize;
     for (start, _) in input.match_indices(variant) {
+        if start < cursor {
+            continue;
+        }
         let end = start + variant.len();
         if !is_boundary(input, start, true) || !is_boundary(input, end, false) {
             continue;
@@ -357,5 +358,24 @@ mod tests {
             normalized,
             "the writer writes quiet letter. the writer writes quiet letter."
         );
+    }
+
+    #[test]
+    fn lexicon_variant_catalog_normalize_text_handles_overlapping_matches() {
+        let payload = br#"{
+            "kind": "linguasteg-lexicon-v1",
+            "schema_version": 1,
+            "language": "en",
+            "entries": [
+                {"slot": "object", "canonical": "token", "variants": ["a-a"]}
+            ]
+        }"#;
+        let dataset = load_lexicon_dataset_artifact("en", payload)
+            .expect("dataset should parse")
+            .expect("dataset should be detected");
+        let catalog = dataset.variant_catalog();
+        let normalized = catalog.normalize_text("a-a-a");
+
+        assert_eq!(normalized, "token-a");
     }
 }

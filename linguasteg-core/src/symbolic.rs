@@ -121,6 +121,16 @@ pub fn validate_symbolic_frame_schema(schema: &SymbolicFrameSchema) -> CoreResul
         seen_slots.push(&field.slot);
     }
 
+    let total_bits = schema.total_bits();
+    if total_bits > usize::from(u8::MAX) {
+        return Err(CoreError::InvalidSymbolicSchema(format!(
+            "schema '{}' exceeds max frame width of {} bits: {}",
+            schema.template_id,
+            u8::MAX,
+            total_bits
+        )));
+    }
+
     Ok(())
 }
 
@@ -180,7 +190,12 @@ pub fn plan_payload_to_symbolic_frames(
         frame_index += 1;
     }
 
-    let padding_bits = (bit_cursor.saturating_sub(total_bits)) as u8;
+    let raw_padding_bits = bit_cursor.saturating_sub(total_bits);
+    let padding_bits = u8::try_from(raw_padding_bits).map_err(|_| {
+        CoreError::InvalidSymbolicPlan(format!(
+            "padding bits value {raw_padding_bits} exceeds u8::MAX"
+        ))
+    })?;
 
     Ok(SymbolicPayloadPlan {
         original_len_bytes: payload.len(),
@@ -403,6 +418,27 @@ mod tests {
 
         let error = validate_symbolic_frame_schema(&schema).expect_err("schema should fail");
         assert!(error.to_string().contains("duplicate symbolic slot"));
+    }
+
+    #[test]
+    fn schema_validation_rejects_total_bit_width_above_u8_max() {
+        let schema = SymbolicFrameSchema {
+            template_id: TemplateId::new("fa-wide").expect("valid template id"),
+            fields: vec![
+                field("s1", 31),
+                field("s2", 31),
+                field("s3", 31),
+                field("s4", 31),
+                field("s5", 31),
+                field("s6", 31),
+                field("s7", 31),
+                field("s8", 31),
+                field("s9", 31),
+            ],
+        };
+
+        let error = validate_symbolic_frame_schema(&schema).expect_err("schema should fail");
+        assert!(error.to_string().contains("exceeds max frame width"));
     }
 
     #[test]

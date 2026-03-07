@@ -1,3 +1,5 @@
+use std::fmt::Write as _;
+
 use linguasteg_core::SymbolicFramePlan;
 
 use super::types::TraceAnalysisSummary;
@@ -220,6 +222,10 @@ pub(crate) fn json_escape(input: &str) -> String {
             '\t' => escaped.push_str("\\t"),
             '\u{08}' => escaped.push_str("\\b"),
             '\u{0C}' => escaped.push_str("\\f"),
+            _ if (ch as u32) <= 0x1F => {
+                write!(&mut escaped, "\\u{:04x}", ch as u32)
+                    .expect("writing to String should not fail");
+            }
             _ => escaped.push(ch),
         }
     }
