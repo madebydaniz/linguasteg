@@ -6,7 +6,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 
-use super::dataset::{DatasetArtifactMetadata, load_lexicon_dataset_artifact};
+use super::dataset::{
+    DatasetArtifactMetadata, LexiconVariantCatalog, load_lexicon_dataset_artifact,
+};
 use super::types::{
     CliError, DataCleanOptions, DataCommand, DataDoctorOptions, DataExportManifestOptions,
     DataImportManifestOptions, DataInstallOptions, DataListOptions, DataPinOptions,
@@ -345,6 +347,59 @@ pub(crate) fn resolve_active_data_source_selection(
     Ok(Some(ActiveDataSourceSelection {
         source_id: record.source_id.clone(),
     }))
+}
+
+pub(crate) fn resolve_active_data_source_variant_catalog(
+    target: ProtoTarget,
+    source_id: Option<&str>,
+    data_dir: Option<&str>,
+) -> Result<Option<LexiconVariantCatalog>, CliError> {
+    let Some(source_id) = source_id else {
+        return Ok(None);
+    };
+
+    let data_dir = resolve_data_dir(data_dir);
+    let source_dir = data_dir.join(target.as_str()).join(source_id);
+    let manifest_path = source_dir.join("manifest.json");
+    if !manifest_path.exists() {
+        return Ok(None);
+    }
+
+    let manifest_raw = fs::read_to_string(&manifest_path).map_err(|error| {
+        CliError::io(
+            "failed to read source manifest",
+            Some(&manifest_path.to_string_lossy()),
+            error,
+        )
+    })?;
+    let manifest: InstalledSourceManifest =
+        serde_json::from_str(&manifest_raw).map_err(|error| {
+            CliError::config(format!(
+                "failed to parse source manifest '{}': {error}",
+                manifest_path.to_string_lossy()
+            ))
+        })?;
+
+    let Some(artifact_raw_path) = manifest.artifact_path.as_deref() else {
+        return Ok(None);
+    };
+    let artifact_path = if Path::new(artifact_raw_path).is_absolute() {
+        PathBuf::from(artifact_raw_path)
+    } else {
+        source_dir.join(artifact_raw_path)
+    };
+    if !artifact_path.exists() {
+        return Ok(None);
+    }
+
+    let bytes = read_local_file_limited(&artifact_path)?;
+    let dataset = load_lexicon_dataset_artifact(target.as_str(), &bytes).map_err(|reason| {
+        CliError::config(format!(
+            "installed artifact for source '{}' is not valid: {reason}",
+            source_id
+        ))
+    })?;
+    Ok(dataset.map(|item| item.variant_catalog()))
 }
 
 pub(crate) fn run_data_command(command: DataCommand) -> Result<(), CliError> {

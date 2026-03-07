@@ -1023,6 +1023,64 @@ fn data_install_rejects_lexicon_dataset_artifact_with_mismatched_language() {
 }
 
 #[test]
+fn encode_uses_dataset_variants_from_selected_source_artifact() {
+    let data_dir = TempDataDir::create();
+    let artifact = TempArtifactFile::create(
+        br#"{
+            "kind":"linguasteg-lexicon-v1",
+            "schema_version":1,
+            "language":"en",
+            "entries":[{"slot":"object","canonical":"letter","variants":["epistle"]}]
+        }"#,
+    );
+    let artifact_url = artifact.as_file_url();
+    let install_output = run_lsteg_with_env(
+        &[
+            "data",
+            "install",
+            "--lang",
+            "en",
+            "--source",
+            "en-wordlist-wordnik",
+            "--artifact-url",
+            &artifact_url,
+            "--format",
+            "json",
+            "--data-dir",
+            data_dir.as_str(),
+        ],
+        &[],
+    );
+    assert!(install_output.status.success());
+
+    let encode_output = run_lsteg_with_env(
+        &[
+            "encode",
+            "--lang",
+            "en",
+            "--message",
+            "hello world",
+            "--source",
+            "en-wordlist-wordnik",
+            "--data-dir",
+            data_dir.as_str(),
+            "--format",
+            "json",
+        ],
+        &[("LSTEG_SECRET", "1234")],
+    );
+    assert!(encode_output.status.success());
+    let encoded_json: Value =
+        serde_json::from_str(&stdout_string(&encode_output)).expect("encode output should be json");
+
+    let final_text = encoded_json
+        .get("final_text")
+        .and_then(Value::as_str)
+        .expect("final_text should be present");
+    assert!(final_text.contains("epistle"));
+}
+
+#[test]
 fn data_install_rejects_artifact_url_with_multi_language_target() {
     let output = run_lsteg(&[
         "data",

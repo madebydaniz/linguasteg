@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::collections::HashSet;
 
 use serde::Deserialize;
@@ -29,6 +30,11 @@ pub(crate) struct LexiconVariantEntry {
     pub(crate) variants: Vec<String>,
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub(crate) struct LexiconVariantCatalog {
+    entries: HashMap<(String, String), Vec<String>>,
+}
+
 impl LexiconDataset {
     pub(crate) fn metadata(&self) -> DatasetArtifactMetadata {
         DatasetArtifactMetadata {
@@ -37,6 +43,35 @@ impl LexiconDataset {
             language: self.language.clone(),
             entry_count: self.entries.len(),
         }
+    }
+
+    pub(crate) fn variant_catalog(&self) -> LexiconVariantCatalog {
+        let mut entries = HashMap::new();
+        for entry in &self.entries {
+            entries.insert(
+                (entry.slot.clone(), entry.canonical.clone()),
+                entry.variants.clone(),
+            );
+        }
+        LexiconVariantCatalog { entries }
+    }
+}
+
+impl LexiconVariantCatalog {
+    pub(crate) fn select_variant(
+        &self,
+        slot: &str,
+        canonical: &str,
+        selector: u64,
+    ) -> Option<&str> {
+        let variants = self
+            .entries
+            .get(&(slot.to_string(), canonical.to_string()))?;
+        if variants.is_empty() {
+            return None;
+        }
+        let index = (selector as usize) % variants.len();
+        variants.get(index).map(String::as_str)
     }
 }
 

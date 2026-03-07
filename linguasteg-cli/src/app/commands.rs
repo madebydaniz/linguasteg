@@ -9,7 +9,11 @@ use linguasteg_core::{
 };
 
 use super::analysis::{analyze_trace_summary, render_trace_analysis_output};
-use super::data::{resolve_active_data_source_selection, run_data_command};
+use super::data::{
+    resolve_active_data_source_selection, resolve_active_data_source_variant_catalog,
+    run_data_command,
+};
+use super::dataset::LexiconVariantCatalog;
 use super::formatters::{build_proto_decode_json, build_proto_encode_json, json_escape};
 use super::language::resolve_trace_target;
 use super::runtime::{
@@ -714,6 +718,13 @@ fn run_encode(options: EncodeOptions) -> Result<(), CliError> {
         options.source_id.as_deref(),
         options.data_dir.as_deref(),
     )?;
+    let active_variant_catalog = resolve_active_data_source_variant_catalog(
+        options.target.clone(),
+        active_data_source
+            .as_ref()
+            .map(|source| source.source_id.as_str()),
+        options.data_dir.as_deref(),
+    )?;
     let output = render_proto_encode_output(
         options.target,
         &payload_text,
@@ -724,6 +735,7 @@ fn run_encode(options: EncodeOptions) -> Result<(), CliError> {
         active_data_source
             .as_ref()
             .map(|source| source.source_id.as_str()),
+        active_variant_catalog.as_ref(),
     )?;
     write_output(&output, options.output_path.as_deref())
 }
@@ -961,7 +973,8 @@ fn run_proto_encode(target: ProtoTarget, payload_text: &str, json: bool) -> Resu
     } else {
         OutputFormat::Text
     };
-    let output = render_proto_encode_output(target, payload_text, format, None, true, None, None)?;
+    let output =
+        render_proto_encode_output(target, payload_text, format, None, true, None, None, None)?;
     println!("{output}");
     Ok(())
 }
@@ -1007,6 +1020,7 @@ fn render_proto_encode_output(
     emit_trace: bool,
     profile: Option<&str>,
     data_source_id: Option<&str>,
+    variant_catalog: Option<&LexiconVariantCatalog>,
 ) -> Result<String, CliError> {
     let payload = payload_text.as_bytes();
     let symbolic_payload = match secret {
@@ -1045,6 +1059,7 @@ fn render_proto_encode_output(
         &mut realization_plans,
         secret,
         data_source_id,
+        variant_catalog,
     );
 
     let mut sentences = Vec::with_capacity(realization_plans.len());
@@ -1130,6 +1145,7 @@ fn apply_secret_surface_variants(
     plans: &mut [RealizationPlan],
     secret: Option<&[u8]>,
     data_source_id: Option<&str>,
+    variant_catalog: Option<&LexiconVariantCatalog>,
 ) {
     let Some(secret_bytes) = secret else {
         return;
@@ -1151,6 +1167,18 @@ fn apply_secret_surface_variants(
     for (frame_index, plan) in plans.iter_mut().enumerate() {
         for assignment in &mut plan.assignments {
             let slot = assignment.slot.as_str();
+            let selector = surface_selector(seed, frame_index, slot, &assignment.surface);
+            if frame_index == 0 {
+                if let Some(variant) = dataset_surface_variant(
+                    variant_catalog,
+                    slot,
+                    assignment.surface.as_str(),
+                    selector,
+                ) {
+                    assignment.surface = variant;
+                    continue;
+                }
+            }
             if frame_index == 0 {
                 if let Some(variant) = secret_intro_surface_variant(
                     language_code,
@@ -1165,6 +1193,16 @@ fn apply_secret_surface_variants(
                 }
             }
             if !should_use_secret_variant(seed, frame_index, slot, &assignment.surface) {
+                continue;
+            }
+            let selector = surface_selector(seed, frame_index, slot, &assignment.surface);
+            if let Some(variant) = dataset_surface_variant(
+                variant_catalog,
+                slot,
+                assignment.surface.as_str(),
+                selector,
+            ) {
+                assignment.surface = variant;
                 continue;
             }
             if let Some(variant) =
@@ -1286,12 +1324,27 @@ fn secret_surface_variant(language_code: &str, slot: &str, surface: &str) -> Opt
 }
 
 fn should_use_secret_variant(seed: u64, frame_index: usize, slot: &str, surface: &str) -> bool {
+    (surface_selector(seed, frame_index, slot, surface) & 1) == 1
+}
+
+fn surface_selector(seed: u64, frame_index: usize, slot: &str, surface: &str) -> u64 {
     let frame_mix = (frame_index as u64)
         .wrapping_add(1)
         .wrapping_mul(0x9E37_79B9_7F4A_7C15);
     let slot_mix = fnv1a64(slot.as_bytes()).rotate_left(17);
     let surface_mix = fnv1a64(surface.as_bytes()).rotate_left(33);
-    ((seed ^ frame_mix ^ slot_mix ^ surface_mix) & 1) == 1
+    seed ^ frame_mix ^ slot_mix ^ surface_mix
+}
+
+fn dataset_surface_variant(
+    variant_catalog: Option<&LexiconVariantCatalog>,
+    slot: &str,
+    surface: &str,
+    selector: u64,
+) -> Option<String> {
+    variant_catalog
+        .and_then(|catalog| catalog.select_variant(slot, surface, selector))
+        .map(ToString::to_string)
 }
 
 fn fnv1a64(bytes: &[u8]) -> u64 {
