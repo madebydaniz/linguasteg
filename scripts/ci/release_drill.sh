@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-readonly RELEASE_PLEASE_CONFIG="release-please-config.json"
-readonly RELEASE_PLEASE_MANIFEST=".release-please-manifest.json"
+readonly RELEASE_PLEASE_CONFIG=".github/release-please-config.json"
+readonly RELEASE_PLEASE_MANIFEST=".github/.release-please-manifest.json"
 
 require_tool() {
   local tool="$1"

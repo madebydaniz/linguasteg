@@ -32,8 +32,8 @@ check_required_workflows() {
 }
 
 check_release_metadata_files() {
-  assert_file_exists "release-please-config.json"
-  assert_file_exists ".release-please-manifest.json"
+  assert_file_exists ".github/release-please-config.json"
+  assert_file_exists ".github/.release-please-manifest.json"
 }
 
 check_freeze_git_state_strict() {

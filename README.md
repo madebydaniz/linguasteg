@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="docs/Linguasteg-cli.png" alt="LinguaSteg Logo" width="220">
+  <img src="assets/logo.png" alt="LinguaSteg Logo" width="220">
   <h1>LinguaSteg</h1>
 </div>
 
@@ -13,6 +13,7 @@
 Multilingual linguistic steganography CLI in Rust.
 
 Encode secret-protected payloads into natural-language cover text and decode them back deterministically.
+
 </div>
 
 ## Installation/Update
@@ -44,6 +45,7 @@ curl -fsSL https://raw.githubusercontent.com/madebydaniz/linguasteg/main/scripts
 ```
 
 Note:
+
 - Script checksum verification is always enabled.
 - Signature verification uses Cosign keyless by default.
 - To skip signature verification (not recommended): `--no-verify-signature`
@@ -73,27 +75,27 @@ lsteg decode --lang auto --text-input --trace "<stego text>" --secret "test-secr
 
 ### Main commands
 
-| Command | Example |
-|---|---|
-| `encode` | `lsteg encode --lang fa --message "salam" --secret "k"` |
-| `decode` | `lsteg decode --lang auto --text-input --trace "..." --secret "k"` |
-| `analyze` | `lsteg analyze --lang auto --text-input --trace "..." --format json` |
-| `validate` | `lsteg validate --lang auto --trace-input --trace "..."` |
-| `catalog` | `lsteg catalog --format json` |
-| `templates` / `profiles` / `schemas` | `lsteg templates --lang de` |
-| `data install` | `lsteg data install --lang all --download` |
-| `data list` | `lsteg data install --lang en --source list --format json` |
-| `data status` | `lsteg data status --format json` |
-| `data update` | `lsteg data update --lang it --download` |
-| `data verify` | `lsteg data verify --lang en --source en-wordnet-princeton` |
+| Command                              | Example                                                              |
+| ------------------------------------ | -------------------------------------------------------------------- |
+| `encode`                             | `lsteg encode --lang fa --message "salam" --secret "k"`              |
+| `decode`                             | `lsteg decode --lang auto --text-input --trace "..." --secret "k"`   |
+| `analyze`                            | `lsteg analyze --lang auto --text-input --trace "..." --format json` |
+| `validate`                           | `lsteg validate --lang auto --trace-input --trace "..."`             |
+| `catalog`                            | `lsteg catalog --format json`                                        |
+| `templates` / `profiles` / `schemas` | `lsteg templates --lang de`                                          |
+| `data install`                       | `lsteg data install --lang all --download`                           |
+| `data list`                          | `lsteg data install --lang en --source list --format json`           |
+| `data status`                        | `lsteg data status --format json`                                    |
+| `data update`                        | `lsteg data update --lang it --download`                             |
+| `data verify`                        | `lsteg data verify --lang en --source en-wordnet-princeton`          |
 
 ## Supported Languages
 
 | Code | Language | Direction |
-|---|---|---|
-| `fa` | Farsi | `rtl` |
-| `en` | English | `ltr` |
-| `de` | German | `ltr` |
-| `it` | Italian | `ltr` |
+| ---- | -------- | --------- |
+| `fa` | Farsi    | `rtl`     |
+| `en` | English  | `ltr`     |
+| `de` | German   | `ltr`     |
+| `it` | Italian  | `ltr`     |
 
-MIT License.
+**Author:** [Daniel Niazmand](https://github.com/madebydaniz)
