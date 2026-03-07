@@ -1,4 +1,4 @@
-use std::io::Read;
+use std::io::{Read, Write};
 
 use linguasteg_core::{
     CryptoEnvelopeInspection, DecodeRequest, EncodeRequest, FixedWidthPlanningOptions, LanguageTag,
@@ -1853,7 +1853,17 @@ fn write_output(output: &str, output_path: Option<&str>) -> Result<(), CliError>
         std::fs::write(path, output)
             .map_err(|error| CliError::io("failed to write output file", Some(path), error))?;
     } else {
-        println!("{output}");
+        let mut stdout = std::io::stdout().lock();
+        stdout
+            .write_all(output.as_bytes())
+            .and_then(|_| {
+                if output.ends_with('\n') {
+                    Ok(())
+                } else {
+                    stdout.write_all(b"\n")
+                }
+            })
+            .map_err(|error| CliError::io("failed to write output to stdout", None, error))?;
     }
     Ok(())
 }
