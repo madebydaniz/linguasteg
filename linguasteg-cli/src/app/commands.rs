@@ -1000,18 +1000,18 @@ fn demo_assignments(
             ("object", "brief"),
         ],
         (ProtoTarget::Other(code), true) if code == "it" => vec![
-            ("subject", "the student"),
-            ("time", "today"),
-            ("location", "in the library"),
-            ("verb", "writes"),
-            ("object", "letter"),
+            ("subject", "lo studente"),
+            ("time", "oggi"),
+            ("location", "in biblioteca"),
+            ("verb", "scrive"),
+            ("object", "lettera"),
         ],
         (ProtoTarget::Other(code), false) if code == "it" => vec![
             ("subject", " "),
-            ("time", "today"),
-            ("location", "in the library"),
-            ("verb", "writes"),
-            ("object", "letter"),
+            ("time", "oggi"),
+            ("location", "in biblioteca"),
+            ("verb", "scrive"),
+            ("object", "lettera"),
         ],
         (ProtoTarget::Other(_), _) => {
             return Err(CliError::config(

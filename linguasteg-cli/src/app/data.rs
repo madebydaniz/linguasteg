@@ -2480,18 +2480,18 @@ fn starter_dataset_template_for_language(language: &ProtoTarget) -> &'static str
   "entries": [
     {
       "slot": "object",
-      "canonical": "letter",
-      "variants": ["missive", "epistle"]
+      "canonical": "lettera",
+      "variants": ["missiva", "epistola"]
     },
     {
       "slot": "adjective",
-      "canonical": "quiet",
-      "variants": ["concise"]
+      "canonical": "sobrio",
+      "variants": ["conciso"]
     },
     {
       "slot": "verb",
-      "canonical": "writes",
-      "variants": ["composes"]
+      "canonical": "scrive",
+      "variants": ["compone"]
     }
   ]
 }

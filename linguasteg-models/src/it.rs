@@ -766,48 +766,76 @@ fn symbolic_field(slot: &str, bit_width: u8) -> SymbolicFieldSpec {
 
 fn subject_forms() -> &'static [&'static str] {
     &[
-        "the writer",
-        "the student",
-        "the artist",
-        "the teacher",
-        "the researcher",
-        "the engineer",
-        "the visitor",
-        "the manager",
-        "the analyst",
-        "the editor",
-        "the designer",
-        "the planner",
-        "the operator",
-        "the curator",
-        "the mentor",
-        "the reviewer",
-        "the architect",
-        "the librarian",
-        "the doctor",
-        "the lawyer",
-        "the chef",
-        "the pilot",
-        "the nurse",
-        "the trader",
-        "the farmer",
-        "the driver",
-        "the clerk",
-        "the coach",
-        "the director",
-        "the inspector",
-        "the producer",
-        "the scientist",
+        "lo scrittore",
+        "lo studente",
+        "l'artista",
+        "l'insegnante",
+        "il ricercatore",
+        "l'ingegnere",
+        "il visitatore",
+        "il manager",
+        "l'analista",
+        "l'editore",
+        "il designer",
+        "il pianificatore",
+        "l'operatore",
+        "il curatore",
+        "il mentore",
+        "il revisore",
+        "l'architetto",
+        "il bibliotecario",
+        "il medico",
+        "l'avvocato",
+        "lo chef",
+        "il pilota",
+        "l'infermiere",
+        "il commerciante",
+        "l'agricoltore",
+        "l'autista",
+        "l'impiegato",
+        "l'allenatore",
+        "il direttore",
+        "l'ispettore",
+        "il produttore",
+        "lo scienziato",
     ]
 }
 
 #[cfg(test)]
 fn object_forms() -> &'static [&'static str] {
     &[
-        "book", "letter", "photo", "journal", "briefing", "dossier", "note", "report", "article",
-        "memo", "contract", "ticket", "canvas", "record", "invoice", "plan", "diagram", "manual",
-        "parcel", "sample", "device", "folder", "archive", "dataset", "summary", "script", "draft",
-        "review", "proposal", "schedule", "catalog", "brief",
+        "libro",
+        "lettera",
+        "foto",
+        "diario",
+        "rapporto",
+        "dossier",
+        "nota",
+        "relazione",
+        "articolo",
+        "promemoria",
+        "contratto",
+        "biglietto",
+        "tela",
+        "registro",
+        "fattura",
+        "piano",
+        "diagramma",
+        "manuale",
+        "pacco",
+        "campione",
+        "dispositivo",
+        "cartella",
+        "archivio",
+        "dataset",
+        "sommario",
+        "copione",
+        "bozza",
+        "revisione",
+        "proposta",
+        "programma",
+        "catalogo",
+        "breve",
     ]
 }
 
@@ -829,132 +857,132 @@ enum ItalianObjectClass {
 fn object_lexemes() -> &'static [ItalianObjectLexeme] {
     const OBJECT_LEXEMES: [ItalianObjectLexeme; 32] = [
         ItalianObjectLexeme {
-            canonical: "book",
-            accepted_forms: &["book", "volume"],
+            canonical: "libro",
+            accepted_forms: &["libro", "volume"],
         },
         ItalianObjectLexeme {
-            canonical: "letter",
-            accepted_forms: &["letter", "missive", "epistle"],
+            canonical: "lettera",
+            accepted_forms: &["lettera", "missiva", "epistola"],
         },
         ItalianObjectLexeme {
-            canonical: "photo",
-            accepted_forms: &["photo"],
+            canonical: "foto",
+            accepted_forms: &["foto"],
         },
         ItalianObjectLexeme {
-            canonical: "journal",
-            accepted_forms: &["journal", "tea"],
+            canonical: "diario",
+            accepted_forms: &["diario", "giornale", "agenda"],
         },
         ItalianObjectLexeme {
-            canonical: "briefing",
-            accepted_forms: &["briefing", "food"],
+            canonical: "rapporto",
+            accepted_forms: &["rapporto", "briefing"],
         },
         ItalianObjectLexeme {
             canonical: "dossier",
-            accepted_forms: &["dossier", "flower"],
+            accepted_forms: &["dossier", "fascicolo"],
         },
         ItalianObjectLexeme {
-            canonical: "note",
-            accepted_forms: &["note"],
+            canonical: "nota",
+            accepted_forms: &["nota", "appunto"],
         },
         ItalianObjectLexeme {
-            canonical: "report",
-            accepted_forms: &["report"],
+            canonical: "relazione",
+            accepted_forms: &["relazione", "report"],
         },
         ItalianObjectLexeme {
-            canonical: "article",
-            accepted_forms: &["article"],
+            canonical: "articolo",
+            accepted_forms: &["articolo"],
         },
         ItalianObjectLexeme {
-            canonical: "memo",
-            accepted_forms: &["memo"],
+            canonical: "promemoria",
+            accepted_forms: &["promemoria", "memo"],
         },
         ItalianObjectLexeme {
-            canonical: "contract",
-            accepted_forms: &["contract", "agreement"],
+            canonical: "contratto",
+            accepted_forms: &["contratto", "accordo"],
         },
         ItalianObjectLexeme {
-            canonical: "ticket",
-            accepted_forms: &["ticket"],
+            canonical: "biglietto",
+            accepted_forms: &["biglietto", "ticket"],
         },
         ItalianObjectLexeme {
-            canonical: "canvas",
-            accepted_forms: &["canvas"],
+            canonical: "tela",
+            accepted_forms: &["tela", "canvas"],
         },
         ItalianObjectLexeme {
-            canonical: "record",
-            accepted_forms: &["record", "entry", "chronicle"],
+            canonical: "registro",
+            accepted_forms: &["registro", "voce", "cronaca"],
         },
         ItalianObjectLexeme {
-            canonical: "invoice",
-            accepted_forms: &["invoice"],
+            canonical: "fattura",
+            accepted_forms: &["fattura"],
         },
         ItalianObjectLexeme {
-            canonical: "plan",
-            accepted_forms: &["plan", "scheme"],
+            canonical: "piano",
+            accepted_forms: &["piano", "schema"],
         },
         ItalianObjectLexeme {
-            canonical: "diagram",
-            accepted_forms: &["diagram"],
+            canonical: "diagramma",
+            accepted_forms: &["diagramma"],
         },
         ItalianObjectLexeme {
-            canonical: "manual",
-            accepted_forms: &["manual"],
+            canonical: "manuale",
+            accepted_forms: &["manuale"],
         },
         ItalianObjectLexeme {
-            canonical: "parcel",
-            accepted_forms: &["parcel"],
+            canonical: "pacco",
+            accepted_forms: &["pacco"],
         },
         ItalianObjectLexeme {
-            canonical: "sample",
-            accepted_forms: &["sample"],
+            canonical: "campione",
+            accepted_forms: &["campione"],
         },
         ItalianObjectLexeme {
-            canonical: "device",
-            accepted_forms: &["device"],
+            canonical: "dispositivo",
+            accepted_forms: &["dispositivo"],
         },
         ItalianObjectLexeme {
-            canonical: "folder",
-            accepted_forms: &["folder"],
+            canonical: "cartella",
+            accepted_forms: &["cartella"],
         },
         ItalianObjectLexeme {
-            canonical: "archive",
-            accepted_forms: &["archive"],
+            canonical: "archivio",
+            accepted_forms: &["archivio"],
         },
         ItalianObjectLexeme {
             canonical: "dataset",
             accepted_forms: &["dataset"],
         },
         ItalianObjectLexeme {
-            canonical: "summary",
-            accepted_forms: &["summary", "abstract"],
+            canonical: "sommario",
+            accepted_forms: &["sommario", "riassunto"],
         },
         ItalianObjectLexeme {
-            canonical: "script",
-            accepted_forms: &["script"],
+            canonical: "copione",
+            accepted_forms: &["copione", "script"],
         },
         ItalianObjectLexeme {
-            canonical: "draft",
-            accepted_forms: &["draft", "outline"],
+            canonical: "bozza",
+            accepted_forms: &["bozza", "outline"],
         },
         ItalianObjectLexeme {
-            canonical: "review",
-            accepted_forms: &["review", "assessment", "critique"],
+            canonical: "revisione",
+            accepted_forms: &["revisione", "valutazione", "critica"],
         },
         ItalianObjectLexeme {
-            canonical: "proposal",
-            accepted_forms: &["proposal"],
+            canonical: "proposta",
+            accepted_forms: &["proposta"],
         },
         ItalianObjectLexeme {
-            canonical: "schedule",
-            accepted_forms: &["schedule"],
+            canonical: "programma",
+            accepted_forms: &["programma", "agenda"],
         },
         ItalianObjectLexeme {
-            canonical: "catalog",
-            accepted_forms: &["catalog"],
+            canonical: "catalogo",
+            accepted_forms: &["catalogo"],
         },
         ItalianObjectLexeme {
-            canonical: "brief",
-            accepted_forms: &["brief"],
+            canonical: "breve",
+            accepted_forms: &["breve"],
         },
     ];
 
@@ -970,9 +998,9 @@ fn select_object_surface(profile: ItalianEncodeProfile, value: u32, verb_value: 
     let lexeme = object_lexeme_for_value(value);
     let verb_index = (verb_value as usize) % verb_lexemes().len();
     let base_surface = match (lexeme.canonical, verb_index) {
-        ("record", 16) => "entry",
-        ("draft", 10) => "outline",
-        ("review", 11) => "assessment",
+        ("registro", 16) => "voce",
+        ("bozza", 10) => "outline",
+        ("revisione", 11) => "valutazione",
         _ => lexeme.canonical,
     };
 
@@ -992,20 +1020,20 @@ fn author_object_variant(
 
     match profile {
         ItalianEncodeProfile::ShakespeareInspiredLight => match canonical {
-            "letter" => Some("epistle"),
-            "record" => Some("chronicle"),
-            "book" => Some("volume"),
+            "lettera" => Some("epistola"),
+            "registro" => Some("cronaca"),
+            "libro" => Some("volume"),
             _ => None,
         },
         ItalianEncodeProfile::DickensInspiredLight => match canonical {
-            "contract" => Some("agreement"),
-            "summary" => Some("abstract"),
-            "review" => Some("critique"),
+            "contratto" => Some("accordo"),
+            "sommario" => Some("riassunto"),
+            "revisione" => Some("critica"),
             _ => None,
         },
         ItalianEncodeProfile::AustenInspiredLight => match canonical {
-            "plan" => Some("scheme"),
-            "letter" => Some("epistle"),
+            "piano" => Some("schema"),
+            "lettera" => Some("epistola"),
             _ => None,
         },
         ItalianEncodeProfile::NeutralPrototype => None,
@@ -1014,10 +1042,10 @@ fn author_object_variant(
 
 fn object_class(canonical: &str) -> ItalianObjectClass {
     match canonical {
-        "photo" | "canvas" | "sample" => ItalianObjectClass::Artifact,
-        "parcel" => ItalianObjectClass::Package,
-        "device" => ItalianObjectClass::Device,
-        "record" | "archive" | "dataset" => ItalianObjectClass::Data,
+        "foto" | "tela" | "campione" => ItalianObjectClass::Artifact,
+        "pacco" => ItalianObjectClass::Package,
+        "dispositivo" => ItalianObjectClass::Device,
+        "registro" | "archivio" | "dataset" => ItalianObjectClass::Data,
         _ => ItalianObjectClass::Document,
     }
 }
@@ -1054,36 +1082,36 @@ struct ItalianAdjectiveLexeme {
 fn adjective_lexemes() -> &'static [ItalianAdjectiveLexeme] {
     const ADJECTIVE_LEXEMES: [ItalianAdjectiveLexeme; 8] = [
         ItalianAdjectiveLexeme {
-            canonical: "old",
-            accepted_forms: &["old", "aged"],
+            canonical: "vecchio",
+            accepted_forms: &["vecchio", "antico"],
         },
         ItalianAdjectiveLexeme {
-            canonical: "new",
-            accepted_forms: &["new"],
+            canonical: "nuovo",
+            accepted_forms: &["nuovo"],
         },
         ItalianAdjectiveLexeme {
-            canonical: "quiet",
-            accepted_forms: &["quiet", "concise"],
+            canonical: "sobrio",
+            accepted_forms: &["sobrio", "conciso"],
         },
         ItalianAdjectiveLexeme {
-            canonical: "bright",
-            accepted_forms: &["bright", "luminous"],
+            canonical: "brillante",
+            accepted_forms: &["brillante", "luminoso"],
         },
         ItalianAdjectiveLexeme {
-            canonical: "warm",
-            accepted_forms: &["warm", "recent", "hearty"],
+            canonical: "caldo",
+            accepted_forms: &["caldo", "recente", "cordiale"],
         },
         ItalianAdjectiveLexeme {
-            canonical: "fresh",
-            accepted_forms: &["fresh", "current", "novel"],
+            canonical: "fresco",
+            accepted_forms: &["fresco", "attuale", "novello"],
         },
         ItalianAdjectiveLexeme {
-            canonical: "small",
-            accepted_forms: &["small", "modest"],
+            canonical: "piccolo",
+            accepted_forms: &["piccolo", "modesto"],
         },
         ItalianAdjectiveLexeme {
-            canonical: "clear",
-            accepted_forms: &["clear", "lucid"],
+            canonical: "chiaro",
+            accepted_forms: &["chiaro", "limpido"],
         },
     ];
 
@@ -1103,9 +1131,9 @@ fn select_adjective_surface(
 ) -> String {
     let lexeme = adjective_lexeme_for_value(value);
     let base_surface = match (lexeme.canonical, class) {
-        ("quiet", ItalianObjectClass::Document | ItalianObjectClass::Data) => "concise",
-        ("warm", ItalianObjectClass::Document | ItalianObjectClass::Data) => "recent",
-        ("fresh", ItalianObjectClass::Document | ItalianObjectClass::Data) => "current",
+        ("sobrio", ItalianObjectClass::Document | ItalianObjectClass::Data) => "conciso",
+        ("caldo", ItalianObjectClass::Document | ItalianObjectClass::Data) => "recente",
+        ("fresco", ItalianObjectClass::Document | ItalianObjectClass::Data) => "attuale",
         _ => lexeme.canonical,
     };
 
@@ -1125,18 +1153,18 @@ fn author_adjective_variant(
 
     match profile {
         ItalianEncodeProfile::ShakespeareInspiredLight => match canonical {
-            "bright" => Some("luminous"),
-            "old" => Some("aged"),
+            "brillante" => Some("luminoso"),
+            "vecchio" => Some("antico"),
             _ => None,
         },
         ItalianEncodeProfile::DickensInspiredLight => match canonical {
-            "warm" => Some("hearty"),
-            "small" => Some("modest"),
+            "caldo" => Some("cordiale"),
+            "piccolo" => Some("modesto"),
             _ => None,
         },
         ItalianEncodeProfile::AustenInspiredLight => match canonical {
-            "clear" => Some("lucid"),
-            "fresh" => Some("novel"),
+            "chiaro" => Some("limpido"),
+            "fresco" => Some("novello"),
             _ => None,
         },
         ItalianEncodeProfile::NeutralPrototype => None,
@@ -1176,7 +1204,14 @@ fn adjective_surface_index(surface: &str) -> CoreResult<u32> {
 #[cfg(test)]
 fn adjective_forms() -> &'static [&'static str] {
     &[
-        "old", "new", "quiet", "bright", "warm", "fresh", "small", "clear",
+        "vecchio",
+        "nuovo",
+        "sobrio",
+        "brillante",
+        "caldo",
+        "fresco",
+        "piccolo",
+        "chiaro",
     ]
 }
 
@@ -1189,132 +1224,132 @@ struct ItalianVerbLexeme {
 fn verb_lexemes() -> &'static [ItalianVerbLexeme] {
     const VERB_LEXEMES: [ItalianVerbLexeme; 32] = [
         ItalianVerbLexeme {
-            canonical: "buys",
-            accepted_forms: &["buys", "acquires"],
+            canonical: "compra",
+            accepted_forms: &["compra", "acquista"],
         },
         ItalianVerbLexeme {
-            canonical: "writes",
-            accepted_forms: &["writes", "composes"],
+            canonical: "scrive",
+            accepted_forms: &["scrive", "compone"],
         },
         ItalianVerbLexeme {
-            canonical: "reads",
-            accepted_forms: &["reads", "peruses"],
+            canonical: "legge",
+            accepted_forms: &["legge", "sfoglia"],
         },
         ItalianVerbLexeme {
-            canonical: "sees",
-            accepted_forms: &["sees", "observes"],
+            canonical: "vede",
+            accepted_forms: &["vede", "osserva"],
         },
         ItalianVerbLexeme {
-            canonical: "keeps",
-            accepted_forms: &["keeps", "retains"],
+            canonical: "conserva",
+            accepted_forms: &["conserva", "mantiene"],
         },
         ItalianVerbLexeme {
-            canonical: "builds",
-            accepted_forms: &["builds", "crafts"],
+            canonical: "costruisce",
+            accepted_forms: &["costruisce", "realizza"],
         },
         ItalianVerbLexeme {
-            canonical: "finds",
-            accepted_forms: &["finds"],
+            canonical: "trova",
+            accepted_forms: &["trova"],
         },
         ItalianVerbLexeme {
-            canonical: "moves",
-            accepted_forms: &["moves"],
+            canonical: "sposta",
+            accepted_forms: &["sposta"],
         },
         ItalianVerbLexeme {
-            canonical: "sends",
-            accepted_forms: &["sends"],
+            canonical: "invia",
+            accepted_forms: &["invia"],
         },
         ItalianVerbLexeme {
-            canonical: "brings",
-            accepted_forms: &["brings"],
+            canonical: "porta",
+            accepted_forms: &["porta"],
         },
         ItalianVerbLexeme {
-            canonical: "drafts",
-            accepted_forms: &["drafts"],
+            canonical: "redige",
+            accepted_forms: &["redige", "abbozza"],
         },
         ItalianVerbLexeme {
-            canonical: "reviews",
-            accepted_forms: &["reviews", "considers"],
+            canonical: "rivede",
+            accepted_forms: &["rivede", "considera"],
         },
         ItalianVerbLexeme {
-            canonical: "files",
-            accepted_forms: &["files"],
+            canonical: "archivia",
+            accepted_forms: &["archivia"],
         },
         ItalianVerbLexeme {
-            canonical: "studies",
-            accepted_forms: &["studies", "examines"],
+            canonical: "studia",
+            accepted_forms: &["studia", "esamina"],
         },
         ItalianVerbLexeme {
-            canonical: "cleans",
-            accepted_forms: &["cleans"],
+            canonical: "pulisce",
+            accepted_forms: &["pulisce"],
         },
         ItalianVerbLexeme {
-            canonical: "paints",
-            accepted_forms: &["paints"],
+            canonical: "dipinge",
+            accepted_forms: &["dipinge"],
         },
         ItalianVerbLexeme {
-            canonical: "records",
-            accepted_forms: &["records", "chronicles"],
+            canonical: "registra",
+            accepted_forms: &["registra", "annota"],
         },
         ItalianVerbLexeme {
-            canonical: "prepares",
-            accepted_forms: &["prepares"],
+            canonical: "prepara",
+            accepted_forms: &["prepara"],
         },
         ItalianVerbLexeme {
-            canonical: "arranges",
-            accepted_forms: &["arranges"],
+            canonical: "organizza",
+            accepted_forms: &["organizza"],
         },
         ItalianVerbLexeme {
-            canonical: "orders",
-            accepted_forms: &["orders", "requests"],
+            canonical: "ordina",
+            accepted_forms: &["ordina", "richiede"],
         },
         ItalianVerbLexeme {
-            canonical: "packs",
-            accepted_forms: &["packs"],
+            canonical: "impacchetta",
+            accepted_forms: &["impacchetta", "imballa"],
         },
         ItalianVerbLexeme {
-            canonical: "repairs",
-            accepted_forms: &["repairs"],
+            canonical: "ripara",
+            accepted_forms: &["ripara"],
         },
         ItalianVerbLexeme {
-            canonical: "tracks",
-            accepted_forms: &["tracks"],
+            canonical: "traccia",
+            accepted_forms: &["traccia"],
         },
         ItalianVerbLexeme {
-            canonical: "updates",
-            accepted_forms: &["updates"],
+            canonical: "aggiorna",
+            accepted_forms: &["aggiorna"],
         },
         ItalianVerbLexeme {
-            canonical: "shares",
-            accepted_forms: &["shares"],
+            canonical: "condivide",
+            accepted_forms: &["condivide"],
         },
         ItalianVerbLexeme {
-            canonical: "stores",
-            accepted_forms: &["stores"],
+            canonical: "memorizza",
+            accepted_forms: &["memorizza", "salva"],
         },
         ItalianVerbLexeme {
-            canonical: "edits",
-            accepted_forms: &["edits"],
+            canonical: "modifica",
+            accepted_forms: &["modifica", "edita"],
         },
         ItalianVerbLexeme {
-            canonical: "prints",
-            accepted_forms: &["prints"],
+            canonical: "stampa",
+            accepted_forms: &["stampa"],
         },
         ItalianVerbLexeme {
-            canonical: "checks",
-            accepted_forms: &["checks"],
+            canonical: "controlla",
+            accepted_forms: &["controlla", "verifica"],
         },
         ItalianVerbLexeme {
-            canonical: "labels",
-            accepted_forms: &["labels"],
+            canonical: "etichetta",
+            accepted_forms: &["etichetta", "classifica"],
         },
         ItalianVerbLexeme {
-            canonical: "folds",
-            accepted_forms: &["folds"],
+            canonical: "piega",
+            accepted_forms: &["piega"],
         },
         ItalianVerbLexeme {
-            canonical: "copies",
-            accepted_forms: &["copies"],
+            canonical: "copia",
+            accepted_forms: &["copia"],
         },
     ];
 
@@ -1344,19 +1379,19 @@ fn author_verb_variant(
 
     match profile {
         ItalianEncodeProfile::ShakespeareInspiredLight => match canonical {
-            "writes" => Some("composes"),
-            "reads" => Some("peruses"),
-            "records" => Some("chronicles"),
+            "scrive" => Some("compone"),
+            "legge" => Some("sfoglia"),
+            "registra" => Some("annota"),
             _ => None,
         },
         ItalianEncodeProfile::DickensInspiredLight => match canonical {
-            "builds" => Some("crafts"),
-            "studies" => Some("examines"),
+            "costruisce" => Some("realizza"),
+            "studia" => Some("esamina"),
             _ => None,
         },
         ItalianEncodeProfile::AustenInspiredLight => match canonical {
-            "reviews" => Some("considers"),
-            "orders" => Some("requests"),
+            "rivede" => Some("considera"),
+            "ordina" => Some("richiede"),
             _ => None,
         },
         ItalianEncodeProfile::NeutralPrototype => None,
@@ -1389,36 +1424,64 @@ fn verb_surface_index(surface: &str) -> CoreResult<u32> {
 #[cfg(test)]
 fn verb_forms() -> &'static [&'static str] {
     &[
-        "buys", "writes", "reads", "sees", "keeps", "builds", "finds", "moves", "sends", "brings",
-        "drafts", "reviews", "files", "studies", "cleans", "paints", "records", "prepares",
-        "arranges", "orders", "packs", "repairs", "tracks", "updates", "shares", "stores", "edits",
-        "prints", "checks", "labels", "folds", "copies",
+        "compra",
+        "scrive",
+        "legge",
+        "vede",
+        "conserva",
+        "costruisce",
+        "trova",
+        "sposta",
+        "invia",
+        "porta",
+        "redige",
+        "rivede",
+        "archivia",
+        "studia",
+        "pulisce",
+        "dipinge",
+        "registra",
+        "prepara",
+        "organizza",
+        "ordina",
+        "impacchetta",
+        "ripara",
+        "traccia",
+        "aggiorna",
+        "condivide",
+        "memorizza",
+        "modifica",
+        "stampa",
+        "controlla",
+        "etichetta",
+        "piega",
+        "copia",
     ]
 }
 
 fn time_forms() -> &'static [&'static str] {
     &[
-        "today",
-        "yesterday",
-        "at dawn",
-        "at noon",
-        "in spring",
-        "tonight",
-        "in winter",
-        "tomorrow",
+        "oggi",
+        "ieri",
+        "all'alba",
+        "a mezzogiorno",
+        "in primavera",
+        "stanotte",
+        "in inverno",
+        "domani",
     ]
 }
 
 fn location_forms() -> &'static [&'static str] {
     &[
-        "at home",
-        "in the library",
-        "in the market",
-        "at school",
-        "in the park",
-        "at the office",
-        "in the kitchen",
-        "on the street",
+        "a casa",
+        "in biblioteca",
+        "al mercato",
+        "a scuola",
+        "al parco",
+        "in ufficio",
+        "in cucina",
+        "in strada",
     ]
 }
 
@@ -1510,17 +1573,17 @@ mod tests {
                 },
                 SlotAssignment {
                     slot: SlotId::new("verb").expect("slot"),
-                    surface: "writes".to_string(),
+                    surface: "scrive".to_string(),
                     lemma: None,
                 },
                 SlotAssignment {
                     slot: SlotId::new("adjective").expect("slot"),
-                    surface: "old".to_string(),
+                    surface: "vecchio".to_string(),
                     lemma: None,
                 },
                 SlotAssignment {
                     slot: SlotId::new("object").expect("slot"),
-                    surface: "book".to_string(),
+                    surface: "libro".to_string(),
                     lemma: None,
                 },
             ],
@@ -1541,22 +1604,22 @@ mod tests {
             assignments: vec![
                 SlotAssignment {
                     slot: SlotId::new("subject").expect("slot"),
-                    surface: "the writer".to_string(),
+                    surface: "lo scrittore".to_string(),
                     lemma: None,
                 },
                 SlotAssignment {
                     slot: SlotId::new("verb").expect("slot"),
-                    surface: "writes".to_string(),
+                    surface: "scrive".to_string(),
                     lemma: None,
                 },
                 SlotAssignment {
                     slot: SlotId::new("adjective").expect("slot"),
-                    surface: "old".to_string(),
+                    surface: "vecchio".to_string(),
                     lemma: None,
                 },
                 SlotAssignment {
                     slot: SlotId::new("object").expect("slot"),
-                    surface: "book".to_string(),
+                    surface: "libro".to_string(),
                     lemma: None,
                 },
             ],
@@ -1565,7 +1628,7 @@ mod tests {
         let rendered = realizer
             .render(template, &plan)
             .expect("realization should succeed");
-        assert_eq!(rendered, "the writer writes old book");
+        assert_eq!(rendered, "lo scrittore scrive vecchio libro");
     }
 
     #[test]
@@ -1662,7 +1725,7 @@ mod tests {
 
     #[test]
     fn italian_text_parser_parses_canonical_sentences() {
-        let text = "the manager labels clear report. the architect in winter at the office, records manual.";
+        let text = "il manager etichetta chiaro relazione. l'architetto in inverno in ufficio, registra manuale.";
         let plans = parse_italian_prototype_text(text).expect("text should parse");
 
         assert_eq!(plans.len(), 2);
@@ -1672,7 +1735,8 @@ mod tests {
 
     #[test]
     fn italian_text_parser_accepts_legacy_object_aliases() {
-        let text = "the writer writes quiet tea. the teacher today at home, keeps flower.";
+        let text =
+            "lo scrittore scrive sobrio giornale. l'insegnante oggi a casa, conserva fascicolo.";
         let plans = parse_italian_prototype_text(text).expect("legacy aliases should parse");
 
         assert_eq!(plans.len(), 2);
@@ -1687,13 +1751,14 @@ mod tests {
             .find(|assignment| assignment.slot.as_str() == "object")
             .expect("object assignment should exist");
 
-        assert_eq!(first_object.surface, "journal");
+        assert_eq!(first_object.surface, "diario");
         assert_eq!(second_object.surface, "dossier");
     }
 
     #[test]
     fn italian_text_parser_accepts_profile_verb_aliases() {
-        let text = "the writer composes quiet letter. the teacher today at home, considers report.";
+        let text =
+            "lo scrittore compone sobrio lettera. l'insegnante oggi a casa, considera relazione.";
         let plans = parse_italian_prototype_text(text).expect("profile verb aliases should parse");
 
         assert_eq!(plans.len(), 2);
@@ -1708,8 +1773,8 @@ mod tests {
             .find(|assignment| assignment.slot.as_str() == "verb")
             .expect("verb assignment should exist");
 
-        assert_eq!(first_verb.surface, "writes");
-        assert_eq!(second_verb.surface, "reviews");
+        assert_eq!(first_verb.surface, "scrive");
+        assert_eq!(second_verb.surface, "rivede");
     }
 
     #[test]
@@ -1753,7 +1818,7 @@ mod tests {
             .iter()
             .find(|assignment| assignment.slot.as_str() == "object")
             .expect("object assignment should exist");
-        assert_eq!(object.surface, "journal");
+        assert_eq!(object.surface, "diario");
     }
 
     #[test]
@@ -1811,7 +1876,7 @@ mod tests {
             .expect("object assignment should exist")
             .surface
             .as_str();
-        assert_eq!(object_surface, "epistle");
+        assert_eq!(object_surface, "epistola");
 
         let recovered = mapper
             .map_plans_to_frames(&plans)
