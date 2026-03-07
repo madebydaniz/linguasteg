@@ -45,10 +45,11 @@ pub(crate) fn resolve_trace_target(
 fn inspect_trace_language(trace_text: &str) -> TraceLanguageState {
     let mut seen_fa = false;
     let mut seen_en = false;
+    let mut seen_de = false;
 
     let trimmed = trace_text.trim_start();
     if trimmed.starts_with('{') {
-        inspect_json_trace_language(trimmed, &mut seen_fa, &mut seen_en);
+        inspect_json_trace_language(trimmed, &mut seen_fa, &mut seen_en, &mut seen_de);
     }
 
     for line in trace_text.lines() {
@@ -58,15 +59,23 @@ fn inspect_trace_language(trace_text: &str) -> TraceLanguageState {
         }
 
         if let Some(template_id) = extract_template_id_from_frame_line(trimmed_line) {
-            record_template(template_id, &mut seen_fa, &mut seen_en);
+            record_template(template_id, &mut seen_fa, &mut seen_en, &mut seen_de);
         }
     }
 
-    match (seen_fa, seen_en) {
-        (true, true) => TraceLanguageState::Mixed,
-        (true, false) => TraceLanguageState::Single(ProtoTarget::Farsi),
-        (false, true) => TraceLanguageState::Single(ProtoTarget::English),
-        (false, false) => TraceLanguageState::Undetected,
+    let seen_count = usize::from(seen_fa) + usize::from(seen_en) + usize::from(seen_de);
+    if seen_count > 1 {
+        return TraceLanguageState::Mixed;
+    }
+
+    if seen_fa {
+        TraceLanguageState::Single(ProtoTarget::Farsi)
+    } else if seen_en {
+        TraceLanguageState::Single(ProtoTarget::English)
+    } else if seen_de {
+        TraceLanguageState::Single(ProtoTarget::Other("de".to_string()))
+    } else {
+        TraceLanguageState::Undetected
     }
 }
 
@@ -77,33 +86,41 @@ fn extract_template_id_from_frame_line(line: &str) -> Option<&str> {
     Some(&line[open + 1..close])
 }
 
-fn inspect_json_trace_language(json_text: &str, seen_fa: &mut bool, seen_en: &mut bool) {
+fn inspect_json_trace_language(
+    json_text: &str,
+    seen_fa: &mut bool,
+    seen_en: &mut bool,
+    seen_de: &mut bool,
+) {
     let Ok(Some(trace)) = parse_proto_encode_trace_json(json_text) else {
         return;
     };
 
     if let Some(language) = trace.language.as_deref() {
-        record_language(language, seen_fa, seen_en);
+        record_language(language, seen_fa, seen_en, seen_de);
     }
 
     for frame in &trace.frames {
-        record_template(&frame.template_id, seen_fa, seen_en);
+        record_template(&frame.template_id, seen_fa, seen_en, seen_de);
     }
 }
 
-fn record_language(value: &str, seen_fa: &mut bool, seen_en: &mut bool) {
+fn record_language(value: &str, seen_fa: &mut bool, seen_en: &mut bool, seen_de: &mut bool) {
     match value {
         "fa" => *seen_fa = true,
         "en" => *seen_en = true,
+        "de" => *seen_de = true,
         _ => {}
     }
 }
 
-fn record_template(value: &str, seen_fa: &mut bool, seen_en: &mut bool) {
+fn record_template(value: &str, seen_fa: &mut bool, seen_en: &mut bool, seen_de: &mut bool) {
     if value.starts_with("fa-") {
         *seen_fa = true;
     } else if value.starts_with("en-") {
         *seen_en = true;
+    } else if value.starts_with("de-") {
+        *seen_de = true;
     }
 }
 
@@ -118,6 +135,14 @@ mod tests {
         let target =
             resolve_trace_target(ProtoTarget::Farsi, true, trace).expect("resolve should pass");
         assert_eq!(target.as_str(), "en");
+    }
+
+    #[test]
+    fn resolve_trace_target_auto_detects_german_from_json_language() {
+        let trace = "{\"mode\":\"proto-encode\",\"language\":\"de\",\"frames\":[]}";
+        let target =
+            resolve_trace_target(ProtoTarget::Farsi, true, trace).expect("resolve should pass");
+        assert_eq!(target.as_str(), "de");
     }
 
     #[test]

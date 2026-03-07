@@ -330,8 +330,9 @@ fn parse_demo_command(mut args: impl Iterator<Item = String>) -> Result<Option<C
     match args.next().as_deref() {
         Some("fa") => Ok(Some(Command::Demo(DemoTarget::Farsi))),
         Some("en") => Ok(Some(Command::Demo(DemoTarget::English))),
+        Some("de") => Ok(Some(Command::Demo(DemoTarget::German))),
         _ => Err(CliError::usage(
-            "demo target is required (supported: fa, en)".to_string(),
+            "demo target is required (supported: fa, en, de)".to_string(),
         )),
     }
 }
@@ -1612,7 +1613,7 @@ pub(crate) fn write_usage(mut writer: impl Write) -> std::io::Result<()> {
         writer,
         "       lsteg data update --lang <code[,code...]> [--source <id>] [--artifact-url <url>] [--data-dir <path>] [--format text|json]"
     )?;
-    writeln!(writer, "       lsteg demo <fa|en>")?;
+    writeln!(writer, "       lsteg demo <fa|en|de>")?;
     writeln!(
         writer,
         "       lsteg proto-encode <code> [message] [--json]"

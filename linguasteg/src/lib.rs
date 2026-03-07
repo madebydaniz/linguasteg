@@ -18,7 +18,10 @@ pub use linguasteg_core::{
     validate_template_descriptor,
 };
 pub use linguasteg_models::{
-    FarsiPrototypeConstraintChecker, FarsiPrototypeLanguagePack, FarsiPrototypeLexicon,
-    FarsiPrototypeRealizer, FarsiPrototypeSymbolicMapper, InMemoryGatewayRegistry, StubGateway,
-    StubModelAdapter,
+    EnglishPrototypeConstraintChecker, EnglishPrototypeLanguagePack, EnglishPrototypeRealizer,
+    EnglishPrototypeSymbolicMapper, EnglishPrototypeTextExtractor, FarsiPrototypeConstraintChecker,
+    FarsiPrototypeLanguagePack, FarsiPrototypeLexicon, FarsiPrototypeRealizer,
+    FarsiPrototypeSymbolicMapper, FarsiPrototypeTextExtractor, GermanPrototypeConstraintChecker,
+    GermanPrototypeLanguagePack, GermanPrototypeRealizer, GermanPrototypeSymbolicMapper,
+    GermanPrototypeTextExtractor, InMemoryGatewayRegistry, StubGateway, StubModelAdapter,
 };

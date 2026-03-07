@@ -208,6 +208,7 @@ pub(crate) enum OutputFormat {
 pub(crate) enum DemoTarget {
     Farsi,
     English,
+    German,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -582,6 +582,7 @@ fn languages_text_lists_supported_languages() {
     assert!(stdout.contains("supported languages:"));
     assert!(stdout.contains("- fa (Farsi, rtl)"));
     assert!(stdout.contains("- en (English, ltr)"));
+    assert!(stdout.contains("- de (German, ltr)"));
 }
 
 #[test]
@@ -595,6 +596,7 @@ fn languages_json_exposes_contract() {
     assert!(stdout.contains("\"direction\":\"rtl\""));
     assert!(stdout.contains("\"code\":\"en\""));
     assert!(stdout.contains("\"direction\":\"ltr\""));
+    assert!(stdout.contains("\"code\":\"de\""));
 }
 
 #[test]
@@ -627,7 +629,7 @@ fn models_text_lists_supported_models() {
     let stdout = stdout_string(&output);
     assert!(stdout.contains("supported models:"));
     assert!(stdout.contains(
-        "- stub/stub-local (Stub Local) languages: fa,en capabilities: deterministic-seed"
+        "- stub/stub-local (Stub Local) languages: fa,en,de capabilities: deterministic-seed"
     ));
 }
 
@@ -641,7 +643,7 @@ fn models_json_exposes_contract() {
     assert!(stdout.contains("\"provider\":\"stub\""));
     assert!(stdout.contains("\"id\":\"stub-local\""));
     assert!(stdout.contains("\"display\":\"Stub Local\""));
-    assert!(stdout.contains("\"languages\":[\"fa\",\"en\"]"));
+    assert!(stdout.contains("\"languages\":[\"fa\",\"en\",\"de\"]"));
     assert!(stdout.contains("\"capabilities\":[\"deterministic-seed\"]"));
 }
 
@@ -659,11 +661,13 @@ fn catalog_text_contains_all_sections() {
     assert!(stdout.contains("profiles:"));
     assert!(stdout.contains("schemas:"));
     assert!(stdout.contains("- fa (Farsi, rtl)"));
+    assert!(stdout.contains("- de (German, ltr)"));
     assert!(stdout.contains("- symbolic-stub (Symbolic Stub) capabilities: deterministic-seed"));
     assert!(stdout.contains(
-        "- stub/stub-local (Stub Local) languages: fa,en capabilities: deterministic-seed"
+        "- stub/stub-local (Stub Local) languages: fa,en,de capabilities: deterministic-seed"
     ));
     assert!(stdout.contains("- fa/fa-basic-sov (Basic SOV) slots: 4"));
+    assert!(stdout.contains("- de/de-basic-svo (German Basic SVO) slots: 4"));
     assert!(stdout.contains(
         "- en/en-neutral-prototype (Neutral English Prototype) register: neutral strength: light inspiration: register-only (<none>)"
     ));
@@ -722,6 +726,8 @@ fn templates_text_lists_supported_templates() {
     assert!(stdout.contains("- fa/fa-time-location-sov (Time + Location + SOV) slots: 5"));
     assert!(stdout.contains("- en/en-basic-svo (English Basic SVO) slots: 4"));
     assert!(stdout.contains("- en/en-time-location-svo (English Time Location SVO) slots: 5"));
+    assert!(stdout.contains("- de/de-basic-svo (German Basic SVO) slots: 4"));
+    assert!(stdout.contains("- de/de-time-location-svo (German Time Location SVO) slots: 5"));
 }
 
 #[test]
@@ -760,6 +766,7 @@ fn profiles_text_lists_supported_profiles() {
     assert!(stdout.contains("- fa/fa-neutral-formal (Formal Persian (Neutral))"));
     assert!(stdout.contains("- fa/fa-saadi-inspired-light (Saadi-inspired (Light))"));
     assert!(stdout.contains("- en/en-neutral-prototype (Neutral English Prototype)"));
+    assert!(stdout.contains("- de/de-neutral-prototype (Neutral German Prototype)"));
     assert!(stdout.contains("- en/en-shakespeare-inspired-light (Shakespeare-inspired (Light))"));
     assert!(stdout.contains("- en/en-dickens-inspired-light (Dickens-inspired (Light))"));
     assert!(stdout.contains("- en/en-austen-inspired-light (Austen-inspired (Light))"));
@@ -805,6 +812,7 @@ fn schemas_text_lists_supported_schemas() {
     assert!(stdout.contains("supported schemas:"));
     assert!(stdout.contains("- fa/fa-basic-sov total_bits: 18"));
     assert!(stdout.contains("- en/en-time-location-svo total_bits: 21"));
+    assert!(stdout.contains("- de/de-time-location-svo total_bits: 21"));
 }
 
 #[test]
@@ -2663,13 +2671,13 @@ fn runtime_errors_return_exit_code_one() {
 
 #[test]
 fn encode_unknown_runtime_language_reports_supported_list() {
-    let output = run_lsteg(&["encode", "--lang", "de", "--message", "hello world"]);
+    let output = run_lsteg(&["encode", "--lang", "zz", "--message", "hello world"]);
     assert_eq!(output.status.code(), Some(1));
 
     let stderr = stderr_string(&output);
     assert!(stderr.contains("LSTEG-CLI-CFG-001"));
-    assert!(stderr.contains("language 'de' is not supported by runtime providers"));
-    assert!(stderr.contains("supported: fa, en"));
+    assert!(stderr.contains("language 'zz' is not supported by runtime providers"));
+    assert!(stderr.contains("supported: fa, en, de"));
 }
 
 #[test]

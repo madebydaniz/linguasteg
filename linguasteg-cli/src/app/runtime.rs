@@ -10,7 +10,9 @@ use linguasteg_models::{
     EnglishPrototypeConstraintChecker, EnglishPrototypeLanguagePack, EnglishPrototypeRealizer,
     EnglishPrototypeSymbolicMapper, EnglishPrototypeTextExtractor, FarsiPrototypeConstraintChecker,
     FarsiPrototypeLanguagePack, FarsiPrototypeRealizer, FarsiPrototypeSymbolicMapper,
-    FarsiPrototypeTextExtractor, InMemoryGatewayRegistry,
+    FarsiPrototypeTextExtractor, GermanPrototypeConstraintChecker, GermanPrototypeLanguagePack,
+    GermanPrototypeRealizer, GermanPrototypeSymbolicMapper, GermanPrototypeTextExtractor,
+    InMemoryGatewayRegistry,
 };
 
 use super::types::{CliError, ProtoTarget};
@@ -209,6 +211,28 @@ impl RuntimeSymbolicMapper for EnglishPrototypeSymbolicMapper {
     }
 }
 
+impl RuntimeSymbolicMapper for GermanPrototypeSymbolicMapper {
+    fn frame_schemas(&self) -> Vec<SymbolicFrameSchema> {
+        GermanPrototypeSymbolicMapper::frame_schemas(self)
+    }
+
+    fn map_payload_to_plans_with_profile(
+        &self,
+        payload_plan: &SymbolicPayloadPlan,
+        profile_id: Option<&StyleProfileId>,
+    ) -> CoreResult<Vec<RealizationPlan>> {
+        GermanPrototypeSymbolicMapper::map_payload_to_plans_with_profile(
+            self,
+            payload_plan,
+            profile_id,
+        )
+    }
+
+    fn map_plans_to_frames(&self, plans: &[RealizationPlan]) -> CoreResult<Vec<SymbolicFramePlan>> {
+        GermanPrototypeSymbolicMapper::map_plans_to_frames(self, plans)
+    }
+}
+
 trait RuntimeProvider: Send + Sync {
     fn language_code(&self) -> &'static str;
     fn language_display(&self) -> &'static str;
@@ -278,8 +302,42 @@ impl RuntimeProvider for EnglishRuntimeProvider {
 
 static FARSI_RUNTIME_PROVIDER: FarsiRuntimeProvider = FarsiRuntimeProvider;
 static ENGLISH_RUNTIME_PROVIDER: EnglishRuntimeProvider = EnglishRuntimeProvider;
-static RUNTIME_PROVIDERS: [&dyn RuntimeProvider; 2] =
-    [&FARSI_RUNTIME_PROVIDER, &ENGLISH_RUNTIME_PROVIDER];
+#[derive(Debug, Clone, Copy)]
+struct GermanRuntimeProvider;
+
+impl RuntimeProvider for GermanRuntimeProvider {
+    fn language_code(&self) -> &'static str {
+        "de"
+    }
+
+    fn language_display(&self) -> &'static str {
+        "German"
+    }
+
+    fn direction(&self) -> &'static str {
+        "ltr"
+    }
+
+    fn build_components(&self) -> RuntimeComponents {
+        RuntimeComponents {
+            language_code: self.language_code(),
+            language_display: self.language_display(),
+            text_decode_lossless: true,
+            pack: Box::new(GermanPrototypeLanguagePack::default()),
+            checker: Box::new(GermanPrototypeConstraintChecker),
+            realizer: Box::new(GermanPrototypeRealizer),
+            extractor: Box::new(GermanPrototypeTextExtractor),
+            mapper: Box::new(GermanPrototypeSymbolicMapper),
+        }
+    }
+}
+
+static GERMAN_RUNTIME_PROVIDER: GermanRuntimeProvider = GermanRuntimeProvider;
+static RUNTIME_PROVIDERS: [&dyn RuntimeProvider; 3] = [
+    &FARSI_RUNTIME_PROVIDER,
+    &ENGLISH_RUNTIME_PROVIDER,
+    &GERMAN_RUNTIME_PROVIDER,
+];
 
 fn runtime_providers() -> &'static [&'static dyn RuntimeProvider] {
     &RUNTIME_PROVIDERS
@@ -406,6 +464,7 @@ mod tests {
         let languages = supported_languages();
         assert!(languages.iter().any(|item| item.code == "fa"));
         assert!(languages.iter().any(|item| item.code == "en"));
+        assert!(languages.iter().any(|item| item.code == "de"));
     }
 
     #[test]
@@ -417,20 +476,24 @@ mod tests {
         let en_runtime =
             PrototypeRuntime::new_for_language_code("en").expect("en runtime should initialize");
         assert_eq!(en_runtime.language_code, "en");
+
+        let de_runtime =
+            PrototypeRuntime::new_for_language_code("de").expect("de runtime should initialize");
+        assert_eq!(de_runtime.language_code, "de");
     }
 
     #[test]
     fn runtime_initialization_rejects_unknown_language_code() {
-        let error = match PrototypeRuntime::new_for_language_code("de") {
+        let error = match PrototypeRuntime::new_for_language_code("zz") {
             Ok(_) => panic!("unknown language runtime should fail"),
             Err(error) => error,
         };
-        assert!(error.to_string().contains("language is not supported: de"));
+        assert!(error.to_string().contains("language is not supported: zz"));
     }
 
     #[test]
     fn initialize_runtime_reports_supported_language_codes_for_unknown_target() {
-        let error = match initialize_runtime(ProtoTarget::Other("de".to_string())) {
+        let error = match initialize_runtime(ProtoTarget::Other("zz".to_string())) {
             Ok(_) => panic!("unknown runtime should fail"),
             Err(error) => error,
         };
@@ -438,9 +501,9 @@ mod tests {
         assert!(
             error
                 .message()
-                .contains("language 'de' is not supported by runtime providers")
+                .contains("language 'zz' is not supported by runtime providers")
         );
-        assert!(error.message().contains("supported: fa, en"));
+        assert!(error.message().contains("supported: fa, en, de"));
     }
 
     #[test]
@@ -448,6 +511,7 @@ mod tests {
         let csv = supported_language_codes_csv();
         assert!(csv.contains("fa"));
         assert!(csv.contains("en"));
+        assert!(csv.contains("de"));
     }
 
     #[test]

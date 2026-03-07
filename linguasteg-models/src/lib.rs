@@ -1,13 +1,19 @@
+pub mod de;
 pub mod en;
 pub mod fa;
 pub mod gateway;
 
+use de::parse_german_prototype_text;
 use en::parse_english_prototype_text;
 use linguasteg_core::{
     CoreError, CoreResult, ModelAdapter, ModelCapability, RealizationPlan, SlotAssignment, SlotId,
     TemplateId, TextExtractor,
 };
 
+pub use de::{
+    GermanPrototypeConstraintChecker, GermanPrototypeLanguagePack, GermanPrototypeRealizer,
+    GermanPrototypeSymbolicMapper,
+};
 pub use en::{
     EnglishPrototypeConstraintChecker, EnglishPrototypeLanguagePack, EnglishPrototypeRealizer,
     EnglishPrototypeSymbolicMapper,
@@ -63,6 +69,15 @@ pub struct EnglishPrototypeTextExtractor;
 impl TextExtractor for EnglishPrototypeTextExtractor {
     fn extract_plans(&self, stego_text: &str) -> CoreResult<Vec<RealizationPlan>> {
         parse_english_prototype_text(stego_text)
+    }
+}
+
+#[derive(Debug, Default, Clone, Copy)]
+pub struct GermanPrototypeTextExtractor;
+
+impl TextExtractor for GermanPrototypeTextExtractor {
+    fn extract_plans(&self, stego_text: &str) -> CoreResult<Vec<RealizationPlan>> {
+        parse_german_prototype_text(stego_text)
     }
 }
 
