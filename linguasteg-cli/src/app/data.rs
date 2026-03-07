@@ -582,6 +582,19 @@ fn run_data_list(options: DataListOptions) -> Result<(), CliError> {
 }
 
 fn run_data_install(options: DataInstallOptions, force_refresh: bool) -> Result<(), CliError> {
+    if options.source_id.as_deref() == Some("list") {
+        if options.targets.len() != 1 {
+            return Err(CliError::usage(
+                "--source list can be used only with a single language in --lang".to_string(),
+            ));
+        }
+        return run_data_list(DataListOptions {
+            format: options.format,
+            target: Some(options.targets[0].clone()),
+            data_dir: options.data_dir,
+        });
+    }
+
     let sources = load_data_sources()?;
     if options.source_id.is_some() && options.targets.len() != 1 {
         return Err(CliError::usage(
@@ -614,10 +627,8 @@ fn run_data_install(options: DataInstallOptions, force_refresh: bool) -> Result<
         let starter_dataset_path = ensure_starter_dataset_template_exists(&data_dir, source)?;
         let artifact = if let Some(url) = options.artifact_url.as_deref() {
             Some(fetch_and_store_artifact(&data_dir, source, url)?)
-        } else if force_refresh {
-            load_local_dataset_artifact(source, &starter_dataset_path)?
         } else {
-            None
+            load_local_dataset_artifact(source, &starter_dataset_path)?
         };
         let manifest_path = write_install_manifest(
             &data_dir,
@@ -648,9 +659,9 @@ fn run_data_install(options: DataInstallOptions, force_refresh: bool) -> Result<
         "data-install"
     };
     let note = if force_refresh {
-        "metadata was refreshed; a valid local starter dataset is activated automatically when present"
+        "metadata was refreshed; local starter dataset remains active unless replaced by explicit --artifact-url"
     } else {
-        "metadata and starter dataset template were prepared; edit starter dataset and run 'lsteg data update --lang <code>' to activate variants"
+        "metadata and starter dataset template were prepared; dataset is active immediately and can be edited locally"
     };
 
     if matches!(options.format, OutputFormat::Json) {

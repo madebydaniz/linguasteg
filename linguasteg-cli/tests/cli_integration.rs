@@ -1585,8 +1585,34 @@ fn data_verify_skips_when_no_artifact_is_present() {
     assert!(verify_output.status.success());
     let stdout = stdout_string(&verify_output);
     assert!(stdout.contains("\"integrity_ok\":true"));
-    assert!(stdout.contains("\"skipped\":1"));
-    assert!(stdout.contains("\"status\":\"skipped-no-artifact\""));
+    assert!(stdout.contains("\"passed\":1"));
+    assert!(stdout.contains("\"status\":\"ok\""));
+}
+
+#[test]
+fn data_install_source_list_prints_available_ids_for_language() {
+    let data_dir = TempDataDir::create();
+    let output = run_lsteg_with_env(
+        &[
+            "data",
+            "install",
+            "--lang",
+            "en",
+            "--source",
+            "list",
+            "--format",
+            "json",
+            "--data-dir",
+            data_dir.as_str(),
+        ],
+        &[],
+    );
+    assert!(output.status.success());
+    let stdout = stdout_string(&output);
+    assert!(stdout.contains("\"mode\":\"data-list\""));
+    assert!(stdout.contains("\"language\":\"en\""));
+    assert!(stdout.contains("\"source_id\":\"en-wordnet-princeton\""));
+    assert!(stdout.contains("\"source_id\":\"en-wordlist-wordnik\""));
 }
 
 #[test]

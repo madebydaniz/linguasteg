@@ -1607,11 +1607,11 @@ pub(crate) fn write_usage(mut writer: impl Write) -> std::io::Result<()> {
     )?;
     writeln!(
         writer,
-        "       lsteg data install --lang <code[,code...]> [--source <id>] [--artifact-url <url>] [--data-dir <path>] [--format text|json]"
+        "       lsteg data install --lang <code[,code...]> [--source <id|list>] [--artifact-url <url>] [--data-dir <path>] [--format text|json]"
     )?;
     writeln!(
         writer,
-        "       lsteg data update --lang <code[,code...]> [--source <id>] [--artifact-url <url>] [--data-dir <path>] [--format text|json]"
+        "       lsteg data update --lang <code[,code...]> [--source <id|list>] [--artifact-url <url>] [--data-dir <path>] [--format text|json]"
     )?;
     writeln!(writer, "       lsteg demo <fa|en|de>")?;
     writeln!(
