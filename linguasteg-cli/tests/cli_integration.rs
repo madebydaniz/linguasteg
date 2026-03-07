@@ -273,6 +273,45 @@ impl Drop for TempOutputFile {
     }
 }
 
+struct TempTextFile {
+    path: PathBuf,
+}
+
+impl TempTextFile {
+    fn create(contents: &str) -> Self {
+        let mut path = std::env::temp_dir();
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock should be after unix epoch")
+            .as_nanos();
+        path.push(format!("linguasteg-text-{nanos}.txt"));
+        std::fs::write(&path, contents).expect("failed to write temp text file");
+        Self { path }
+    }
+
+    fn empty() -> Self {
+        let mut path = std::env::temp_dir();
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock should be after unix epoch")
+            .as_nanos();
+        path.push(format!("linguasteg-output-{nanos}.txt"));
+        Self { path }
+    }
+
+    fn as_str(&self) -> &str {
+        self.path
+            .to_str()
+            .expect("temp text file path must be valid utf8")
+    }
+}
+
+impl Drop for TempTextFile {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.path);
+    }
+}
+
 #[test]
 fn encode_json_outputs_proto_encode_mode() {
     let output = run_lsteg(&["encode", "--message", "salam", "--format", "json"]);
@@ -2466,6 +2505,81 @@ fn decode_text_input_roundtrip_from_english_plain_text_works() {
     let decoded_json = stdout_string(&decode_output);
     assert!(decoded_json.contains("\"language\":\"en\""));
     assert!(decoded_json.contains("\"payload_utf8\":\"hello world\""));
+}
+
+#[test]
+fn decode_text_input_roundtrip_from_german_plain_text_works() {
+    let encode_output = run_lsteg(&["encode", "--lang", "de", "--message", "hallo welt"]);
+    assert!(encode_output.status.success());
+    let stego_text = stdout_string(&encode_output);
+
+    let decode_output = run_lsteg_with_stdin(
+        &["decode", "--lang", "de", "--text-input", "--format", "json"],
+        &stego_text,
+    );
+    assert!(decode_output.status.success());
+
+    let decoded_json = stdout_string(&decode_output);
+    assert!(decoded_json.contains("\"language\":\"de\""));
+    assert!(decoded_json.contains("\"payload_utf8\":\"hallo welt\""));
+}
+
+#[test]
+fn decode_text_input_roundtrip_from_italian_plain_text_works() {
+    let encode_output = run_lsteg(&["encode", "--lang", "it", "--message", "ciao mondo"]);
+    assert!(encode_output.status.success());
+    let stego_text = stdout_string(&encode_output);
+
+    let decode_output = run_lsteg_with_stdin(
+        &["decode", "--lang", "it", "--text-input", "--format", "json"],
+        &stego_text,
+    );
+    assert!(decode_output.status.success());
+
+    let decoded_json = stdout_string(&decode_output);
+    assert!(decoded_json.contains("\"language\":\"it\""));
+    assert!(decoded_json.contains("\"payload_utf8\":\"ciao mondo\""));
+}
+
+#[test]
+fn encode_decode_with_file_io_roundtrip_for_italian() {
+    let input_file = TempTextFile::create("ciao mondo");
+    let encoded_file = TempTextFile::empty();
+    let decoded_file = TempOutputFile::create();
+
+    let encode_output = run_lsteg(&[
+        "encode",
+        "--lang",
+        "it",
+        "--input",
+        input_file.as_str(),
+        "--output",
+        encoded_file.as_str(),
+    ]);
+    assert!(encode_output.status.success());
+
+    let encoded_text =
+        std::fs::read_to_string(encoded_file.as_str()).expect("encoded output file should exist");
+    assert!(!encoded_text.trim().is_empty());
+
+    let decode_output = run_lsteg(&[
+        "decode",
+        "--lang",
+        "it",
+        "--text-input",
+        "--input",
+        encoded_file.as_str(),
+        "--output",
+        decoded_file.as_str(),
+        "--format",
+        "json",
+    ]);
+    assert!(decode_output.status.success());
+
+    let decoded_json = std::fs::read_to_string(decoded_file.as_str())
+        .expect("decoded output file should be created");
+    assert!(decoded_json.contains("\"language\":\"it\""));
+    assert!(decoded_json.contains("\"payload_utf8\":\"ciao mondo\""));
 }
 
 #[test]
