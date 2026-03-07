@@ -110,33 +110,33 @@ struct EnvelopeHeader {
     ciphertext_len: u32,
 }
 
-pub fn seal_payload(payload: &[u8], secret: &[u8]) -> CryptoEnvelopeResult<Vec<u8>> {
-    seal_payload_with_config(payload, secret, &CryptoEnvelopeConfig::default())
+pub fn seal_payload(payload: &[u8], key_material: &[u8]) -> CryptoEnvelopeResult<Vec<u8>> {
+    seal_payload_with_config(payload, key_material, &CryptoEnvelopeConfig::default())
 }
 
 pub fn seal_payload_with_config(
     payload: &[u8],
-    secret: &[u8],
+    key_material: &[u8],
     config: &CryptoEnvelopeConfig,
 ) -> CryptoEnvelopeResult<Vec<u8>> {
-    require_secret(secret)?;
+    ensure_key_material_present(key_material)?;
 
     let kdf_salt = fill_random_bytes(SALT_LEN)?;
     let aead_nonce = fill_random_bytes(NONCE_LEN)?;
 
-    seal_payload_with_material(payload, secret, config, &kdf_salt, &aead_nonce)
+    seal_payload_with_material(payload, key_material, config, &kdf_salt, &aead_nonce)
 }
 
-pub fn open_payload(envelope: &[u8], secret: &[u8]) -> CryptoEnvelopeResult<Vec<u8>> {
-    open_payload_with_config(envelope, secret, &CryptoEnvelopeConfig::default())
+pub fn open_payload(envelope: &[u8], key_material: &[u8]) -> CryptoEnvelopeResult<Vec<u8>> {
+    open_payload_with_config(envelope, key_material, &CryptoEnvelopeConfig::default())
 }
 
 pub fn open_payload_with_config(
     envelope: &[u8],
-    secret: &[u8],
+    key_material: &[u8],
     config: &CryptoEnvelopeConfig,
 ) -> CryptoEnvelopeResult<Vec<u8>> {
-    require_secret(secret)?;
+    ensure_key_material_present(key_material)?;
 
     let header = parse_header(envelope)?;
     if header.version != ENVELOPE_VERSION_V1 {
@@ -184,7 +184,7 @@ pub fn open_payload_with_config(
     let aead_nonce = &envelope[salt_end..nonce_end];
 
     let ciphertext = &envelope[nonce_end..];
-    let key = derive_key(secret, kdf_salt, &config.kdf)?;
+    let key = derive_key(key_material, kdf_salt, &config.kdf)?;
     let cipher = XChaCha20Poly1305::new(Key::from_slice(&key));
     let plaintext = cipher
         .decrypt(XNonce::from_slice(aead_nonce), ciphertext)
@@ -248,13 +248,13 @@ fn aead_name(id: u8) -> &'static str {
 
 fn seal_payload_with_material(
     payload: &[u8],
-    secret: &[u8],
+    key_material: &[u8],
     config: &CryptoEnvelopeConfig,
     kdf_salt: &[u8],
     aead_nonce: &[u8],
 ) -> CryptoEnvelopeResult<Vec<u8>> {
     validate_material_lengths(kdf_salt, aead_nonce)?;
-    let key = derive_key(secret, kdf_salt, &config.kdf)?;
+    let key = derive_key(key_material, kdf_salt, &config.kdf)?;
     let cipher = XChaCha20Poly1305::new(Key::from_slice(&key));
     let ciphertext = cipher
         .encrypt(XNonce::from_slice(aead_nonce), payload)
@@ -305,7 +305,7 @@ fn parse_header(envelope: &[u8]) -> CryptoEnvelopeResult<EnvelopeHeader> {
 }
 
 fn derive_key(
-    secret: &[u8],
+    key_material: &[u8],
     kdf_salt: &[u8],
     params: &KeyDerivationParams,
 ) -> CryptoEnvelopeResult<[u8; KEY_LEN]> {
@@ -319,7 +319,7 @@ fn derive_key(
     let mut key = [0u8; KEY_LEN];
     let argon = Argon2::new(Algorithm::Argon2id, Version::V0x13, argon_params);
     argon
-        .hash_password_into(secret, kdf_salt, &mut key)
+        .hash_password_into(key_material, kdf_salt, &mut key)
         .map_err(|error| CryptoEnvelopeError::KeyDerivationFailed(error.to_string()))?;
     Ok(key)
 }
@@ -351,8 +351,8 @@ fn validate_material_lengths(kdf_salt: &[u8], aead_nonce: &[u8]) -> CryptoEnvelo
     Ok(())
 }
 
-fn require_secret(secret: &[u8]) -> CryptoEnvelopeResult<()> {
-    if secret.is_empty() {
+fn ensure_key_material_present(key_material: &[u8]) -> CryptoEnvelopeResult<()> {
+    if key_material.is_empty() {
         return Err(CryptoEnvelopeError::SecretRequired);
     }
     Ok(())
