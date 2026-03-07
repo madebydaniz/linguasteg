@@ -1602,7 +1602,7 @@ fn collect_manifest_candidates(
     let mut items = Vec::new();
     let language_codes = match target {
         Some(value) => vec![value.as_str().to_string()],
-        None => vec!["fa".to_string(), "en".to_string()],
+        None => discover_data_languages(data_dir)?,
     };
     for language in language_codes {
         let language_dir = data_dir.join(&language);
@@ -1644,6 +1644,45 @@ fn collect_manifest_candidates(
         }
     }
     Ok(items)
+}
+
+fn discover_data_languages(data_dir: &Path) -> Result<Vec<String>, CliError> {
+    if !data_dir.exists() {
+        return Ok(Vec::new());
+    }
+
+    let entries = fs::read_dir(data_dir).map_err(|error| {
+        CliError::io(
+            "failed to read data directory",
+            Some(&data_dir.to_string_lossy()),
+            error,
+        )
+    })?;
+
+    let mut languages = Vec::new();
+    for entry in entries {
+        let entry = entry.map_err(|error| {
+            CliError::io(
+                "failed to read language directory entry",
+                Some(&data_dir.to_string_lossy()),
+                error,
+            )
+        })?;
+        let path = entry.path();
+        if !path.is_dir() {
+            continue;
+        }
+
+        let language = entry.file_name().to_string_lossy().trim().to_string();
+        if language.is_empty() {
+            continue;
+        }
+        languages.push(language);
+    }
+
+    languages.sort();
+    languages.dedup();
+    Ok(languages)
 }
 
 fn read_manifest_for_doctor(path: &Path) -> Result<InstalledSourceManifest, String> {
