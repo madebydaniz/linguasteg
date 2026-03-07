@@ -209,6 +209,7 @@ pub(crate) enum DemoTarget {
     Farsi,
     English,
     German,
+    Italian,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -54,6 +54,15 @@
       "version": "latest",
       "checksum_sha256": null,
       "recommended": true
+    },
+    {
+      "id": "it-kaikki-wiktionary",
+      "language": "it",
+      "source_url": "https://kaikki.org/dictionary/Italian/index.html",
+      "license": "CC-BY-SA-3.0 + GFDL",
+      "version": "latest",
+      "checksum_sha256": null,
+      "recommended": true
     }
   ]
 }

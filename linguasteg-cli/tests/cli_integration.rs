@@ -607,6 +607,7 @@ fn languages_text_lists_supported_languages() {
     assert!(stdout.contains("- fa (Farsi, rtl)"));
     assert!(stdout.contains("- en (English, ltr)"));
     assert!(stdout.contains("- de (German, ltr)"));
+    assert!(stdout.contains("- it (Italian, ltr)"));
 }
 
 #[test]
@@ -621,6 +622,7 @@ fn languages_json_exposes_contract() {
     assert!(stdout.contains("\"code\":\"en\""));
     assert!(stdout.contains("\"direction\":\"ltr\""));
     assert!(stdout.contains("\"code\":\"de\""));
+    assert!(stdout.contains("\"code\":\"it\""));
 }
 
 #[test]
@@ -653,7 +655,7 @@ fn models_text_lists_supported_models() {
     let stdout = stdout_string(&output);
     assert!(stdout.contains("supported models:"));
     assert!(stdout.contains(
-        "- stub/stub-local (Stub Local) languages: fa,en,de capabilities: deterministic-seed"
+        "- stub/stub-local (Stub Local) languages: fa,en,de,it capabilities: deterministic-seed"
     ));
 }
 
@@ -667,7 +669,7 @@ fn models_json_exposes_contract() {
     assert!(stdout.contains("\"provider\":\"stub\""));
     assert!(stdout.contains("\"id\":\"stub-local\""));
     assert!(stdout.contains("\"display\":\"Stub Local\""));
-    assert!(stdout.contains("\"languages\":[\"fa\",\"en\",\"de\"]"));
+    assert!(stdout.contains("\"languages\":[\"fa\",\"en\",\"de\",\"it\"]"));
     assert!(stdout.contains("\"capabilities\":[\"deterministic-seed\"]"));
 }
 
@@ -686,9 +688,10 @@ fn catalog_text_contains_all_sections() {
     assert!(stdout.contains("schemas:"));
     assert!(stdout.contains("- fa (Farsi, rtl)"));
     assert!(stdout.contains("- de (German, ltr)"));
+    assert!(stdout.contains("- it (Italian, ltr)"));
     assert!(stdout.contains("- symbolic-stub (Symbolic Stub) capabilities: deterministic-seed"));
     assert!(stdout.contains(
-        "- stub/stub-local (Stub Local) languages: fa,en,de capabilities: deterministic-seed"
+        "- stub/stub-local (Stub Local) languages: fa,en,de,it capabilities: deterministic-seed"
     ));
     assert!(stdout.contains("- fa/fa-basic-sov (Basic SOV) slots: 4"));
     assert!(stdout.contains("- de/de-basic-svo (German Basic SVO) slots: 4"));

@@ -331,8 +331,9 @@ fn parse_demo_command(mut args: impl Iterator<Item = String>) -> Result<Option<C
         Some("fa") => Ok(Some(Command::Demo(DemoTarget::Farsi))),
         Some("en") => Ok(Some(Command::Demo(DemoTarget::English))),
         Some("de") => Ok(Some(Command::Demo(DemoTarget::German))),
+        Some("it") => Ok(Some(Command::Demo(DemoTarget::Italian))),
         _ => Err(CliError::usage(
-            "demo target is required (supported: fa, en, de)".to_string(),
+            "demo target is required (supported: fa, en, de, it)".to_string(),
         )),
     }
 }
@@ -1185,7 +1186,7 @@ fn parse_proto_encode_command(
     let mut args = args.collect::<Vec<_>>();
     if args.is_empty() {
         return Err(CliError::usage(
-            "proto-encode target is required (use language code like: fa, en, de)".to_string(),
+            "proto-encode target is required (use language code like: fa, en, de, it)".to_string(),
         ));
     }
     let target = parse_proto_target(args[0].as_str())?;
@@ -1208,7 +1209,7 @@ fn parse_proto_decode_command(
     let mut args = args.collect::<Vec<_>>();
     if args.is_empty() {
         return Err(CliError::usage(
-            "proto-decode target is required (use language code like: fa, en, de)".to_string(),
+            "proto-decode target is required (use language code like: fa, en, de, it)".to_string(),
         ));
     }
     let target = parse_proto_target(args[0].as_str())?;
@@ -1494,7 +1495,7 @@ fn normalize_language_code(value: &str) -> Result<String, CliError> {
     }
     if normalized.starts_with('-') || normalized.ends_with('-') || normalized.contains("--") {
         return Err(CliError::config(format!(
-            "invalid language code '{value}' (expected lowercase language code like 'fa', 'en', or 'de')"
+            "invalid language code '{value}' (expected lowercase language code like 'fa', 'en', 'de', or 'it')"
         )));
     }
     if !normalized
@@ -1502,7 +1503,7 @@ fn normalize_language_code(value: &str) -> Result<String, CliError> {
         .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
     {
         return Err(CliError::config(format!(
-            "invalid language code '{value}' (expected lowercase language code like 'fa', 'en', or 'de')"
+            "invalid language code '{value}' (expected lowercase language code like 'fa', 'en', 'de', or 'it')"
         )));
     }
     Ok(normalized)

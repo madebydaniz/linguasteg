@@ -45,6 +45,7 @@ pub(crate) fn execute(command: Command) -> Result<(), CliError> {
         Command::Demo(DemoTarget::Farsi) => run_demo(ProtoTarget::Farsi)?,
         Command::Demo(DemoTarget::English) => run_demo(ProtoTarget::English)?,
         Command::Demo(DemoTarget::German) => run_demo(ProtoTarget::Other("de".to_string()))?,
+        Command::Demo(DemoTarget::Italian) => run_demo(ProtoTarget::Other("it".to_string()))?,
         Command::ProtoEncode(target, payload_text, json) => {
             run_proto_encode(target, &payload_text, json)?
         }
@@ -998,9 +999,23 @@ fn demo_assignments(
             ("verb", "schreibt"),
             ("object", "brief"),
         ],
+        (ProtoTarget::Other(code), true) if code == "it" => vec![
+            ("subject", "the student"),
+            ("time", "today"),
+            ("location", "in the library"),
+            ("verb", "writes"),
+            ("object", "letter"),
+        ],
+        (ProtoTarget::Other(code), false) if code == "it" => vec![
+            ("subject", " "),
+            ("time", "today"),
+            ("location", "in the library"),
+            ("verb", "writes"),
+            ("object", "letter"),
+        ],
         (ProtoTarget::Other(_), _) => {
             return Err(CliError::config(
-                "demo supports only built-in targets: fa, en, de".to_string(),
+                "demo supports only built-in targets: fa, en, de, it".to_string(),
             ));
         }
     };
@@ -1012,6 +1027,7 @@ fn time_location_template_id(target: &ProtoTarget) -> Result<&'static str, CliEr
         ProtoTarget::Farsi => Ok("fa-time-location-sov"),
         ProtoTarget::English => Ok("en-time-location-svo"),
         ProtoTarget::Other(code) if code == "de" => Ok("de-time-location-svo"),
+        ProtoTarget::Other(code) if code == "it" => Ok("it-time-location-svo"),
         ProtoTarget::Other(code) => Err(CliError::config(format!(
             "no demo template is registered for language '{code}'"
         ))),

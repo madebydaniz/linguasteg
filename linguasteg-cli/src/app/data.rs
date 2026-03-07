@@ -2472,6 +2472,31 @@ fn starter_dataset_template_for_language(language: &ProtoTarget) -> &'static str
 }
 "#
         }
+        "it" => {
+            r#"{
+  "kind": "linguasteg-lexicon-v1",
+  "schema_version": 1,
+  "language": "it",
+  "entries": [
+    {
+      "slot": "object",
+      "canonical": "letter",
+      "variants": ["missive", "epistle"]
+    },
+    {
+      "slot": "adjective",
+      "canonical": "quiet",
+      "variants": ["concise"]
+    },
+    {
+      "slot": "verb",
+      "canonical": "writes",
+      "variants": ["composes"]
+    }
+  ]
+}
+"#
+        }
         _ => {
             r#"{
   "kind": "linguasteg-lexicon-v1",

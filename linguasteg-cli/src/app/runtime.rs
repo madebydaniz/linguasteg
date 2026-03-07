@@ -12,7 +12,8 @@ use linguasteg_models::{
     FarsiPrototypeLanguagePack, FarsiPrototypeRealizer, FarsiPrototypeSymbolicMapper,
     FarsiPrototypeTextExtractor, GermanPrototypeConstraintChecker, GermanPrototypeLanguagePack,
     GermanPrototypeRealizer, GermanPrototypeSymbolicMapper, GermanPrototypeTextExtractor,
-    InMemoryGatewayRegistry,
+    InMemoryGatewayRegistry, ItalianPrototypeConstraintChecker, ItalianPrototypeLanguagePack,
+    ItalianPrototypeRealizer, ItalianPrototypeSymbolicMapper, ItalianPrototypeTextExtractor,
 };
 
 use super::types::{CliError, ProtoTarget};
@@ -233,6 +234,28 @@ impl RuntimeSymbolicMapper for GermanPrototypeSymbolicMapper {
     }
 }
 
+impl RuntimeSymbolicMapper for ItalianPrototypeSymbolicMapper {
+    fn frame_schemas(&self) -> Vec<SymbolicFrameSchema> {
+        ItalianPrototypeSymbolicMapper::frame_schemas(self)
+    }
+
+    fn map_payload_to_plans_with_profile(
+        &self,
+        payload_plan: &SymbolicPayloadPlan,
+        profile_id: Option<&StyleProfileId>,
+    ) -> CoreResult<Vec<RealizationPlan>> {
+        ItalianPrototypeSymbolicMapper::map_payload_to_plans_with_profile(
+            self,
+            payload_plan,
+            profile_id,
+        )
+    }
+
+    fn map_plans_to_frames(&self, plans: &[RealizationPlan]) -> CoreResult<Vec<SymbolicFramePlan>> {
+        ItalianPrototypeSymbolicMapper::map_plans_to_frames(self, plans)
+    }
+}
+
 trait RuntimeProvider: Send + Sync {
     fn language_code(&self) -> &'static str;
     fn language_display(&self) -> &'static str;
@@ -333,10 +356,42 @@ impl RuntimeProvider for GermanRuntimeProvider {
 }
 
 static GERMAN_RUNTIME_PROVIDER: GermanRuntimeProvider = GermanRuntimeProvider;
-static RUNTIME_PROVIDERS: [&dyn RuntimeProvider; 3] = [
+#[derive(Debug, Clone, Copy)]
+struct ItalianRuntimeProvider;
+
+impl RuntimeProvider for ItalianRuntimeProvider {
+    fn language_code(&self) -> &'static str {
+        "it"
+    }
+
+    fn language_display(&self) -> &'static str {
+        "Italian"
+    }
+
+    fn direction(&self) -> &'static str {
+        "ltr"
+    }
+
+    fn build_components(&self) -> RuntimeComponents {
+        RuntimeComponents {
+            language_code: self.language_code(),
+            language_display: self.language_display(),
+            text_decode_lossless: true,
+            pack: Box::new(ItalianPrototypeLanguagePack::default()),
+            checker: Box::new(ItalianPrototypeConstraintChecker),
+            realizer: Box::new(ItalianPrototypeRealizer),
+            extractor: Box::new(ItalianPrototypeTextExtractor),
+            mapper: Box::new(ItalianPrototypeSymbolicMapper),
+        }
+    }
+}
+
+static ITALIAN_RUNTIME_PROVIDER: ItalianRuntimeProvider = ItalianRuntimeProvider;
+static RUNTIME_PROVIDERS: [&dyn RuntimeProvider; 4] = [
     &FARSI_RUNTIME_PROVIDER,
     &ENGLISH_RUNTIME_PROVIDER,
     &GERMAN_RUNTIME_PROVIDER,
+    &ITALIAN_RUNTIME_PROVIDER,
 ];
 
 fn runtime_providers() -> &'static [&'static dyn RuntimeProvider] {
@@ -465,6 +520,7 @@ mod tests {
         assert!(languages.iter().any(|item| item.code == "fa"));
         assert!(languages.iter().any(|item| item.code == "en"));
         assert!(languages.iter().any(|item| item.code == "de"));
+        assert!(languages.iter().any(|item| item.code == "it"));
     }
 
     #[test]
@@ -480,6 +536,10 @@ mod tests {
         let de_runtime =
             PrototypeRuntime::new_for_language_code("de").expect("de runtime should initialize");
         assert_eq!(de_runtime.language_code, "de");
+
+        let it_runtime =
+            PrototypeRuntime::new_for_language_code("it").expect("it runtime should initialize");
+        assert_eq!(it_runtime.language_code, "it");
     }
 
     #[test]
@@ -503,7 +563,7 @@ mod tests {
                 .message()
                 .contains("language 'zz' is not supported by runtime providers")
         );
-        assert!(error.message().contains("supported: fa, en, de"));
+        assert!(error.message().contains("supported: fa, en, de, it"));
     }
 
     #[test]
@@ -512,6 +572,7 @@ mod tests {
         assert!(csv.contains("fa"));
         assert!(csv.contains("en"));
         assert!(csv.contains("de"));
+        assert!(csv.contains("it"));
     }
 
     #[test]
