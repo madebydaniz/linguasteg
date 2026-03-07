@@ -934,6 +934,95 @@ fn data_install_with_artifact_url_stores_artifact_and_hash() {
 }
 
 #[test]
+fn data_install_with_lexicon_dataset_artifact_records_dataset_metadata() {
+    let data_dir = TempDataDir::create();
+    let artifact = TempArtifactFile::create(
+        br#"{
+            "kind":"linguasteg-lexicon-v1",
+            "schema_version":1,
+            "language":"en",
+            "entries":[
+                {"slot":"object","canonical":"letter","variants":["missive","epistle"]},
+                {"slot":"verb","canonical":"writes","variants":["composes"]}
+            ]
+        }"#,
+    );
+    let artifact_url = artifact.as_file_url();
+    let output = run_lsteg_with_env(
+        &[
+            "data",
+            "install",
+            "--lang",
+            "en",
+            "--source",
+            "en-wordlist-wordnik",
+            "--artifact-url",
+            &artifact_url,
+            "--format",
+            "json",
+            "--data-dir",
+            data_dir.as_str(),
+        ],
+        &[],
+    );
+    assert!(output.status.success());
+
+    let manifest_path = std::path::Path::new(data_dir.as_str())
+        .join("en")
+        .join("en-wordlist-wordnik")
+        .join("manifest.json");
+    let manifest_raw = std::fs::read_to_string(&manifest_path).expect("manifest should exist");
+    let manifest: Value = serde_json::from_str(&manifest_raw).expect("manifest should be json");
+
+    assert_eq!(
+        manifest["artifact_dataset_kind"].as_str(),
+        Some("linguasteg-lexicon-v1")
+    );
+    assert_eq!(
+        manifest["artifact_dataset_schema_version"].as_u64(),
+        Some(1)
+    );
+    assert_eq!(manifest["artifact_dataset_language"].as_str(), Some("en"));
+    assert_eq!(manifest["artifact_dataset_entry_count"].as_u64(), Some(2));
+}
+
+#[test]
+fn data_install_rejects_lexicon_dataset_artifact_with_mismatched_language() {
+    let data_dir = TempDataDir::create();
+    let artifact = TempArtifactFile::create(
+        br#"{
+            "kind":"linguasteg-lexicon-v1",
+            "schema_version":1,
+            "language":"fa",
+            "entries":[{"slot":"object","canonical":"letter","variants":["missive"]}]
+        }"#,
+    );
+    let artifact_url = artifact.as_file_url();
+    let output = run_lsteg_with_env(
+        &[
+            "data",
+            "install",
+            "--lang",
+            "en",
+            "--source",
+            "en-wordlist-wordnik",
+            "--artifact-url",
+            &artifact_url,
+            "--format",
+            "json",
+            "--data-dir",
+            data_dir.as_str(),
+        ],
+        &[],
+    );
+    assert_eq!(output.status.code(), Some(1));
+    let stderr = stderr_string(&output);
+    assert!(stderr.contains("LSTEG-CLI-CFG-001"));
+    assert!(stderr.contains("artifact validation failed"));
+    assert!(stderr.contains("does not match selected language"));
+}
+
+#[test]
 fn data_install_rejects_artifact_url_with_multi_language_target() {
     let output = run_lsteg(&[
         "data",

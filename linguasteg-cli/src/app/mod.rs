@@ -2,6 +2,7 @@ mod analysis;
 mod args;
 mod commands;
 mod data;
+mod dataset;
 mod formatters;
 mod language;
 mod runtime;

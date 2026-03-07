@@ -6,6 +6,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 
+use super::dataset::{DatasetArtifactMetadata, load_lexicon_dataset_artifact};
 use super::types::{
     CliError, DataCleanOptions, DataCommand, DataDoctorOptions, DataExportManifestOptions,
     DataImportManifestOptions, DataInstallOptions, DataListOptions, DataPinOptions,
@@ -265,6 +266,10 @@ struct InstalledSourceManifest {
     artifact_path: Option<String>,
     artifact_sha256: Option<String>,
     artifact_bytes: Option<usize>,
+    artifact_dataset_kind: Option<String>,
+    artifact_dataset_schema_version: Option<u8>,
+    artifact_dataset_language: Option<String>,
+    artifact_dataset_entry_count: Option<usize>,
     installed_at_epoch_sec: u64,
 }
 
@@ -1349,6 +1354,10 @@ fn run_data_import_manifest(options: DataImportManifestOptions) -> Result<(), Cl
             artifact_path: entry.artifact_path.clone(),
             artifact_sha256: entry.artifact_sha256.clone(),
             artifact_bytes: None,
+            artifact_dataset_kind: None,
+            artifact_dataset_schema_version: None,
+            artifact_dataset_language: None,
+            artifact_dataset_entry_count: None,
             installed_at_epoch_sec: entry.installed_at_epoch_sec,
         };
         let manifest_path = source_dir.join("manifest.json");
@@ -2310,6 +2319,18 @@ fn write_install_manifest(
             .map(|item| item.path.to_string_lossy().to_string()),
         artifact_sha256: artifact.as_ref().map(|item| item.sha256.clone()),
         artifact_bytes: artifact.as_ref().map(|item| item.byte_len),
+        artifact_dataset_kind: artifact
+            .and_then(|item| item.dataset_metadata.as_ref())
+            .map(|item| item.kind.clone()),
+        artifact_dataset_schema_version: artifact
+            .and_then(|item| item.dataset_metadata.as_ref())
+            .map(|item| item.schema_version),
+        artifact_dataset_language: artifact
+            .and_then(|item| item.dataset_metadata.as_ref())
+            .map(|item| item.language.clone()),
+        artifact_dataset_entry_count: artifact
+            .and_then(|item| item.dataset_metadata.as_ref())
+            .map(|item| item.entry_count),
         installed_at_epoch_sec,
     };
     let manifest_path = source_dir.join("manifest.json");
@@ -2331,6 +2352,7 @@ struct StoredArtifact {
     path: PathBuf,
     sha256: String,
     byte_len: usize,
+    dataset_metadata: Option<DatasetArtifactMetadata>,
 }
 
 fn fetch_and_store_artifact(
@@ -2339,6 +2361,14 @@ fn fetch_and_store_artifact(
     artifact_url: &str,
 ) -> Result<StoredArtifact, CliError> {
     let bytes = read_artifact_bytes(artifact_url)?;
+    let dataset_metadata = load_lexicon_dataset_artifact(source.language.as_str(), &bytes)
+        .map_err(|reason| {
+            CliError::config(format!(
+                "artifact validation failed for source '{}': {reason}",
+                source.id
+            ))
+        })?
+        .map(|dataset| dataset.metadata());
     let sha256 = sha256_hex(&bytes);
     let source_dir = data_dir.join(source.language.as_str()).join(&source.id);
     fs::create_dir_all(&source_dir).map_err(|error| {
@@ -2360,6 +2390,7 @@ fn fetch_and_store_artifact(
         path: artifact_path,
         sha256,
         byte_len: bytes.len(),
+        dataset_metadata,
     })
 }
 
