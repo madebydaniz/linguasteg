@@ -2,9 +2,11 @@ pub mod de;
 pub mod en;
 pub mod fa;
 pub mod gateway;
+pub mod it;
 
 use de::parse_german_prototype_text;
 use en::parse_english_prototype_text;
+use it::parse_italian_prototype_text;
 use linguasteg_core::{
     CoreError, CoreResult, ModelAdapter, ModelCapability, RealizationPlan, SlotAssignment, SlotId,
     TemplateId, TextExtractor,
@@ -23,6 +25,10 @@ pub use fa::{
     FarsiPrototypeRealizer, FarsiPrototypeSymbolicMapper,
 };
 pub use gateway::{InMemoryGatewayRegistry, StubGateway};
+pub use it::{
+    ItalianPrototypeConstraintChecker, ItalianPrototypeLanguagePack, ItalianPrototypeRealizer,
+    ItalianPrototypeSymbolicMapper,
+};
 
 #[derive(Debug, Default)]
 pub struct StubModelAdapter;
@@ -78,6 +84,15 @@ pub struct GermanPrototypeTextExtractor;
 impl TextExtractor for GermanPrototypeTextExtractor {
     fn extract_plans(&self, stego_text: &str) -> CoreResult<Vec<RealizationPlan>> {
         parse_german_prototype_text(stego_text)
+    }
+}
+
+#[derive(Debug, Default, Clone, Copy)]
+pub struct ItalianPrototypeTextExtractor;
+
+impl TextExtractor for ItalianPrototypeTextExtractor {
+    fn extract_plans(&self, stego_text: &str) -> CoreResult<Vec<RealizationPlan>> {
+        parse_italian_prototype_text(stego_text)
     }
 }
 

@@ -23,5 +23,7 @@ pub use linguasteg_models::{
     FarsiPrototypeLanguagePack, FarsiPrototypeLexicon, FarsiPrototypeRealizer,
     FarsiPrototypeSymbolicMapper, FarsiPrototypeTextExtractor, GermanPrototypeConstraintChecker,
     GermanPrototypeLanguagePack, GermanPrototypeRealizer, GermanPrototypeSymbolicMapper,
-    GermanPrototypeTextExtractor, InMemoryGatewayRegistry, StubGateway, StubModelAdapter,
+    GermanPrototypeTextExtractor, InMemoryGatewayRegistry, ItalianPrototypeConstraintChecker,
+    ItalianPrototypeLanguagePack, ItalianPrototypeRealizer, ItalianPrototypeSymbolicMapper,
+    ItalianPrototypeTextExtractor, StubGateway, StubModelAdapter,
 };
