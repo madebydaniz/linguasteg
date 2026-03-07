@@ -332,6 +332,30 @@ fn encode_json_supports_english_target() {
 }
 
 #[test]
+fn encode_emits_dataset_notice_when_no_source_is_installed() {
+    let data_dir = TempDataDir::create();
+    let output = run_lsteg_with_env(
+        &[
+            "encode",
+            "--lang",
+            "en",
+            "--message",
+            "hello",
+            "--format",
+            "json",
+            "--data-dir",
+            data_dir.as_str(),
+        ],
+        &[],
+    );
+    assert!(output.status.success());
+
+    let stderr = stderr_string(&output);
+    assert!(stderr.contains("notice: no dataset source is installed for language 'en'"));
+    assert!(stderr.contains("lsteg data install --lang en"));
+}
+
+#[test]
 fn encode_english_varies_output_across_secrets() {
     let output_a = run_lsteg_with_env(
         &[
@@ -884,10 +908,20 @@ fn data_install_creates_state_and_source_manifest() {
         .join("fa")
         .join("fa-wordlist-cc0")
         .join("manifest.json");
+    let en_starter_dataset_path = std::path::Path::new(data_dir.as_str())
+        .join("en")
+        .join("en-wordnet-princeton")
+        .join("dataset.json");
+    let fa_starter_dataset_path = std::path::Path::new(data_dir.as_str())
+        .join("fa")
+        .join("fa-wordlist-cc0")
+        .join("dataset.json");
 
     assert!(state_path.exists());
     assert!(en_manifest_path.exists());
     assert!(fa_manifest_path.exists());
+    assert!(en_starter_dataset_path.exists());
+    assert!(fa_starter_dataset_path.exists());
 }
 
 #[test]
@@ -925,6 +959,7 @@ fn data_update_marks_existing_install_as_updated() {
     let stdout = stdout_string(&update_output);
     assert!(stdout.contains("\"mode\":\"data-update\""));
     assert!(stdout.contains("\"status\":\"updated\""));
+    assert!(stdout.contains("\"artifact_path\":\""));
 }
 
 #[test]

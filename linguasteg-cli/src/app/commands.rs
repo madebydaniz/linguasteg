@@ -11,7 +11,7 @@ use linguasteg_core::{
 use super::analysis::{analyze_trace_summary, render_trace_analysis_output};
 use super::data::{
     resolve_active_data_source_selection, resolve_active_data_source_variant_catalog,
-    run_data_command,
+    resolve_effective_data_dir, run_data_command,
 };
 use super::dataset::LexiconVariantCatalog;
 use super::formatters::{build_proto_decode_json, build_proto_encode_json, json_escape};
@@ -726,6 +726,14 @@ fn run_encode(options: EncodeOptions) -> Result<(), CliError> {
             .map(|source| source.source_id.as_str()),
         options.data_dir.as_deref(),
     )?;
+    emit_dataset_hint_if_unavailable(
+        &options.target,
+        active_data_source
+            .as_ref()
+            .map(|source| source.source_id.as_str()),
+        active_variant_catalog.as_ref(),
+        options.data_dir.as_deref(),
+    );
     let output = render_proto_encode_output(
         options.target,
         &payload_text,
@@ -739,6 +747,38 @@ fn run_encode(options: EncodeOptions) -> Result<(), CliError> {
         active_variant_catalog.as_ref(),
     )?;
     write_output(&output, options.output_path.as_deref())
+}
+
+fn emit_dataset_hint_if_unavailable(
+    target: &ProtoTarget,
+    active_source_id: Option<&str>,
+    variant_catalog: Option<&LexiconVariantCatalog>,
+    data_dir: Option<&str>,
+) {
+    if variant_catalog.is_some() {
+        return;
+    }
+
+    let language_code = target.as_str();
+    if let Some(source_id) = active_source_id {
+        let starter_path = resolve_effective_data_dir(data_dir)
+            .join(language_code)
+            .join(source_id)
+            .join("dataset.json");
+        eprintln!(
+            "notice: dataset variants are not active for language '{}'. edit '{}' then run: lsteg data update --lang {} --source {}",
+            language_code,
+            starter_path.to_string_lossy(),
+            language_code,
+            source_id
+        );
+        return;
+    }
+
+    eprintln!(
+        "notice: no dataset source is installed for language '{}'. for better lexical variation run: lsteg data install --lang {}",
+        language_code, language_code
+    );
 }
 
 fn run_decode(options: DecodeOptions) -> Result<(), CliError> {

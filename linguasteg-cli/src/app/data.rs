@@ -19,6 +19,7 @@ const DATA_STATE_FILE: &str = "state.json";
 const DATA_SOURCES_MANIFEST: &str = include_str!("../../assets/data_sources.json");
 const MANIFEST_SCHEMA_VERSION: u8 = 1;
 const MAX_ARTIFACT_BYTES: usize = 64 * 1024 * 1024;
+const STARTER_DATASET_FILE: &str = "dataset.json";
 
 #[derive(Debug, Clone, Deserialize)]
 struct DataSourceCatalogRaw {
@@ -81,6 +82,7 @@ struct DataInstallItem {
     version: String,
     status: String,
     manifest_path: String,
+    starter_dataset_path: String,
     artifact_path: Option<String>,
     artifact_sha256: Option<String>,
 }
@@ -362,6 +364,10 @@ pub(crate) fn resolve_active_data_source_selection(
     }))
 }
 
+pub(crate) fn resolve_effective_data_dir(explicit: Option<&str>) -> PathBuf {
+    resolve_data_dir(explicit)
+}
+
 pub(crate) fn resolve_active_data_source_variant_catalog(
     target: ProtoTarget,
     source_id: Option<&str>,
@@ -605,11 +611,14 @@ fn run_data_install(options: DataInstallOptions, force_refresh: bool) -> Result<
         let source =
             resolve_source_for_target(&sources, target.clone(), options.source_id.as_deref())?;
         let status = upsert_install_state(&mut state, source, now, force_refresh);
-        let artifact = options
-            .artifact_url
-            .as_deref()
-            .map(|url| fetch_and_store_artifact(&data_dir, source, url))
-            .transpose()?;
+        let starter_dataset_path = ensure_starter_dataset_template_exists(&data_dir, source)?;
+        let artifact = if let Some(url) = options.artifact_url.as_deref() {
+            Some(fetch_and_store_artifact(&data_dir, source, url)?)
+        } else if force_refresh {
+            load_local_dataset_artifact(source, &starter_dataset_path)?
+        } else {
+            None
+        };
         let manifest_path = write_install_manifest(
             &data_dir,
             source,
@@ -623,6 +632,7 @@ fn run_data_install(options: DataInstallOptions, force_refresh: bool) -> Result<
             version: source.version.clone(),
             status: status.to_string(),
             manifest_path: manifest_path.to_string_lossy().to_string(),
+            starter_dataset_path: starter_dataset_path.to_string_lossy().to_string(),
             artifact_path: artifact
                 .as_ref()
                 .map(|item| item.path.to_string_lossy().to_string()),
@@ -637,7 +647,11 @@ fn run_data_install(options: DataInstallOptions, force_refresh: bool) -> Result<
     } else {
         "data-install"
     };
-    let note = "metadata and cache manifest were prepared; remote fetch pipeline is controlled by future data-fetch worker";
+    let note = if force_refresh {
+        "metadata was refreshed; a valid local starter dataset is activated automatically when present"
+    } else {
+        "metadata and starter dataset template were prepared; edit starter dataset and run 'lsteg data update --lang <code>' to activate variants"
+    };
 
     if matches!(options.format, OutputFormat::Json) {
         let payload = DataInstallResponse {
@@ -664,12 +678,13 @@ fn run_data_install(options: DataInstallOptions, force_refresh: bool) -> Result<
             .as_ref()
             .map_or_else(String::new, |path| format!(" artifact:{path}"));
         println!(
-            "- {}/{} version:{} status:{} manifest:{}{}",
+            "- {}/{} version:{} status:{} manifest:{} starter_dataset:{}{}",
             item.language,
             item.source_id,
             item.version,
             item.status,
             item.manifest_path,
+            item.starter_dataset_path,
             artifact_suffix
         );
         if let Some(sha256) = &item.artifact_sha256 {
@@ -2367,6 +2382,166 @@ fn resolve_data_dir(explicit: Option<&str>) -> PathBuf {
             .join("data");
     }
     PathBuf::from(".linguasteg-data")
+}
+
+fn starter_dataset_template_for_language(language: &ProtoTarget) -> &'static str {
+    match language.as_str() {
+        "en" => {
+            r#"{
+  "kind": "linguasteg-lexicon-v1",
+  "schema_version": 1,
+  "language": "en",
+  "entries": [
+    {
+      "slot": "object",
+      "canonical": "letter",
+      "variants": ["missive", "epistle"]
+    },
+    {
+      "slot": "adjective",
+      "canonical": "quiet",
+      "variants": ["concise"]
+    },
+    {
+      "slot": "verb",
+      "canonical": "writes",
+      "variants": ["composes"]
+    }
+  ]
+}
+"#
+        }
+        "fa" => {
+            r#"{
+  "kind": "linguasteg-lexicon-v1",
+  "schema_version": 1,
+  "language": "fa",
+  "entries": [
+    {
+      "slot": "object",
+      "canonical": "نامه",
+      "variants": ["مکتوب"]
+    },
+    {
+      "slot": "adjective",
+      "canonical": "زیبا",
+      "variants": ["خوش"]
+    },
+    {
+      "slot": "verb",
+      "canonical": "نوشت",
+      "variants": ["نگاشت"]
+    }
+  ]
+}
+"#
+        }
+        "de" => {
+            r#"{
+  "kind": "linguasteg-lexicon-v1",
+  "schema_version": 1,
+  "language": "de",
+  "entries": [
+    {
+      "slot": "object",
+      "canonical": "brief",
+      "variants": ["schreiben", "botschaft"]
+    },
+    {
+      "slot": "adjective",
+      "canonical": "neu",
+      "variants": ["frisch"]
+    },
+    {
+      "slot": "verb",
+      "canonical": "schreibt",
+      "variants": ["verfasst"]
+    }
+  ]
+}
+"#
+        }
+        _ => {
+            r#"{
+  "kind": "linguasteg-lexicon-v1",
+  "schema_version": 1,
+  "language": "xx",
+  "entries": [
+    {
+      "slot": "object",
+      "canonical": "placeholder",
+      "variants": ["placeholder-alt"]
+    }
+  ]
+}
+"#
+        }
+    }
+}
+
+fn ensure_starter_dataset_template_exists(
+    data_dir: &Path,
+    source: &DataSource,
+) -> Result<PathBuf, CliError> {
+    let source_dir = data_dir.join(source.language.as_str()).join(&source.id);
+    fs::create_dir_all(&source_dir).map_err(|error| {
+        CliError::io(
+            "failed to create source data directory",
+            Some(&source_dir.to_string_lossy()),
+            error,
+        )
+    })?;
+
+    let starter_path = source_dir.join(STARTER_DATASET_FILE);
+    if starter_path.exists() {
+        return Ok(starter_path);
+    }
+
+    let template_raw = starter_dataset_template_for_language(&source.language)
+        .replace("\"xx\"", &format!("\"{}\"", source.language.as_str()));
+    fs::write(&starter_path, template_raw).map_err(|error| {
+        CliError::io(
+            "failed to write starter dataset template",
+            Some(&starter_path.to_string_lossy()),
+            error,
+        )
+    })?;
+    Ok(starter_path)
+}
+
+fn load_local_dataset_artifact(
+    source: &DataSource,
+    dataset_path: &Path,
+) -> Result<Option<StoredArtifact>, CliError> {
+    if !dataset_path.exists() {
+        return Ok(None);
+    }
+    let bytes = read_local_file_limited(dataset_path)?;
+    if bytes.is_empty() {
+        return Ok(None);
+    }
+
+    let metadata = load_lexicon_dataset_artifact(source.language.as_str(), &bytes)
+        .map_err(|reason| {
+            CliError::config(format!(
+                "starter dataset validation failed for source '{}': {reason}",
+                source.id
+            ))
+        })?
+        .ok_or_else(|| {
+            CliError::config(format!(
+                "starter dataset for source '{}' is not a linguasteg lexicon dataset",
+                source.id
+            ))
+        })?
+        .metadata();
+
+    Ok(Some(StoredArtifact {
+        path: dataset_path.to_path_buf(),
+        sha256: sha256_hex(&bytes),
+        byte_len: bytes.len(),
+        dataset_metadata: Some(metadata),
+    }))
 }
 
 fn unix_epoch_seconds() -> Result<u64, CliError> {
