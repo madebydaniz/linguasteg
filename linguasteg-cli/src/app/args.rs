@@ -1,11 +1,12 @@
 use std::io::Write;
 
 use super::types::{
-    AnalyzeOptions, CatalogQueryOptions, CliError, Command, DataCleanOptions, DataCommand,
-    DataDoctorOptions, DataExportManifestOptions, DataImportManifestOptions, DataInstallOptions,
-    DataListOptions, DataPinOptions, DataStatusOptions, DataVerifyOptions, DecodeInputMode,
-    DecodeOptions, DemoTarget, EncodeOptions, OutputFormat, ProfileQueryOptions, ProtoTarget,
-    SchemaQueryOptions, TemplateQueryOptions, ValidateOptions,
+    AnalyzeOptions, CatalogQueryOptions, CliError, Command, DataArtifactValidateOptions,
+    DataCleanOptions, DataCommand, DataDoctorOptions, DataExportManifestOptions,
+    DataImportManifestOptions, DataInstallOptions, DataListOptions, DataPinOptions,
+    DataStatusOptions, DataVerifyOptions, DecodeInputMode, DecodeOptions, DemoTarget,
+    EncodeOptions, OutputFormat, ProfileQueryOptions, ProtoTarget, SchemaQueryOptions,
+    TemplateQueryOptions, ValidateOptions,
 };
 
 pub(crate) fn parse_command(args: Vec<String>) -> Result<Option<Command>, CliError> {
@@ -434,7 +435,7 @@ fn parse_schemas_command(args: impl Iterator<Item = String>) -> Result<Option<Co
 fn parse_data_command(mut args: impl Iterator<Item = String>) -> Result<Option<Command>, CliError> {
     let Some(subcommand) = args.next() else {
         return Err(CliError::usage(
-            "data subcommand is required (supported: list, status, verify, doctor, clean, pin, export-manifest, import-manifest, install, update)"
+            "data subcommand is required (supported: list, status, verify, doctor, clean, pin, artifact validate, export-manifest, import-manifest, install, update)"
                 .to_string(),
         ));
     };
@@ -449,14 +450,90 @@ fn parse_data_command(mut args: impl Iterator<Item = String>) -> Result<Option<C
         "doctor" => parse_data_doctor_command(args),
         "clean" => parse_data_clean_command(args),
         "pin" => parse_data_pin_command(args),
+        "artifact" => parse_data_artifact_command(args),
         "export-manifest" => parse_data_export_manifest_command(args),
         "import-manifest" => parse_data_import_manifest_command(args),
         "install" => parse_data_install_command(args, false),
         "update" => parse_data_install_command(args, true),
         _ => Err(CliError::usage(format!(
-            "unknown data subcommand: {subcommand} (supported: list, status, verify, doctor, clean, pin, export-manifest, import-manifest, install, update)"
+            "unknown data subcommand: {subcommand} (supported: list, status, verify, doctor, clean, pin, artifact validate, export-manifest, import-manifest, install, update)"
         ))),
     }
+}
+
+fn parse_data_artifact_command(
+    mut args: impl Iterator<Item = String>,
+) -> Result<Option<Command>, CliError> {
+    let Some(subcommand) = args.next() else {
+        return Err(CliError::usage(
+            "data artifact subcommand is required (supported: validate)".to_string(),
+        ));
+    };
+    if subcommand == "--help" || subcommand == "-h" {
+        return Ok(None);
+    }
+
+    match subcommand.as_str() {
+        "validate" => parse_data_artifact_validate_command(args),
+        _ => Err(CliError::usage(format!(
+            "unknown data artifact subcommand: {subcommand} (supported: validate)"
+        ))),
+    }
+}
+
+fn parse_data_artifact_validate_command(
+    mut args: impl Iterator<Item = String>,
+) -> Result<Option<Command>, CliError> {
+    let mut format = env_output_format("LSTEG_FORMAT")?.unwrap_or(OutputFormat::Text);
+    let mut target = None;
+    let mut input_path = None;
+    let mut seen_lang = false;
+    let mut seen_input = false;
+
+    while let Some(arg) = args.next() {
+        match arg.as_str() {
+            "--help" | "-h" => return Ok(None),
+            "--format" => {
+                parse_output_format_arg(&mut args, &mut format)?;
+            }
+            "--lang" => {
+                if seen_lang {
+                    return Err(CliError::usage(
+                        "--lang cannot be provided multiple times".to_string(),
+                    ));
+                }
+                seen_lang = true;
+                target = Some(parse_proto_target(&next_arg_value(&mut args, "--lang")?)?);
+            }
+            "--input" => {
+                if seen_input {
+                    return Err(CliError::usage(
+                        "--input cannot be provided multiple times".to_string(),
+                    ));
+                }
+                seen_input = true;
+                input_path = Some(next_arg_value(&mut args, "--input")?);
+            }
+            _ => {
+                return Err(CliError::usage(format!(
+                    "unknown data artifact validate argument: {arg}"
+                )));
+            }
+        }
+    }
+
+    let target =
+        target.ok_or_else(|| CliError::usage("data artifact validate requires --lang <code>"))?;
+    let input_path = input_path
+        .ok_or_else(|| CliError::usage("data artifact validate requires --input <file>"))?;
+
+    Ok(Some(Command::Data(DataCommand::ArtifactValidate(
+        DataArtifactValidateOptions {
+            format,
+            target,
+            input_path,
+        },
+    ))))
 }
 
 fn parse_data_list_command(
@@ -1501,6 +1578,10 @@ pub(crate) fn write_usage(mut writer: impl Write) -> std::io::Result<()> {
     )?;
     writeln!(
         writer,
+        "       lsteg data artifact validate --lang <code> --input <file> [--format text|json]"
+    )?;
+    writeln!(
+        writer,
         "       lsteg data export-manifest [--lang <code>] [--source <id>] [--output <file>] [--data-dir <path>] [--format text|json]"
     )?;
     writeln!(
@@ -2056,6 +2137,51 @@ mod tests {
         );
         assert_eq!(options.data_dir.as_deref(), Some("/tmp/lsteg-pin"));
         assert!(matches!(options.format, OutputFormat::Json));
+    }
+
+    #[test]
+    fn parse_data_artifact_validate_command_sets_lang_and_input() {
+        let command = parse_command(vec![
+            "data".to_string(),
+            "artifact".to_string(),
+            "validate".to_string(),
+            "--lang".to_string(),
+            "en".to_string(),
+            "--input".to_string(),
+            "/tmp/lexicon.json".to_string(),
+            "--format".to_string(),
+            "json".to_string(),
+        ])
+        .expect("parse should succeed")
+        .expect("command should exist");
+
+        let Command::Data(DataCommand::ArtifactValidate(options)) = command else {
+            panic!("expected data artifact validate command");
+        };
+
+        assert_eq!(options.target, ProtoTarget::English);
+        assert_eq!(options.input_path, "/tmp/lexicon.json");
+        assert!(matches!(options.format, OutputFormat::Json));
+    }
+
+    #[test]
+    fn parse_data_artifact_validate_command_requires_input() {
+        let result = parse_command(vec![
+            "data".to_string(),
+            "artifact".to_string(),
+            "validate".to_string(),
+            "--lang".to_string(),
+            "en".to_string(),
+        ]);
+        let error = match result {
+            Ok(_) => panic!("missing input should fail"),
+            Err(error) => error,
+        };
+
+        assert_eq!(
+            error.message(),
+            "data artifact validate requires --input <file>"
+        );
     }
 
     #[test]

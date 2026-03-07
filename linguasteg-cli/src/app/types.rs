@@ -25,6 +25,7 @@ pub(crate) enum DataCommand {
     Doctor(DataDoctorOptions),
     Clean(DataCleanOptions),
     Pin(DataPinOptions),
+    ArtifactValidate(DataArtifactValidateOptions),
     ExportManifest(DataExportManifestOptions),
     ImportManifest(DataImportManifestOptions),
     Install(DataInstallOptions),
@@ -72,6 +73,12 @@ pub(crate) struct DataPinOptions {
     pub(crate) source_id: Option<String>,
     pub(crate) checksum_sha256: Option<String>,
     pub(crate) data_dir: Option<String>,
+}
+
+pub(crate) struct DataArtifactValidateOptions {
+    pub(crate) format: OutputFormat,
+    pub(crate) target: ProtoTarget,
+    pub(crate) input_path: String,
 }
 
 pub(crate) struct DataExportManifestOptions {

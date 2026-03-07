@@ -1121,6 +1121,58 @@ fn data_install_rejects_artifact_url_with_multi_language_target() {
 }
 
 #[test]
+fn data_artifact_validate_reports_ok_for_valid_lexicon_dataset() {
+    let artifact = TempArtifactFile::create(
+        br#"{
+            "kind":"linguasteg-lexicon-v1",
+            "schema_version":1,
+            "language":"en",
+            "entries":[{"slot":"object","canonical":"letter","variants":["epistle"]}]
+        }"#,
+    );
+    let output = run_lsteg(&[
+        "data",
+        "artifact",
+        "validate",
+        "--lang",
+        "en",
+        "--input",
+        &artifact.as_file_url(),
+        "--format",
+        "json",
+    ]);
+    assert!(output.status.success());
+    let stdout = stdout_string(&output);
+    assert!(stdout.contains("\"mode\":\"data-artifact-validate\""));
+    assert!(stdout.contains("\"valid\":true"));
+    assert!(stdout.contains("\"entry_count\":1"));
+}
+
+#[test]
+fn data_artifact_validate_fails_for_non_dataset_input() {
+    let artifact = TempArtifactFile::create(b"not-a-dataset");
+    let output = run_lsteg(&[
+        "data",
+        "artifact",
+        "validate",
+        "--lang",
+        "en",
+        "--input",
+        &artifact.as_file_url(),
+        "--format",
+        "json",
+    ]);
+    assert_eq!(output.status.code(), Some(1));
+    let stdout = stdout_string(&output);
+    assert!(stdout.contains("\"mode\":\"data-artifact-validate\""));
+    assert!(stdout.contains("\"valid\":false"));
+
+    let stderr = stderr_string(&output);
+    assert!(stderr.contains("LSTEG-CLI-CFG-001"));
+    assert!(stderr.contains("artifact validation failed"));
+}
+
+#[test]
 fn data_status_reports_installed_manifest_state() {
     let data_dir = TempDataDir::create();
     let install_output = run_lsteg_with_env(

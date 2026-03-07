@@ -10,9 +10,9 @@ use super::dataset::{
     DatasetArtifactMetadata, LexiconVariantCatalog, load_lexicon_dataset_artifact,
 };
 use super::types::{
-    CliError, DataCleanOptions, DataCommand, DataDoctorOptions, DataExportManifestOptions,
-    DataImportManifestOptions, DataInstallOptions, DataListOptions, DataPinOptions,
-    DataStatusOptions, DataVerifyOptions, OutputFormat, ProtoTarget,
+    CliError, DataArtifactValidateOptions, DataCleanOptions, DataCommand, DataDoctorOptions,
+    DataExportManifestOptions, DataImportManifestOptions, DataInstallOptions, DataListOptions,
+    DataPinOptions, DataStatusOptions, DataVerifyOptions, OutputFormat, ProtoTarget,
 };
 
 const DATA_STATE_FILE: &str = "state.json";
@@ -255,6 +255,19 @@ struct DataImportResponse {
     items: Vec<DataImportItem>,
 }
 
+#[derive(Debug, Clone, Serialize)]
+struct DataArtifactValidateResponse {
+    mode: &'static str,
+    input: String,
+    language: String,
+    valid: bool,
+    kind: Option<String>,
+    schema_version: Option<u8>,
+    dataset_language: Option<String>,
+    entry_count: Option<usize>,
+    error: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct InstalledSourceManifest {
     schema_version: u8,
@@ -410,10 +423,97 @@ pub(crate) fn run_data_command(command: DataCommand) -> Result<(), CliError> {
         DataCommand::Doctor(options) => run_data_doctor(options),
         DataCommand::Clean(options) => run_data_clean(options),
         DataCommand::Pin(options) => run_data_pin(options),
+        DataCommand::ArtifactValidate(options) => run_data_artifact_validate(options),
         DataCommand::ExportManifest(options) => run_data_export_manifest(options),
         DataCommand::ImportManifest(options) => run_data_import_manifest(options),
         DataCommand::Install(options) => run_data_install(options, false),
         DataCommand::Update(options) => run_data_install(options, true),
+    }
+}
+
+fn run_data_artifact_validate(options: DataArtifactValidateOptions) -> Result<(), CliError> {
+    let bytes = read_artifact_bytes(&options.input_path)?;
+    let parsed = load_lexicon_dataset_artifact(options.target.as_str(), &bytes);
+    let response = match parsed {
+        Ok(Some(dataset)) => {
+            let metadata = dataset.metadata();
+            DataArtifactValidateResponse {
+                mode: "data-artifact-validate",
+                input: options.input_path.clone(),
+                language: options.target.as_str().to_string(),
+                valid: true,
+                kind: Some(metadata.kind),
+                schema_version: Some(metadata.schema_version),
+                dataset_language: Some(metadata.language),
+                entry_count: Some(metadata.entry_count),
+                error: None,
+            }
+        }
+        Ok(None) => DataArtifactValidateResponse {
+            mode: "data-artifact-validate",
+            input: options.input_path.clone(),
+            language: options.target.as_str().to_string(),
+            valid: false,
+            kind: None,
+            schema_version: None,
+            dataset_language: None,
+            entry_count: None,
+            error: Some(
+                "artifact is not a linguasteg lexicon dataset (expected kind 'linguasteg-lexicon-v1')"
+                    .to_string(),
+            ),
+        },
+        Err(reason) => DataArtifactValidateResponse {
+            mode: "data-artifact-validate",
+            input: options.input_path.clone(),
+            language: options.target.as_str().to_string(),
+            valid: false,
+            kind: Some("linguasteg-lexicon-v1".to_string()),
+            schema_version: None,
+            dataset_language: None,
+            entry_count: None,
+            error: Some(reason),
+        },
+    };
+
+    if matches!(options.format, OutputFormat::Json) {
+        let output = serde_json::to_string(&response).map_err(|error| {
+            CliError::internal(format!(
+                "failed to serialize data artifact validate response: {error}"
+            ))
+        })?;
+        println!("{output}");
+    } else {
+        println!("data artifact validate:");
+        println!("input: {}", response.input);
+        println!("language: {}", response.language);
+        println!("valid: {}", if response.valid { "yes" } else { "no" });
+        if let Some(kind) = &response.kind {
+            println!("kind: {kind}");
+        }
+        if let Some(schema_version) = response.schema_version {
+            println!("schema_version: {schema_version}");
+        }
+        if let Some(dataset_language) = &response.dataset_language {
+            println!("dataset_language: {dataset_language}");
+        }
+        if let Some(entry_count) = response.entry_count {
+            println!("entry_count: {entry_count}");
+        }
+        if let Some(error) = &response.error {
+            println!("error: {error}");
+        }
+    }
+
+    if response.valid {
+        Ok(())
+    } else {
+        let reason = response
+            .error
+            .unwrap_or_else(|| "artifact validation failed".to_string());
+        Err(CliError::config(format!(
+            "artifact validation failed: {reason}"
+        )))
     }
 }
 
