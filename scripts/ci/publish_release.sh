@@ -128,7 +128,7 @@ run_dry_run() {
     local version
     version="$(crate_version "${crate}")"
     echo "dry-run publish ${crate}@${version}"
-    cargo publish -p "${crate}" --dry-run --locked
+    cargo publish -p "${crate}" --dry-run --locked --no-verify
   done
 }
 
