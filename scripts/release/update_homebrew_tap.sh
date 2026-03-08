@@ -5,6 +5,7 @@ usage() {
   cat <<USAGE
 Usage: update_homebrew_tap.sh \
   --version <vX.Y.Z> \
+  --release-tag <tag> \
   --checksums <path/to/checksums.txt> \
   --source-repo <owner/repo> \
   --tap-repo <owner/homebrew-tap> \
@@ -13,6 +14,7 @@ USAGE
 }
 
 VERSION=""
+RELEASE_TAG=""
 CHECKSUMS_FILE=""
 SOURCE_REPO=""
 TAP_REPO=""
@@ -22,6 +24,10 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --version)
       VERSION="$2"
+      shift 2
+      ;;
+    --release-tag)
+      RELEASE_TAG="$2"
       shift 2
       ;;
     --checksums)
@@ -58,6 +64,10 @@ if [[ -z "$VERSION" || -z "$CHECKSUMS_FILE" || -z "$SOURCE_REPO" || -z "$TAP_REP
   exit 2
 fi
 
+if [[ -z "$RELEASE_TAG" ]]; then
+  RELEASE_TAG="linguasteg-${VERSION}"
+fi
+
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 RENDER_SCRIPT="${ROOT_DIR}/scripts/release/render_homebrew_formula.sh"
 if [[ ! -x "$RENDER_SCRIPT" ]]; then
@@ -76,6 +86,7 @@ mkdir -p "${TAP_DIR}/Formula"
 
 "$RENDER_SCRIPT" \
   --version "$VERSION" \
+  --release-tag "$RELEASE_TAG" \
   --repo "$SOURCE_REPO" \
   --checksums "$CHECKSUMS_FILE" \
   --output "${TAP_DIR}/Formula/lsteg.rb"
