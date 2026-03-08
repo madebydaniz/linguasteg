@@ -91,25 +91,12 @@ jobs:
       - build
 
     steps:
-      - name: Checkout release tag for xtask
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.inputs.release_tag || github.event.release.tag_name }}
-
       - name: Download all build artifacts
         uses: actions/download-artifact@v4
         with:
           pattern: lsteg-*
           path: dist
           merge-multiple: true
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: 1.85.0
-
-      - name: Rust cache
-        uses: Swatinem/rust-cache@v2
 
       - name: Generate checksums
         shell: bash
@@ -132,8 +119,16 @@ jobs:
             --bundle dist/checksums.txt.bundle \
             dist/checksums.txt
 
-      - name: Verify checksums signature via xtask
-        run: cargo run -q -p xtask -- verify-release --artifact dist/checksums.txt --bundle dist/checksums.txt.bundle --tag "${{ github.event.inputs.release_tag || github.event.release.tag_name }}"
+      - name: Verify checksums signature with cosign
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${{ github.event.inputs.release_tag || github.event.release.tag_name }}"
+          cosign verify-blob \
+            --bundle dist/checksums.txt.bundle \
+            --certificate-identity "https://github.com/${{ github.repository }}/.github/workflows/release-binaries.yml@refs/tags/${TAG}" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            dist/checksums.txt
 
       - name: Upload release assets
         uses: softprops/action-gh-release@v2
