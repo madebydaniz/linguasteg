@@ -21,12 +21,32 @@ concurrency:
 jobs:
   preflight:
     if: startsWith(github.event.inputs.release_tag || github.event.release.tag_name, 'linguasteg-v')
+    outputs:
+      checkout_tag: ${{ steps.refs.outputs.checkout_tag }}
+      semver_tag: ${{ steps.refs.outputs.semver_tag }}
     runs-on: ubuntu-latest
     steps:
+      - name: Resolve release refs
+        id: refs
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${{ github.event.inputs.release_tag || github.event.release.tag_name }}"
+          if [[ "${TAG}" =~ ^linguasteg-v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+            echo "checkout_tag=${TAG}" >> "$GITHUB_OUTPUT"
+            echo "semver_tag=v${BASH_REMATCH[1]}" >> "$GITHUB_OUTPUT"
+          elif [[ "${TAG}" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+            echo "checkout_tag=${TAG}" >> "$GITHUB_OUTPUT"
+            echo "semver_tag=${TAG}" >> "$GITHUB_OUTPUT"
+          else
+            echo "::error::unsupported release tag '${TAG}'"
+            exit 1
+          fi
+
       - name: Checkout release tag
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.inputs.release_tag || github.event.release.tag_name }}
+          ref: ${{ steps.refs.outputs.checkout_tag }}
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -37,7 +57,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Publish preflight
-        run: ./scripts/ci/publish_release.sh preflight "${{ github.event.inputs.release_tag || github.event.release.tag_name }}"
+        run: ./scripts/ci/publish_release.sh preflight "${{ steps.refs.outputs.semver_tag }}"
 
   dry-run:
     if: startsWith(github.event.inputs.release_tag || github.event.release.tag_name, 'linguasteg-v')
@@ -48,7 +68,7 @@ jobs:
       - name: Checkout release tag
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.inputs.release_tag || github.event.release.tag_name }}
+          ref: ${{ needs.preflight.outputs.checkout_tag }}
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -73,7 +93,7 @@ jobs:
       - name: Checkout release tag
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.inputs.release_tag || github.event.release.tag_name }}
+          ref: ${{ needs.preflight.outputs.checkout_tag }}
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
