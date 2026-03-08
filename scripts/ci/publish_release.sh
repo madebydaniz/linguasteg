@@ -127,8 +127,8 @@ run_dry_run() {
   for crate in "${CRATES[@]}"; do
     local version
     version="$(crate_version "${crate}")"
-    echo "dry-run publish ${crate}@${version}"
-    cargo publish -p "${crate}" --dry-run --locked --no-verify
+    echo "dry-run package ${crate}@${version}"
+    cargo package -p "${crate}" --locked --no-verify
   done
 }
 
