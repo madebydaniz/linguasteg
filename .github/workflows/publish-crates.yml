@@ -64,7 +64,8 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Publish preflight
-        run: cd release-src && ../tooling/scripts/ci/publish_release.sh preflight "${{ steps.refs.outputs.semver_tag }}"
+        working-directory: ${{ github.workspace }}/release-src
+        run: $GITHUB_WORKSPACE/tooling/scripts/ci/publish_release.sh preflight "${{ steps.refs.outputs.semver_tag }}"
 
   dry-run:
     if: startsWith(github.event.inputs.release_tag || github.event.release.tag_name, 'linguasteg-v')
@@ -93,7 +94,8 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Publish dry-run
-        run: cd release-src && ../tooling/scripts/ci/publish_release.sh dry-run
+        working-directory: ${{ github.workspace }}/release-src
+        run: $GITHUB_WORKSPACE/tooling/scripts/ci/publish_release.sh dry-run
 
   publish:
     if: startsWith(github.event.inputs.release_tag || github.event.release.tag_name, 'linguasteg-v')
@@ -125,4 +127,5 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Publish workspace crates
-        run: cd release-src && ../tooling/scripts/ci/publish_release.sh publish
+        working-directory: ${{ github.workspace }}/release-src
+        run: $GITHUB_WORKSPACE/tooling/scripts/ci/publish_release.sh publish
