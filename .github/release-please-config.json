@@ -69,27 +69,32 @@
     "linguasteg": {
       "component": "linguasteg",
       "release-type": "rust",
-      "package-name": "linguasteg"
+      "package-name": "linguasteg",
+      "changelog-path": "linguasteg/CHANGELOG.md"
     },
     "linguasteg-core": {
       "component": "linguasteg-core",
       "release-type": "rust",
-      "package-name": "linguasteg-core"
+      "package-name": "linguasteg-core",
+      "changelog-path": "linguasteg-core/CHANGELOG.md"
     },
     "linguasteg-models": {
       "component": "linguasteg-models",
       "release-type": "rust",
-      "package-name": "linguasteg-models"
+      "package-name": "linguasteg-models",
+      "changelog-path": "linguasteg-models/CHANGELOG.md"
     },
     "linguasteg-cli": {
       "component": "linguasteg-cli",
       "release-type": "rust",
-      "package-name": "linguasteg-cli"
+      "package-name": "linguasteg-cli",
+      "changelog-path": "linguasteg-cli/CHANGELOG.md"
     },
     "linguasteg-eval": {
       "component": "linguasteg-eval",
       "release-type": "rust",
-      "package-name": "linguasteg-eval"
+      "package-name": "linguasteg-eval",
+      "changelog-path": "linguasteg-eval/CHANGELOG.md"
     }
   }
 }

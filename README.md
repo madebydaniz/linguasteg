@@ -41,7 +41,7 @@ curl -fsSL https://raw.githubusercontent.com/madebydaniz/linguasteg/main/scripts
 Install a specific version:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/madebydaniz/linguasteg/main/scripts/install.sh | bash -s -- --version v0.1.0
+curl -fsSL https://raw.githubusercontent.com/madebydaniz/linguasteg/main/scripts/install.sh | bash -s -- --version v0.2.0
 ```
 
 Note:
@@ -89,6 +89,29 @@ lsteg decode --lang auto --text-input --trace "<stego text>" --secret "test-secr
 | `data update`                        | `lsteg data update --lang it --download`                             |
 | `data verify`                        | `lsteg data verify --lang en --source en-wordnet-princeton`          |
 
+## Release Signature Verification (Cosign)
+
+Every GitHub Release publishes:
+
+- `checksums.txt`
+- `checksums.txt.sig`
+- `checksums.txt.pem`
+- `checksums.txt.bundle`
+
+Example verification:
+
+```bash
+VERSION=v0.2.0
+curl -fsSLO "https://github.com/madebydaniz/linguasteg/releases/download/${VERSION}/checksums.txt"
+curl -fsSLO "https://github.com/madebydaniz/linguasteg/releases/download/${VERSION}/checksums.txt.bundle"
+
+cosign verify-blob \
+  --bundle checksums.txt.bundle \
+  --certificate-identity-regexp "^https://github.com/madebydaniz/linguasteg/\\.github/workflows/release-binaries\\.yml@refs/(heads/main|tags/.+)$" \
+  --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+  checksums.txt
+```
+
 ## Supported Languages
 
 | Code | Language | Direction |
@@ -108,7 +131,11 @@ Licensed under the **MIT License** - see [LICENSE](LICENSE) file for details.
 
 ## Changelog
 
-See [CHANGELOG.md](CHANGELOG.md) for version history and breaking changes.
+- [`linguasteg/CHANGELOG.md`](linguasteg/CHANGELOG.md)
+- [`linguasteg-cli/CHANGELOG.md`](linguasteg-cli/CHANGELOG.md)
+- [`linguasteg-core/CHANGELOG.md`](linguasteg-core/CHANGELOG.md)
+- [`linguasteg-models/CHANGELOG.md`](linguasteg-models/CHANGELOG.md)
+- [`linguasteg-eval/CHANGELOG.md`](linguasteg-eval/CHANGELOG.md)
 
 ## Authors
 
