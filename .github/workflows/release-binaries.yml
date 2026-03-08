@@ -15,6 +15,7 @@ concurrency:
 
 jobs:
   build:
+    if: startsWith(github.event.release.tag_name, 'linguasteg-cli-v')
     name: build-${{ matrix.target }}
     runs-on: ${{ matrix.os }}
     strategy:
@@ -34,6 +35,19 @@ jobs:
         with:
           ref: ${{ github.event.release.tag_name }}
 
+      - name: Derive CLI version tag
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${{ github.event.release.tag_name }}"
+          if [[ "${TAG}" =~ ^linguasteg-cli-v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+            echo "version_tag=v${BASH_REMATCH[1]}" >> "$GITHUB_OUTPUT"
+          else
+            echo "::error::unexpected release tag '${TAG}' for release-binaries"
+            exit 1
+          fi
+
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -50,7 +64,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          TAG="${{ github.event.release.tag_name }}"
+          TAG="${{ steps.version.outputs.version_tag }}"
           TARGET="${{ matrix.target }}"
           ASSET="lsteg-${TAG}-${TARGET}.tar.gz"
           mkdir -p dist
@@ -64,6 +78,7 @@ jobs:
           if-no-files-found: error
 
   sign-and-publish:
+    if: startsWith(github.event.release.tag_name, 'linguasteg-cli-v')
     name: sign-and-publish
     runs-on: ubuntu-latest
     needs:
@@ -122,12 +137,26 @@ jobs:
             dist/checksums.txt.bundle
 
   update-homebrew-tap:
+    if: startsWith(github.event.release.tag_name, 'linguasteg-cli-v')
     name: update-homebrew-tap
     runs-on: ubuntu-latest
     needs:
       - sign-and-publish
 
     steps:
+      - name: Derive CLI version tag
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${{ github.event.release.tag_name }}"
+          if [[ "${TAG}" =~ ^linguasteg-cli-v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+            echo "version_tag=v${BASH_REMATCH[1]}" >> "$GITHUB_OUTPUT"
+          else
+            echo "::error::unexpected release tag '${TAG}' for homebrew update"
+            exit 1
+          fi
+
       - name: Evaluate tap update gate
         id: tap-gate
         env:
@@ -173,7 +202,7 @@ jobs:
           set -euo pipefail
           TAP_REPO="${HOMEBREW_TAP_REPO:-madebydaniz/homebrew-tap}"
           ./scripts/release/update_homebrew_tap.sh \
-            --version "${{ github.event.release.tag_name }}" \
+            --version "${{ steps.version.outputs.version_tag }}" \
             --checksums checksums.txt \
             --source-repo "${{ github.repository }}" \
             --tap-repo "${TAP_REPO}" \

@@ -14,6 +14,7 @@ concurrency:
 
 jobs:
   preflight:
+    if: startsWith(github.event.release.tag_name, 'linguasteg-v')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout release tag
@@ -33,6 +34,7 @@ jobs:
         run: ./scripts/ci/publish_release.sh preflight "${{ github.event.release.tag_name }}"
 
   dry-run:
+    if: startsWith(github.event.release.tag_name, 'linguasteg-v')
     runs-on: ubuntu-latest
     needs:
       - preflight
@@ -54,6 +56,7 @@ jobs:
         run: ./scripts/ci/publish_release.sh dry-run
 
   publish:
+    if: startsWith(github.event.release.tag_name, 'linguasteg-v')
     runs-on: ubuntu-latest
     needs:
       - preflight

@@ -44,9 +44,13 @@ assert_release_tag_matches_workspace_version() {
     return 0
   fi
 
-  local normalized="${release_tag#v}"
-  if [[ ! "${normalized}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-    echo "::error::release tag '${release_tag}' must match v<major>.<minor>.<patch>"
+  local normalized=""
+  if [[ "${release_tag}" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+    normalized="${BASH_REMATCH[1]}"
+  elif [[ "${release_tag}" =~ ^linguasteg-v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+    normalized="${BASH_REMATCH[1]}"
+  else
+    echo "::error::release tag '${release_tag}' must match v<major>.<minor>.<patch> or linguasteg-v<major>.<minor>.<patch>"
     exit 1
   fi
 
