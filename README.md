@@ -32,7 +32,7 @@ brew update
 brew upgrade lsteg
 ```
 
-### Install script (GitHub Release assets)
+### Install script
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/madebydaniz/linguasteg/main/scripts/install.sh | bash
@@ -90,6 +90,8 @@ lsteg decode --lang auto --text-input --trace "<stego text>" --secret "test-secr
 | `data verify`                        | `lsteg data verify --lang en --source en-wordnet-princeton`          |
 
 ## Release Signature Verification (Cosign)
+
+Release integrity is enforced with keyless Cosign signatures over `checksums.txt`, and those checksums are used to verify every published binary archive.
 
 Every GitHub Release publishes:
 
