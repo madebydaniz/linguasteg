@@ -4,6 +4,15 @@ on:
   release:
     types:
       - published
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Release tag to build assets for (for example linguasteg-v0.2.0)
+        required: true
+        type: string
+
+env:
+  RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.event.release.tag_name }}
 
 permissions:
   contents: write
@@ -15,7 +24,7 @@ concurrency:
 
 jobs:
   build:
-    if: startsWith(github.event.release.tag_name, 'linguasteg-cli-v')
+    if: startsWith(env.RELEASE_TAG, 'linguasteg-v')
     name: build-${{ matrix.target }}
     runs-on: ${{ matrix.os }}
     strategy:
@@ -33,15 +42,15 @@ jobs:
       - name: Checkout release tag
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.release.tag_name }}
+          ref: ${{ env.RELEASE_TAG }}
 
       - name: Derive CLI version tag
         id: version
         shell: bash
         run: |
           set -euo pipefail
-          TAG="${{ github.event.release.tag_name }}"
-          if [[ "${TAG}" =~ ^linguasteg-cli-v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+          TAG="${{ env.RELEASE_TAG }}"
+          if [[ "${TAG}" =~ ^linguasteg-v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
             echo "version_tag=v${BASH_REMATCH[1]}" >> "$GITHUB_OUTPUT"
           else
             echo "::error::unexpected release tag '${TAG}' for release-binaries"
@@ -78,7 +87,7 @@ jobs:
           if-no-files-found: error
 
   sign-and-publish:
-    if: startsWith(github.event.release.tag_name, 'linguasteg-cli-v')
+    if: startsWith(env.RELEASE_TAG, 'linguasteg-v')
     name: sign-and-publish
     runs-on: ubuntu-latest
     needs:
@@ -122,12 +131,12 @@ jobs:
             dist/checksums.txt
 
       - name: Verify checksums signature via xtask
-        run: cargo run -q -p xtask -- verify-release --artifact dist/checksums.txt --bundle dist/checksums.txt.bundle --tag "${{ github.event.release.tag_name }}"
+        run: cargo run -q -p xtask -- verify-release --artifact dist/checksums.txt --bundle dist/checksums.txt.bundle --tag "${{ env.RELEASE_TAG }}"
 
       - name: Upload release assets
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.event.release.tag_name }}
+          tag_name: ${{ env.RELEASE_TAG }}
           overwrite_files: true
           files: |
             dist/*.tar.gz
@@ -137,7 +146,7 @@ jobs:
             dist/checksums.txt.bundle
 
   update-homebrew-tap:
-    if: startsWith(github.event.release.tag_name, 'linguasteg-cli-v')
+    if: startsWith(env.RELEASE_TAG, 'linguasteg-v')
     name: update-homebrew-tap
     runs-on: ubuntu-latest
     needs:
@@ -149,8 +158,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          TAG="${{ github.event.release.tag_name }}"
-          if [[ "${TAG}" =~ ^linguasteg-cli-v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+          TAG="${{ env.RELEASE_TAG }}"
+          if [[ "${TAG}" =~ ^linguasteg-v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
             echo "version_tag=v${BASH_REMATCH[1]}" >> "$GITHUB_OUTPUT"
           else
             echo "::error::unexpected release tag '${TAG}' for homebrew update"
@@ -175,7 +184,7 @@ jobs:
         if: steps.tap-gate.outputs.enabled == 'true'
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.release.tag_name }}
+          ref: ${{ env.RELEASE_TAG }}
 
       - name: Configure git identity
         if: steps.tap-gate.outputs.enabled == 'true'
@@ -188,7 +197,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          TAG="${{ github.event.release.tag_name }}"
+          TAG="${{ env.RELEASE_TAG }}"
           REPO="${{ github.repository }}"
           curl -fsSL "https://github.com/${REPO}/releases/download/${TAG}/checksums.txt" -o checksums.txt
 
