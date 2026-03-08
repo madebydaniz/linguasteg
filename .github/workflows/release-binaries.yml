@@ -11,9 +11,6 @@ on:
         required: true
         type: string
 
-env:
-  RELEASE_TAG: ${{ github.event.inputs.release_tag || github.event.release.tag_name }}
-
 permissions:
   contents: write
   id-token: write
@@ -24,7 +21,7 @@ concurrency:
 
 jobs:
   build:
-    if: startsWith(env.RELEASE_TAG, 'linguasteg-v')
+    if: startsWith(github.event.inputs.release_tag || github.event.release.tag_name, 'linguasteg-v')
     name: build-${{ matrix.target }}
     runs-on: ${{ matrix.os }}
     strategy:
@@ -42,14 +39,14 @@ jobs:
       - name: Checkout release tag
         uses: actions/checkout@v4
         with:
-          ref: ${{ env.RELEASE_TAG }}
+          ref: ${{ github.event.inputs.release_tag || github.event.release.tag_name }}
 
       - name: Derive CLI version tag
         id: version
         shell: bash
         run: |
           set -euo pipefail
-          TAG="${{ env.RELEASE_TAG }}"
+          TAG="${{ github.event.inputs.release_tag || github.event.release.tag_name }}"
           if [[ "${TAG}" =~ ^linguasteg-v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
             echo "version_tag=v${BASH_REMATCH[1]}" >> "$GITHUB_OUTPUT"
           else
@@ -87,7 +84,7 @@ jobs:
           if-no-files-found: error
 
   sign-and-publish:
-    if: startsWith(env.RELEASE_TAG, 'linguasteg-v')
+    if: startsWith(github.event.inputs.release_tag || github.event.release.tag_name, 'linguasteg-v')
     name: sign-and-publish
     runs-on: ubuntu-latest
     needs:
@@ -131,12 +128,12 @@ jobs:
             dist/checksums.txt
 
       - name: Verify checksums signature via xtask
-        run: cargo run -q -p xtask -- verify-release --artifact dist/checksums.txt --bundle dist/checksums.txt.bundle --tag "${{ env.RELEASE_TAG }}"
+        run: cargo run -q -p xtask -- verify-release --artifact dist/checksums.txt --bundle dist/checksums.txt.bundle --tag "${{ github.event.inputs.release_tag || github.event.release.tag_name }}"
 
       - name: Upload release assets
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ env.RELEASE_TAG }}
+          tag_name: ${{ github.event.inputs.release_tag || github.event.release.tag_name }}
           overwrite_files: true
           files: |
             dist/*.tar.gz
@@ -146,7 +143,7 @@ jobs:
             dist/checksums.txt.bundle
 
   update-homebrew-tap:
-    if: startsWith(env.RELEASE_TAG, 'linguasteg-v')
+    if: startsWith(github.event.inputs.release_tag || github.event.release.tag_name, 'linguasteg-v')
     name: update-homebrew-tap
     runs-on: ubuntu-latest
     needs:
@@ -158,7 +155,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          TAG="${{ env.RELEASE_TAG }}"
+          TAG="${{ github.event.inputs.release_tag || github.event.release.tag_name }}"
           if [[ "${TAG}" =~ ^linguasteg-v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
             echo "version_tag=v${BASH_REMATCH[1]}" >> "$GITHUB_OUTPUT"
           else
@@ -184,7 +181,7 @@ jobs:
         if: steps.tap-gate.outputs.enabled == 'true'
         uses: actions/checkout@v4
         with:
-          ref: ${{ env.RELEASE_TAG }}
+          ref: ${{ github.event.inputs.release_tag || github.event.release.tag_name }}
 
       - name: Configure git identity
         if: steps.tap-gate.outputs.enabled == 'true'
@@ -197,7 +194,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          TAG="${{ env.RELEASE_TAG }}"
+          TAG="${{ github.event.inputs.release_tag || github.event.release.tag_name }}"
           REPO="${{ github.repository }}"
           curl -fsSL "https://github.com/${REPO}/releases/download/${TAG}/checksums.txt" -o checksums.txt
 
