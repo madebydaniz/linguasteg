@@ -23,8 +23,3 @@ unsafe_code = "warn"
 [workspace.lints.clippy]
 all = "warn"
 pedantic = "warn"
-
-[workspace.dependencies]
-linguasteg-core = { path = "linguasteg-core", version = "0.1.0" }
-linguasteg-models = { path = "linguasteg-models", version = "0.1.0" }
-linguasteg-eval = { path = "linguasteg-eval", version = "0.1.0" }

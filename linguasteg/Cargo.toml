@@ -11,5 +11,5 @@ description = "Public facade crate for the LinguaSteg workspace"
 workspace = true
 
 [dependencies]
-linguasteg-core.workspace = true
-linguasteg-models.workspace = true
+linguasteg-core = { path = "../linguasteg-core", version = "0.1.0" }
+linguasteg-models = { path = "../linguasteg-models", version = "0.1.0" }

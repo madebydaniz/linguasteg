@@ -11,4 +11,4 @@ description = "Model adapters and provider integrations for LinguaSteg"
 workspace = true
 
 [dependencies]
-linguasteg-core.workspace = true
+linguasteg-core = { path = "../linguasteg-core", version = "0.1.0" }
