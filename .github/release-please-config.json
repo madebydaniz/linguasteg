@@ -6,41 +6,63 @@
   "include-component-in-tag": true,
   "pull-request-header": "A new version is ready to be released 🚀",
   "bump-minor-pre-major": true,
-  "plugins": [
-    "cargo-workspace"
-  ],
+  "plugins": ["cargo-workspace"],
   "changelog-sections": [
     {
       "type": "feat",
-      "section": "Features"
+      "section": "✨ Features"
     },
     {
       "type": "fix",
-      "section": "Bug Fixes"
+      "section": "🐛 Bug Fixes"
     },
     {
       "type": "perf",
-      "section": "Performance"
+      "section": "⚡ Performance"
     },
     {
       "type": "refactor",
-      "section": "Refactoring"
+      "section": "🧱 Refactoring"
+    },
+    {
+      "type": "style",
+      "section": "🎨 Styles"
+    },
+    {
+      "type": "test",
+      "section": "✅ Tests"
+    },
+    {
+      "type": "build",
+      "section": "🏗️ Build System"
     },
     {
       "type": "deps",
-      "section": "Dependencies"
+      "section": "⬆️ Dependencies"
     },
     {
       "type": "docs",
-      "section": "Documentation"
+      "section": "📜 Documentation"
     },
     {
       "type": "ci",
-      "section": "CI/CD"
+      "section": "♻️ CI/CD"
     },
     {
       "type": "chore",
-      "section": "Miscellaneous"
+      "section": "👽 Miscellaneous"
+    },
+    {
+      "type": "release",
+      "section": "🚀 Releases"
+    },
+    {
+      "type": "revert",
+      "section": "⏪ Reverts"
+    },
+    {
+      "type": "security",
+      "section": "🔐 Security"
     }
   ],
   "packages": {
