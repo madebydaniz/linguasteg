@@ -1,0 +1,1 @@
+error [LSTEG-CLI-TRC-001]: validation failed: frame 02 starts at bit 19 but expected 18

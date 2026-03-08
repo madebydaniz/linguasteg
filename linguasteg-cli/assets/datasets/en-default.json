@@ -1,0 +1,22 @@
+{
+  "kind": "linguasteg-lexicon-v1",
+  "schema_version": 1,
+  "language": "en",
+  "entries": [
+    {
+      "slot": "object",
+      "canonical": "letter",
+      "variants": ["missive", "epistle"]
+    },
+    {
+      "slot": "adjective",
+      "canonical": "quiet",
+      "variants": ["concise"]
+    },
+    {
+      "slot": "verb",
+      "canonical": "writes",
+      "variants": ["composes"]
+    }
+  ]
+}

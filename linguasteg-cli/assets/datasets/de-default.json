@@ -1,0 +1,22 @@
+{
+  "kind": "linguasteg-lexicon-v1",
+  "schema_version": 1,
+  "language": "de",
+  "entries": [
+    {
+      "slot": "object",
+      "canonical": "brief",
+      "variants": ["schreiben", "botschaft"]
+    },
+    {
+      "slot": "adjective",
+      "canonical": "klare",
+      "variants": ["helle"]
+    },
+    {
+      "slot": "verb",
+      "canonical": "schreibt",
+      "variants": ["verfasst"]
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "kind": "linguasteg-lexicon-v1",
+  "schema_version": 1,
+  "language": "fa",
+  "entries": [
+    {
+      "slot": "object",
+      "canonical": "نامه",
+      "variants": ["مکتوب"]
+    },
+    {
+      "slot": "adjective",
+      "canonical": "زیبا",
+      "variants": ["خوش"]
+    },
+    {
+      "slot": "verb",
+      "canonical": "نوشت",
+      "variants": ["نگاشت"]
+    }
+  ]
+}

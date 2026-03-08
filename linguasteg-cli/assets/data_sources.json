@@ -1,0 +1,75 @@
+{
+  "schema_version": 1,
+  "sources": [
+    {
+      "id": "en-wordnet-princeton",
+      "language": "en",
+      "source_url": "https://wordnet.princeton.edu/",
+      "artifact_url": "embedded://en-default",
+      "license": "Princeton WordNet License",
+      "version": "3.1",
+      "checksum_sha256": null,
+      "recommended": true
+    },
+    {
+      "id": "en-wordlist-wordnik",
+      "language": "en",
+      "source_url": "https://github.com/wordnik/wordlist",
+      "artifact_url": "embedded://en-default",
+      "license": "MIT",
+      "version": "main",
+      "checksum_sha256": null,
+      "recommended": false
+    },
+    {
+      "id": "fa-wordlist-cc0",
+      "language": "fa",
+      "source_url": "https://github.com/jadijadi/persianwords",
+      "artifact_url": "embedded://fa-default",
+      "license": "CC0-1.0",
+      "version": "main",
+      "checksum_sha256": null,
+      "recommended": true
+    },
+    {
+      "id": "fa-wordlist-mit",
+      "language": "fa",
+      "source_url": "https://github.com/mvalipour/word-list-fa",
+      "artifact_url": "embedded://fa-default",
+      "license": "MIT",
+      "version": "main",
+      "checksum_sha256": null,
+      "recommended": false
+    },
+    {
+      "id": "fa-kaikki-wiktionary",
+      "language": "fa",
+      "source_url": "https://kaikki.org/dictionary/Persian/index.html",
+      "artifact_url": "embedded://fa-default",
+      "license": "CC-BY-SA-3.0 + GFDL",
+      "version": "latest",
+      "checksum_sha256": null,
+      "recommended": false
+    },
+    {
+      "id": "de-kaikki-wiktionary",
+      "language": "de",
+      "source_url": "https://kaikki.org/dictionary/German/index.html",
+      "artifact_url": "embedded://de-default",
+      "license": "CC-BY-SA-3.0 + GFDL",
+      "version": "latest",
+      "checksum_sha256": null,
+      "recommended": true
+    },
+    {
+      "id": "it-kaikki-wiktionary",
+      "language": "it",
+      "source_url": "https://kaikki.org/dictionary/Italian/index.html",
+      "artifact_url": "embedded://it-default",
+      "license": "CC-BY-SA-3.0 + GFDL",
+      "version": "latest",
+      "checksum_sha256": null,
+      "recommended": true
+    }
+  ]
+}

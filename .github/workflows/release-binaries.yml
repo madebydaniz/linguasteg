@@ -1,0 +1,180 @@
+name: release-binaries
+
+on:
+  release:
+    types:
+      - published
+
+permissions:
+  contents: write
+  id-token: write
+
+concurrency:
+  group: release-binaries-${{ github.event.release.tag_name }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: build-${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          - os: macos-13
+            target: x86_64-apple-darwin
+          - os: macos-14
+            target: aarch64-apple-darwin
+
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.85.0
+          targets: ${{ matrix.target }}
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build lsteg
+        run: cargo build --release --locked -p linguasteg-cli --target ${{ matrix.target }}
+
+      - name: Package archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${{ github.event.release.tag_name }}"
+          TARGET="${{ matrix.target }}"
+          ASSET="lsteg-${TAG}-${TARGET}.tar.gz"
+          mkdir -p dist
+          tar -C "target/${TARGET}/release" -czf "dist/${ASSET}" lsteg
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lsteg-${{ matrix.target }}
+          path: dist/*.tar.gz
+          if-no-files-found: error
+
+  sign-and-publish:
+    name: sign-and-publish
+    runs-on: ubuntu-latest
+    needs:
+      - build
+
+    steps:
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: lsteg-*
+          path: dist
+          merge-multiple: true
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.85.0
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Generate checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd dist
+          sha256sum *.tar.gz > checksums.txt
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Sign checksums file (keyless)
+        shell: bash
+        run: |
+          set -euo pipefail
+          cosign sign-blob \
+            --yes \
+            --output-signature dist/checksums.txt.sig \
+            --output-certificate dist/checksums.txt.pem \
+            --bundle dist/checksums.txt.bundle \
+            dist/checksums.txt
+
+      - name: Verify checksums signature via xtask
+        run: cargo run -q -p xtask -- verify-release --artifact dist/checksums.txt --bundle dist/checksums.txt.bundle --tag "${{ github.event.release.tag_name }}"
+
+      - name: Upload release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.release.tag_name }}
+          overwrite_files: true
+          files: |
+            dist/*.tar.gz
+            dist/checksums.txt
+            dist/checksums.txt.sig
+            dist/checksums.txt.pem
+            dist/checksums.txt.bundle
+
+  update-homebrew-tap:
+    name: update-homebrew-tap
+    runs-on: ubuntu-latest
+    needs:
+      - sign-and-publish
+
+    steps:
+      - name: Evaluate tap update gate
+        id: tap-gate
+        env:
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${HOMEBREW_TAP_TOKEN}" ]]; then
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "skip: HOMEBREW_TAP_TOKEN is not set"
+          else
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout release tag
+        if: steps.tap-gate.outputs.enabled == 'true'
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
+
+      - name: Configure git identity
+        if: steps.tap-gate.outputs.enabled == 'true'
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Download release checksums
+        if: steps.tap-gate.outputs.enabled == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${{ github.event.release.tag_name }}"
+          REPO="${{ github.repository }}"
+          curl -fsSL "https://github.com/${REPO}/releases/download/${TAG}/checksums.txt" -o checksums.txt
+
+      - name: Update tap formula
+        if: steps.tap-gate.outputs.enabled == 'true'
+        env:
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          HOMEBREW_TAP_REPO: ${{ vars.HOMEBREW_TAP_REPO }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAP_REPO="${HOMEBREW_TAP_REPO:-madebydaniz/homebrew-tap}"
+          ./scripts/release/update_homebrew_tap.sh \
+            --version "${{ github.event.release.tag_name }}" \
+            --checksums checksums.txt \
+            --source-repo "${{ github.repository }}" \
+            --tap-repo "${TAP_REPO}" \
+            --token "${HOMEBREW_TAP_TOKEN}"

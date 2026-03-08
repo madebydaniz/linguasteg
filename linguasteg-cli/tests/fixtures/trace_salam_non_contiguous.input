@@ -1,0 +1,43 @@
+Farsi prototype encode
+input text: salam
+payload bytes: 5
+encoded bytes (with length prefix): 76
+frames: 32
+padding bits: 16
+
+frame 01 [fa-basic-sov] bits=0..18 values=subject:0,object:1,adjective:1,verb:9 => مرد نامه قدیمی را خرید
+frame 02 [fa-time-location-sov] bits=19..40 values=subject:6,time:1,location:2,object:13,verb:10 => دوست دیروز در بازار نامه را نوشت
+frame 03 [fa-basic-sov] bits=39..57 values=subject:4,object:14,adjective:0,verb:2 => پژوهشگر چای تازه را خورد
+frame 04 [fa-time-location-sov] bits=57..78 values=subject:0,time:2,location:0,object:2,verb:4 => مرد صبح در خانه چای را خرید
+frame 05 [fa-basic-sov] bits=78..96 values=subject:0,object:24,adjective:0,verb:0 => مرد کتاب زیبا را خرید
+frame 06 [fa-time-location-sov] bits=96..117 values=subject:0,time:0,location:0,object:0,verb:2 => مرد امروز در خانه کتاب را دید
+frame 07 [fa-basic-sov] bits=117..135 values=subject:20,object:5,adjective:4,verb:28 => پژوهشگر عکس زیبا را نوشت
+frame 08 [fa-time-location-sov] bits=135..156 values=subject:18,time:5,location:7,object:22,verb:12 => دانشجو سحر در آشپزخانه گل را خرید
+frame 09 [fa-basic-sov] bits=156..174 values=subject:17,object:24,adjective:1,verb:12 => زن کتاب قدیمی را خرید
+frame 10 [fa-time-location-sov] bits=174..195 values=subject:16,time:7,location:5,object:25,verb:24 => مرد فردا در پارک نامه را خرید
+frame 11 [fa-basic-sov] bits=195..213 values=subject:3,object:25,adjective:3,verb:14 => نویسنده نامه قدیمی را دید
+frame 12 [fa-time-location-sov] bits=213..234 values=subject:18,time:4,location:1,object:9,verb:6 => دانشجو شب در کتابخانه غذا را خرید
+frame 13 [fa-basic-sov] bits=234..252 values=subject:25,object:12,adjective:5,verb:23 => زن کتاب قدیمی را دید
+frame 14 [fa-time-location-sov] bits=252..273 values=subject:31,time:7,location:7,object:23,verb:27 => هنرمند فردا در آشپزخانه عکس را خرید
+frame 15 [fa-basic-sov] bits=273..291 values=subject:16,object:16,adjective:7,verb:11 => مرد گل تازه را دید
+frame 16 [fa-time-location-sov] bits=291..312 values=subject:7,time:2,location:0,object:17,verb:21 => هنرمند صبح در خانه عکس را خرید
+frame 17 [fa-basic-sov] bits=312..330 values=subject:30,object:18,adjective:0,verb:19 => دوست کتاب زیبا را نوشت
+frame 18 [fa-time-location-sov] bits=330..351 values=subject:30,time:2,location:3,object:15,verb:23 => دوست صبح در دانشگاه غذا را خورد
+frame 19 [fa-basic-sov] bits=351..369 values=subject:16,object:23,adjective:4,verb:8 => مرد عکس زیبا را دید
+frame 20 [fa-time-location-sov] bits=369..390 values=subject:9,time:7,location:4,object:29,verb:31 => زن فردا در باغ عکس را نوشت
+frame 21 [fa-basic-sov] bits=390..408 values=subject:9,object:12,adjective:5,verb:19 => زن کتاب قدیمی را نوشت
+frame 22 [fa-time-location-sov] bits=408..429 values=subject:26,time:7,location:2,object:22,verb:4 => دانشجو فردا در بازار گل را خرید
+frame 23 [fa-basic-sov] bits=429..447 values=subject:25,object:15,adjective:2,verb:12 => زن غذا تازه را خرید
+frame 24 [fa-time-location-sov] bits=447..468 values=subject:26,time:7,location:0,object:21,verb:19 => دانشجو فردا در خانه غذا را دید
+frame 25 [fa-basic-sov] bits=468..486 values=subject:3,object:1,adjective:3,verb:27 => نویسنده نامه قدیمی را خرید
+frame 26 [fa-time-location-sov] bits=486..507 values=subject:16,time:2,location:7,object:20,verb:5 => مرد صبح در آشپزخانه چای را دید
+frame 27 [fa-basic-sov] bits=507..525 values=subject:10,object:16,adjective:2,verb:18 => دانشجو گل زیبا را خرید
+frame 28 [fa-time-location-sov] bits=525..546 values=subject:0,time:4,location:2,object:4,verb:0 => مرد شب در بازار گل را خرید
+frame 29 [fa-basic-sov] bits=546..564 values=subject:14,object:21,adjective:4,verb:13 => دوست غذا تازه را دید
+frame 30 [fa-time-location-sov] bits=564..585 values=subject:2,time:3,location:0,object:21,verb:31 => دانشجو عصر در خانه غذا را دید
+frame 31 [fa-basic-sov] bits=585..603 values=subject:9,object:26,adjective:4,verb:26 => زن چای تازه را خورد
+frame 32 [fa-time-location-sov] bits=603..608 values=subject:12,time:0,location:0,object:0,verb:0 => پژوهشگر امروز در خانه کتاب را خرید
+
+final prototype text:
+مرد نامه قدیمی را خرید. دوست دیروز در بازار نامه را نوشت. پژوهشگر چای تازه را خورد. مرد صبح در خانه چای را خرید. مرد کتاب زیبا را خرید. مرد امروز در خانه کتاب را دید. پژوهشگر عکس زیبا را نوشت. دانشجو سحر در آشپزخانه گل را خرید. زن کتاب قدیمی را خرید. مرد فردا در پارک نامه را خرید. نویسنده نامه قدیمی را دید. دانشجو شب در کتابخانه غذا را خرید. زن کتاب قدیمی را دید. هنرمند فردا در آشپزخانه عکس را خرید. مرد گل تازه را دید. هنرمند صبح در خانه عکس را خرید. دوست کتاب زیبا را نوشت. دوست صبح در دانشگاه غذا را خورد. مرد عکس زیبا را دید. زن فردا در باغ عکس را نوشت. زن کتاب قدیمی را نوشت. دانشجو فردا در بازار گل را خرید. زن غذا تازه را خرید. دانشجو فردا در خانه غذا را دید. نویسنده نامه قدیمی را خرید. مرد صبح در آشپزخانه چای را دید. دانشجو گل زیبا را خرید. مرد شب در بازار گل را خرید. دوست غذا تازه را دید. دانشجو عصر در خانه غذا را دید. زن چای تازه را خورد. پژوهشگر امروز در خانه کتاب را خرید.
+gateway response: stub:encode:fa:symbolic-stub:salam

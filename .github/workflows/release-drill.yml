@@ -1,0 +1,38 @@
+name: release-drill
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Git ref to run the drill against"
+        required: false
+        default: "develop"
+  schedule:
+    - cron: "30 4 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-drill-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  release-drill:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.ref || github.ref }}
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.85.0
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Release drill (preflight + dry-run)
+        run: ./scripts/ci/release_drill.sh full
