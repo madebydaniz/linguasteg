@@ -5,6 +5,7 @@ usage() {
   cat <<USAGE
 Usage: render_homebrew_formula.sh \
   --version <vX.Y.Z> \
+  --release-tag <tag> \
   --repo <owner/repo> \
   --checksums <path/to/checksums.txt> \
   --output <path/to/lsteg.rb>
@@ -12,6 +13,7 @@ USAGE
 }
 
 VERSION=""
+RELEASE_TAG=""
 REPO=""
 CHECKSUMS_FILE=""
 OUTPUT_FILE=""
@@ -20,6 +22,10 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --version)
       VERSION="$2"
+      shift 2
+      ;;
+    --release-tag)
+      RELEASE_TAG="$2"
       shift 2
       ;;
     --repo)
@@ -56,6 +62,10 @@ if [[ "$VERSION" != v* ]]; then
   VERSION="v${VERSION}"
 fi
 
+if [[ -z "$RELEASE_TAG" ]]; then
+  RELEASE_TAG="linguasteg-${VERSION}"
+fi
+
 if [[ ! -f "$CHECKSUMS_FILE" ]]; then
   echo "error: checksums file not found: $CHECKSUMS_FILE" >&2
   exit 1
@@ -86,7 +96,7 @@ S_MAC_X64="$(checksum_for "$A_MAC_X64")"
 S_LINUX_X64="$(checksum_for "$A_LINUX_X64")"
 
 VERSION_CLEAN="${VERSION#v}"
-BASE_URL="https://github.com/${REPO}/releases/download/${VERSION}"
+BASE_URL="https://github.com/${REPO}/releases/download/${RELEASE_TAG}"
 
 cat > "$OUTPUT_FILE" <<FORMULA
 class Lsteg < Formula

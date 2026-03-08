@@ -4,7 +4,7 @@ set -euo pipefail
 OWNER="madebydaniz"
 REPO="linguasteg"
 BINARY_NAME="lsteg"
-WORKFLOW_IDENTITY_REGEX='^https://github.com/madebydaniz/linguasteg/.github/workflows/release-binaries.yml@refs/tags/v[0-9].*$'
+WORKFLOW_IDENTITY_REGEX='^https://github.com/madebydaniz/linguasteg/\.github/workflows/release-binaries\.yml@refs/(heads/main|tags/.+)$'
 OIDC_ISSUER="https://token.actions.githubusercontent.com"
 
 VERSION=""
@@ -16,7 +16,7 @@ usage() {
 Usage: install.sh [options]
 
 Options:
-  --version <vX.Y.Z|X.Y.Z>  Install a specific release tag (default: latest)
+  --version <linguasteg-vX.Y.Z|vX.Y.Z|X.Y.Z>  Install a specific release (default: latest)
   --install-dir <path>      Target bin directory (default: ~/.local/bin or /usr/local/bin)
   --no-verify-signature     Skip cosign signature verification (not recommended)
   -h, --help                Show help
@@ -42,6 +42,32 @@ resolve_latest_tag() {
     exit 1
   fi
   printf '%s\n' "$tag"
+}
+
+normalize_release_refs() {
+  local raw="$1"
+
+  if [[ "$raw" =~ ^linguasteg-v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+    VERSION="v${BASH_REMATCH[1]}"
+    RELEASE_TAG="$raw"
+    return
+  fi
+
+  if [[ "$raw" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+    VERSION="$raw"
+    RELEASE_TAG="linguasteg-${raw}"
+    return
+  fi
+
+  if [[ "$raw" =~ ^([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+    VERSION="v${raw}"
+    RELEASE_TAG="linguasteg-v${raw}"
+    return
+  fi
+
+  echo "error: unsupported version/tag '${raw}'" >&2
+  echo "expected one of: linguasteg-vX.Y.Z, vX.Y.Z, or X.Y.Z" >&2
+  exit 2
 }
 
 resolve_target() {
@@ -145,16 +171,14 @@ require_tool curl
 require_tool tar
 
 if [[ -z "$VERSION" ]]; then
-  VERSION="$(resolve_latest_tag)"
-fi
-
-if [[ "$VERSION" != v* ]]; then
-  VERSION="v${VERSION}"
+  normalize_release_refs "$(resolve_latest_tag)"
+else
+  normalize_release_refs "$VERSION"
 fi
 
 TARGET="$(resolve_target)"
 ASSET_NAME="${BINARY_NAME}-${VERSION}-${TARGET}.tar.gz"
-RELEASE_URL="https://github.com/${OWNER}/${REPO}/releases/download/${VERSION}"
+RELEASE_URL="https://github.com/${OWNER}/${REPO}/releases/download/${RELEASE_TAG}"
 
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT

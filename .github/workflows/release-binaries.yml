@@ -208,6 +208,7 @@ jobs:
           TAP_REPO="${HOMEBREW_TAP_REPO:-madebydaniz/homebrew-tap}"
           ./scripts/release/update_homebrew_tap.sh \
             --version "${{ steps.version.outputs.version_tag }}" \
+            --release-tag "${{ github.event.inputs.release_tag || github.event.release.tag_name }}" \
             --checksums checksums.txt \
             --source-repo "${{ github.repository }}" \
             --tap-repo "${TAP_REPO}" \
