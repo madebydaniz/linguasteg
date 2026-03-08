@@ -1,6 +1,6 @@
 [package]
 name = "linguasteg"
-version = "0.1.0"
+version = "0.2.0"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -11,5 +11,5 @@ description = "Public facade crate for the LinguaSteg workspace"
 workspace = true
 
 [dependencies]
-linguasteg-core = { path = "../linguasteg-core", version = "0.1.0" }
-linguasteg-models = { path = "../linguasteg-models", version = "0.1.0" }
+linguasteg-core = { path = "../linguasteg-core", version = "0.2.0" }
+linguasteg-models = { path = "../linguasteg-models", version = "0.2.0" }
