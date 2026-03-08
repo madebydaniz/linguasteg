@@ -1014,7 +1014,7 @@ fn author_object_variant(
     value: u32,
     verb_index: usize,
 ) -> Option<&'static str> {
-    if !is_light_profile_variant(value, verb_index, 2) {
+    if !is_light_profile_variant(value, verb_index, LightProfileChannel::Object) {
         return None;
     }
 
@@ -1147,7 +1147,7 @@ fn author_adjective_variant(
     value: u32,
     object_value: u32,
 ) -> Option<&'static str> {
-    if !is_light_profile_variant(value, object_value as usize, 1) {
+    if !is_light_profile_variant(value, object_value as usize, LightProfileChannel::Adjective) {
         return None;
     }
 
@@ -1171,11 +1171,28 @@ fn author_adjective_variant(
     }
 }
 
-fn is_light_profile_variant(left: u32, right: usize, salt: u64) -> bool {
-    let mix = (u64::from(left)).wrapping_mul(0x9E37_79B9_7F4A_7C15)
-        ^ (right as u64).wrapping_mul(0xD1B5_4A32_D192_ED03)
-        ^ salt;
-    (mix & 0b11) == 0
+#[derive(Debug, Clone, Copy)]
+enum LightProfileChannel {
+    Object,
+    Adjective,
+    Verb,
+}
+
+impl LightProfileChannel {
+    const fn bias(self) -> usize {
+        match self {
+            Self::Object => 11,
+            Self::Adjective => 7,
+            Self::Verb => 13,
+        }
+    }
+}
+
+fn is_light_profile_variant(left: u32, right: usize, channel: LightProfileChannel) -> bool {
+    let mixed = (left as usize)
+        .wrapping_add(right.wrapping_mul(3))
+        .wrapping_add(channel.bias());
+    (mixed % 4) == 0
 }
 
 fn adjective_surface_index(surface: &str) -> CoreResult<u32> {
@@ -1373,7 +1390,7 @@ fn author_verb_variant(
     value: u32,
     object_value: u32,
 ) -> Option<&'static str> {
-    if !is_light_profile_variant(value, object_value as usize, 3) {
+    if !is_light_profile_variant(value, object_value as usize, LightProfileChannel::Verb) {
         return None;
     }
 
@@ -1826,7 +1843,13 @@ mod tests {
         let mapper = ItalianPrototypeSymbolicMapper;
         let object_value = 1u32;
         let verb_value = (0u32..32)
-            .find(|value| super::is_light_profile_variant(object_value, *value as usize, 2))
+            .find(|value| {
+                super::is_light_profile_variant(
+                    object_value,
+                    *value as usize,
+                    super::LightProfileChannel::Object,
+                )
+            })
             .expect("a profile variant gate should exist");
         let payload_plan = SymbolicPayloadPlan {
             original_len_bytes: 2,

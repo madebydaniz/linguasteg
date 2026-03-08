@@ -98,4 +98,28 @@ lsteg decode --lang auto --text-input --trace "<stego text>" --secret "test-secr
 | `de` | German   | `ltr`     |
 | `it` | Italian  | `ltr`     |
 
-**Author:** [Daniel Niazmand](https://github.com/madebydaniz)
+## License
+
+Licensed under the **MIT License** - see [LICENSE](LICENSE) file for details.
+
+## Support & Community
+
+- **Issues & Bug Reports**: [GitHub Issues](https://github.com/madebydaniz/linguasteg/issues)
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for version history and breaking changes.
+
+## Authors
+
+**LinguaSteg** is maintained by [Daniel Niazmand](https://github.com/madebydaniz) with support from the community.
+
+---
+
+<div align="center">
+
+**Made with ❤️ for open-source builders and privacy-first communication.**
+
+[GitHub](https://github.com/madebydaniz/linguasteg) • [Report Bug](https://github.com/madebydaniz/linguasteg/issues) • [Request Feature](https://github.com/madebydaniz/linguasteg/issues)
+
+</div>
