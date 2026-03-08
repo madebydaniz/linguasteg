@@ -875,7 +875,7 @@ checksum = "6800badb6cb2082ffd7b6a67e6125bb39f18782f793520caee8cb8846be06112"
 
 [[package]]
 name = "linguasteg"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "linguasteg-core",
  "linguasteg-models",
@@ -883,7 +883,7 @@ dependencies = [
 
 [[package]]
 name = "linguasteg-cli"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "linguasteg-core",
  "linguasteg-models",
@@ -895,7 +895,7 @@ dependencies = [
 
 [[package]]
 name = "linguasteg-core"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "argon2",
  "chacha20poly1305",
@@ -904,11 +904,11 @@ dependencies = [
 
 [[package]]
 name = "linguasteg-eval"
-version = "0.1.0"
+version = "0.1.1"
 
 [[package]]
 name = "linguasteg-models"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "linguasteg-core",
 ]
