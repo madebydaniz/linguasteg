@@ -12,7 +12,7 @@ on:
         type: string
 
 env:
-  RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.event.release.tag_name }}
+  RELEASE_TAG: ${{ github.event.inputs.release_tag || github.event.release.tag_name }}
 
 permissions:
   contents: read
