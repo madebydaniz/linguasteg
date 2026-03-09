@@ -2,6 +2,6 @@
   "linguasteg": "0.2.1",
   "linguasteg-core": "0.2.1",
   "linguasteg-models": "0.2.1",
-  "linguasteg-cli": "0.2.1",
+  "linguasteg-cli": "0.2.2",
   "linguasteg-eval": "0.1.2"
 }
