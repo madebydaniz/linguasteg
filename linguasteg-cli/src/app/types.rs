@@ -1,6 +1,7 @@
 use std::fmt::{Display, Formatter};
 
 pub(crate) enum Command {
+    Version,
     Encode(EncodeOptions),
     Decode(DecodeOptions),
     Analyze(AnalyzeOptions),

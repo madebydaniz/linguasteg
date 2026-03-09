@@ -18,6 +18,9 @@ pub(crate) fn parse_command(args: Vec<String>) -> Result<Option<Command>, CliErr
     if command == "--help" || command == "-h" {
         return Ok(None);
     }
+    if command == "--version" || command == "-V" {
+        return Ok(Some(Command::Version));
+    }
 
     match command.as_str() {
         "encode" => parse_encode_command(args),
@@ -1547,6 +1550,7 @@ pub(crate) fn write_usage(mut writer: impl Write) -> std::io::Result<()> {
         writer,
         "Usage: lsteg <encode|decode|analyze|validate|languages|strategies|models|catalog|templates|profiles|schemas|data|demo|proto-encode|proto-decode>"
     )?;
+    writeln!(writer, "       lsteg --version")?;
     writeln!(
         writer,
         "       lsteg encode [--lang <code>] (--message <text> | --input <file>) [--source <id>] [--data-dir <path>] [--emit-trace] [--profile <id>] [--secret <value> | --secret-file <file>] [--format text|json] [--output <file>]"
@@ -1658,6 +1662,22 @@ mod tests {
         parse_output_format_arg(&mut args, &mut format).expect("format parse should succeed");
 
         assert!(matches!(format, OutputFormat::Json));
+    }
+
+    #[test]
+    fn parse_command_supports_long_version_flag() {
+        let command = parse_command(vec!["--version".to_string()])
+            .expect("parse should succeed")
+            .expect("command should exist");
+        assert!(matches!(command, Command::Version));
+    }
+
+    #[test]
+    fn parse_command_supports_short_version_flag() {
+        let command = parse_command(vec!["-V".to_string()])
+            .expect("parse should succeed")
+            .expect("command should exist");
+        assert!(matches!(command, Command::Version));
     }
 
     #[test]
