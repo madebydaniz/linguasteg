@@ -11,6 +11,17 @@ readonly CRATES=(
 
 metadata=""
 
+is_workspace_crate() {
+  local crate_name="$1"
+  local candidate
+  for candidate in "${CRATES[@]}"; do
+    if [[ "${candidate}" == "${crate_name}" ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
 require_tool() {
   local tool="$1"
   if ! command -v "${tool}" >/dev/null 2>&1; then
@@ -121,6 +132,7 @@ run_preflight() {
 
 run_dry_run() {
   require_tool jq
+  require_tool curl
   load_metadata
   unset CARGO_REGISTRY_TOKEN || true
 
@@ -128,7 +140,34 @@ run_dry_run() {
     local version
     version="$(crate_version "${crate}")"
     echo "dry-run package ${crate}@${version}"
-    cargo package -p "${crate}" --locked --no-verify
+
+    local log_file
+    log_file="$(mktemp)"
+    if cargo package -p "${crate}" --locked --no-verify >"${log_file}" 2>&1; then
+      cat "${log_file}"
+      rm -f "${log_file}"
+      continue
+    fi
+
+    cat "${log_file}"
+
+    local req_line dep_name dep_req dep_version
+    req_line="$(grep -E "failed to select a version for the requirement" "${log_file}" | tail -1 || true)"
+    rm -f "${log_file}"
+
+    if [[ "${req_line}" =~ requirement\ \`([a-zA-Z0-9_-]+)\ =\ \"\^?([0-9]+\.[0-9]+\.[0-9]+)\" ]]; then
+      dep_name="${BASH_REMATCH[1]}"
+      dep_req="${BASH_REMATCH[2]}"
+      dep_version="$(crate_version "${dep_name}")"
+
+      if is_workspace_crate "${dep_name}" && [[ "${dep_version}" == "${dep_req}" ]] && ! crate_exists "${dep_name}" "${dep_version}"; then
+        echo "::warning::dry-run skipped crates.io dependency availability for ${crate}@${version}; workspace dependency ${dep_name}@${dep_version} is not published yet"
+        continue
+      fi
+    fi
+
+    echo "::error::dry-run failed for ${crate}@${version}"
+    exit 1
   done
 }
 
