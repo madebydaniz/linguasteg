@@ -29,6 +29,7 @@ use super::types::{
 
 pub(crate) fn execute(command: Command) -> Result<(), CliError> {
     match command {
+        Command::Version => run_version(),
         Command::Encode(options) => run_encode(options)?,
         Command::Decode(options) => run_decode(options)?,
         Command::Analyze(options) => run_analyze(options)?,
@@ -54,6 +55,10 @@ pub(crate) fn execute(command: Command) -> Result<(), CliError> {
     }
 
     Ok(())
+}
+
+fn run_version() {
+    println!("lsteg {}", env!("CARGO_PKG_VERSION"));
 }
 
 fn run_catalog(options: CatalogQueryOptions) -> Result<(), CliError> {
