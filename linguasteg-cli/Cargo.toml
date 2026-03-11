@@ -6,6 +6,7 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "Command-line interface for LinguaSteg"
+readme = "README.md"
 
 [[bin]]
 name = "lsteg"
