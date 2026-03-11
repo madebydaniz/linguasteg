@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.2.2](https://github.com/madebydaniz/linguasteg/compare/linguasteg-models-v0.2.1...linguasteg-models-v0.2.2) (2026-03-11)
+
+
+### 📜 Documentation
+
+* **crates:** add per-crate READMEs and set Cargo.toml readme metadata ([ec4b893](https://github.com/madebydaniz/linguasteg/commit/ec4b89329aabe51918f67b55d6ea1bbd9118609d))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * linguasteg-core bumped from 0.2.1 to 0.2.2
+
 ## [0.2.1](https://github.com/madebydaniz/linguasteg/compare/linguasteg-models-v0.2.0...linguasteg-models-v0.2.1) (2026-03-08)
 
 

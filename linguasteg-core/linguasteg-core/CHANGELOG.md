@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.2](https://github.com/madebydaniz/linguasteg/compare/linguasteg-core-v0.2.1...linguasteg-core-v0.2.2) (2026-03-11)
+
+
+### 📜 Documentation
+
+* **crates:** add per-crate READMEs and set Cargo.toml readme metadata ([ec4b893](https://github.com/madebydaniz/linguasteg/commit/ec4b89329aabe51918f67b55d6ea1bbd9118609d))
+
 ## [0.2.1](https://github.com/madebydaniz/linguasteg/compare/linguasteg-core-v0.2.0...linguasteg-core-v0.2.1) (2026-03-08)
 
 

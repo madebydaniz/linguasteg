@@ -1,6 +1,6 @@
 [package]
 name = "linguasteg-models"
-version = "0.2.1"
+version = "0.2.2"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -12,4 +12,4 @@ readme = "README.md"
 workspace = true
 
 [dependencies]
-linguasteg-core = { path = "../linguasteg-core", version = "0.2.1" }
+linguasteg-core = { path = "../linguasteg-core", version = "0.2.2" }
