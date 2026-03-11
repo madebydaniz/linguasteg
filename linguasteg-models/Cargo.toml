@@ -6,6 +6,7 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "Model adapters and provider integrations for LinguaSteg"
+readme = "README.md"
 
 [lints]
 workspace = true

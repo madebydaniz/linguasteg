@@ -6,6 +6,7 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "Evaluation and metrics utilities for LinguaSteg"
+readme = "README.md"
 
 [lints]
 workspace = true
